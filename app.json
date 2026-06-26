@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Ambulanza Turni",
+    "slug": "ambulanza-turni",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "ambulanzaturni",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.ambulanza.turni",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#121212"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": ["expo-sqlite"],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
