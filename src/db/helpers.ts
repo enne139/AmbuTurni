@@ -170,6 +170,20 @@ function nowISO(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Registra un tombstone per un'eliminazione, così la sincronizzazione può
+ * propagarla agli altri dispositivi. Va chiamata SOLO per cancellazioni "locali"
+ * (azioni dell'utente), non quando si applica una cancellazione ricevuta in pull.
+ */
+async function recordDeletion(table: string, id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO deletions (table_name, id, updated_at, is_synced) VALUES (?, ?, ?, 0)
+     ON CONFLICT(table_name, id) DO UPDATE SET updated_at = excluded.updated_at, is_synced = 0`,
+    [table, id, nowISO()]
+  );
+}
+
 // ---------------------------------------------------------------------------
 // LOOKUP: ASSOCIAZIONI
 // ---------------------------------------------------------------------------
@@ -212,6 +226,7 @@ export async function updateAssociazione(id: string, nome: string): Promise<void
 export async function deleteAssociazione(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM associazioni WHERE id = ?', [id]);
+  await recordDeletion('associazioni', id);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +281,7 @@ export async function updatePersona(id: string, cognome: string, nome: string): 
 export async function deletePersona(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM persone WHERE id = ?', [id]);
+  await recordDeletion('persone', id);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +331,7 @@ export async function updateOspedale(id: string, nome: string, citta?: string): 
 export async function deleteOspedale(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM ospedali WHERE id = ?', [id]);
+  await recordDeletion('ospedali', id);
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +575,15 @@ export async function saveTurno(input: TurnoInput): Promise<string> {
 
 export async function deleteTurno(id: string): Promise<void> {
   const db = await getDb();
+  // I servizi figli vengono rimossi in cascata: registriamo un tombstone anche per
+  // ciascuno di essi, altrimenti resterebbero sul server e tornerebbero col pull.
+  const figli = await db.getAllAsync<{ id: string }>(
+    'SELECT id FROM servizi WHERE turno_id = ?',
+    [id]
+  );
   await db.runAsync('DELETE FROM turni WHERE id = ?', [id]);
+  for (const s of figli) await recordDeletion('servizi', s.id);
+  await recordDeletion('turni', id);
   await recomputeProgressiviTurni();
 }
 
@@ -686,6 +711,7 @@ export async function moveServizio(
 export async function deleteServizio(id: string, turnoId: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM servizi WHERE id = ?', [id]);
+  await recordDeletion('servizi', id);
   await resequenceServizi(turnoId);
   await updateNumServizi(turnoId);
 }
@@ -792,6 +818,7 @@ export async function saveAssistenza(input: AssistenzaInput): Promise<string> {
 export async function deleteAssistenza(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM assistenze WHERE id = ?', [id]);
+  await recordDeletion('assistenze', id);
   await recomputeProgressiviAssistenze();
 }
 

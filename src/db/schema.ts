@@ -122,4 +122,14 @@ CREATE TABLE IF NOT EXISTS sync_meta (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Tombstone delle eliminazioni: quando una riga viene cancellata localmente, qui
+-- resta traccia (table_name, id) così il push può propagare la cancellazione.
+CREATE TABLE IF NOT EXISTS deletions (
+  table_name TEXT NOT NULL,
+  id TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  is_synced INTEGER DEFAULT 0,
+  PRIMARY KEY (table_name, id)
+);
 `;

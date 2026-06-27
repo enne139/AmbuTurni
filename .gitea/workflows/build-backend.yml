@@ -1,15 +1,15 @@
-# Action Gitea: costruisce e pubblica l'immagine del backend con Podman.
+# Action Gitea: costruisce e pubblica l'immagine del backend sul REGISTRY DELLO
+# STESSO GITEA (Packages → Container), usando il token automatico dell'action.
 #
-# Configura nel repository Gitea (Settings → Actions → Secrets/Variables):
-#   Variables:
-#     REGISTRY    es. gitea.example.com         (host del tuo Gitea / registry)
-#     IMAGE_NAME  es. owner/ambulanza-sync       (owner + nome immagine)
-#   Secrets:
-#     REGISTRY_USER      utente con permesso di scrittura sui package
-#     REGISTRY_PASSWORD  password o token (PAT) di quell'utente
+# Prerequisiti:
+#  - il runner deve avere `podman` disponibile e `runs-on` deve combaciare con
+#    un'etichetta del tuo runner (qui: ubuntu-latest);
+#  - nel Gitea deve essere abilitato il Container Registry (lo è di default);
+#  - l'utente che fa partire l'action (github.actor) deve poter scrivere i package
+#    del proprio owner. Se il token automatico non bastasse, crea un secret
+#    REGISTRY_TOKEN (PAT con scope write:package) e verrà usato al suo posto.
 #
-# Nota: il runner deve avere il comando `podman` disponibile e `runs-on` deve
-# combaciare con un'etichetta del tuo runner (qui: ubuntu-latest).
+# Immagine prodotta: <host-gitea>/<owner>/ambulanza-sync:<sha> e :latest
 
 name: build-backend-image
 
@@ -29,19 +29,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build & push immagine (Podman)
+      - name: Build & push sullo stesso Gitea (Podman)
         env:
-          REGISTRY: ${{ vars.REGISTRY }}
-          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          # Token automatico dell'action; REGISTRY_TOKEN (PAT) usato come fallback se presente.
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
           set -euo pipefail
-          IMG="$REGISTRY/$IMAGE_NAME"
+
+          # Ricava host e owner (in minuscolo: il registry OCI richiede lowercase).
+          HOST="${SERVER_URL#http://}"; HOST="${HOST#https://}"; HOST="${HOST%%/*}"
+          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          IMG="$HOST/$OWNER_LC/ambulanza-sync"
           TAG="${GITHUB_SHA::8}"
-          echo "Costruisco $IMG:$TAG"
+
+          # Usa il PAT se fornito, altrimenti il token automatico.
+          TOKEN="${REGISTRY_TOKEN:-$GITEA_TOKEN}"
+
+          echo "Costruisco e pubblico $IMG:$TAG su $HOST"
           podman build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
-          echo "$REGISTRY_PASSWORD" | podman login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          printf '%s' "$TOKEN" | podman login "$HOST" -u "$ACTOR" --password-stdin
           podman push "$IMG:$TAG"
           podman push "$IMG:latest"
-          echo "Pubblicata: $IMG:$TAG e :latest"
+          echo "Pubblicata: $IMG:$TAG  (e :latest)"

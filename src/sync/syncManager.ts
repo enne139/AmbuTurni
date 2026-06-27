@@ -104,13 +104,21 @@ function normalize(v: unknown): string | number | null {
   return String(v);
 }
 
-/** Invia al server tutte le righe locali con is_synced = 0; al successo le marca sincronizzate. */
+interface Change {
+  table: SyncTable;
+  id: string;
+  data: Record<string, unknown>;
+  updated_at: unknown;
+  deleted?: boolean;
+}
+
+/** Invia al server le righe modificate (is_synced=0) e i tombstone delle eliminazioni. */
 async function pushChanges(base: string, token: string): Promise<number> {
   const d = await db();
-  const changes: { table: SyncTable; id: string; data: Record<string, unknown>; updated_at: unknown }[] =
-    [];
+  const changes: Change[] = [];
   const idsByTable: Record<string, string[]> = {};
 
+  // 1) Righe create/modificate localmente.
   for (const table of SYNC_TABLES) {
     const rows = await d.getAllAsync<Record<string, unknown>>(
       `SELECT * FROM ${table} WHERE is_synced = 0`
@@ -119,6 +127,21 @@ async function pushChanges(base: string, token: string): Promise<number> {
       changes.push({ table, id: String(row.id), data: row, updated_at: row.updated_at });
       (idsByTable[table] ??= []).push(String(row.id));
     }
+  }
+
+  // 2) Eliminazioni (tombstone): inviate con deleted=true e data vuoto.
+  const tombstones = await d.getAllAsync<{ table_name: string; id: string; updated_at: string }>(
+    'SELECT table_name, id, updated_at FROM deletions WHERE is_synced = 0'
+  );
+  for (const t of tombstones) {
+    if (!SYNC_TABLES.includes(t.table_name as SyncTable)) continue;
+    changes.push({
+      table: t.table_name as SyncTable,
+      id: t.id,
+      data: {},
+      updated_at: t.updated_at,
+      deleted: true,
+    });
   }
 
   if (changes.length === 0) return 0;
@@ -130,12 +153,15 @@ async function pushChanges(base: string, token: string): Promise<number> {
   });
   if (!res.ok) throw new Error(`Push fallito (${res.status})`);
 
-  // Marca come sincronizzate solo le righe effettivamente inviate.
+  // Marca come sincronizzate le righe inviate…
   for (const [table, ids] of Object.entries(idsByTable)) {
     for (const id of ids) {
       await d.runAsync(`UPDATE ${table} SET is_synced = 1 WHERE id = ?`, [id]);
     }
   }
+  // …e rimuove i tombstone ormai propagati al server.
+  await d.runAsync('DELETE FROM deletions WHERE is_synced = 0');
+
   return changes.length;
 }
 

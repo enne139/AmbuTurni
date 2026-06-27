@@ -54,9 +54,23 @@ npm run dev
 
 ## Build dell'immagine
 
-L'immagine viene creata automaticamente dalla action Gitea
-`.gitea/workflows/build-backend.yml` (Podman) a ogni push su `backend/**`, e pubblicata
-sul registry configurato. Poi nel `docker-compose.yml` imposti `SYNC_IMAGE` con quel tag.
+L'immagine viene creata dalla action `.gitea/workflows/build-backend.yml` (Podman) a ogni
+push su `backend/**` e pubblicata sul **Container Registry dello stesso Gitea**, usando il
+token automatico dell'action (nessun secret da configurare; serve solo che il runner abbia
+`podman`). Il tag prodotto è:
+
+```
+<host-gitea>/<owner>/ambulanza-sync:<sha>   (+ :latest)
+```
+
+Imposta poi `SYNC_IMAGE` nel `.env` con quel percorso, es.:
+
+```
+SYNC_IMAGE=gitea.miodominio.it/laura/ambulanza-sync:latest
+```
+
+> Per fare il `pull` dell'immagine, il server dove gira il compose deve poter accedere al
+> registry Gitea: se è privato, esegui prima `podman login <host-gitea>`.
 
 ## Sicurezza
 

@@ -164,9 +164,13 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   inserisce/corregge da Impostazioni → Ospedali.
 - Bug "campi multiline su web" segnalato ma non riprodotto del tutto: tenere d'occhio.
 - Web + sql.js dipende dal CDN per il `.wasm`: valutare di bundlare il wasm per offline reale.
-- **Sync**: implementata (backend + client). Limite attuale: le **eliminazioni non si
-  propagano** (manca un meccanismo di tombstone lato client); il pull gestisce già i record
-  `deleted`, ma il client non li genera. Da aggiungere se serve.
+- **Sync**: implementata (backend + client), incluse le **eliminazioni** tramite tombstone
+  (tabella locale `deletions`): le delete locali registrano un tombstone, il push lo invia con
+  `deleted=true`, gli altri dispositivi lo applicano col pull. Cancellando un turno si crea il
+  tombstone anche per i suoi servizi (rimossi in cascata). Nota: dopo un import/restore del
+  backup, eventuali tombstone pregressi potrebbero ri-eliminare dati al primo sync (caso limite).
+- L'immagine del backend è pubblicata sul **registry dello stesso Gitea** dall'action (token
+  automatico). Imposta `SYNC_IMAGE` nel `.env` del compose con `<host-gitea>/<owner>/ambulanza-sync`.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```
