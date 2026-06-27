@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     # Esegui sul runner self-hosted che ha podman installato
-    runs-on: [self-hosted, linux, podman]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
