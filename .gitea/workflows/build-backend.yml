@@ -50,8 +50,11 @@ jobs:
           TOKEN="${REGISTRY_TOKEN:-$GITEA_TOKEN}"
 
           echo "Costruisco e pubblico $IMG:$TAG su $HOST"
-          podman build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
-          printf '%s' "$TOKEN" | podman login "$HOST" -u "$ACTOR" --password-stdin
-          podman push "$IMG:$TAG"
-          podman push "$IMG:latest"
+          
+          # SOSTITUITO PODMAN CON DOCKER
+          docker build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
+          printf '%s' "$TOKEN" | docker login "$HOST" -u "$ACTOR" --password-stdin
+          docker push "$IMG:$TAG"
+          docker push "$IMG:latest"
+          
           echo "Pubblicata: $IMG:$TAG  (e :latest)"
