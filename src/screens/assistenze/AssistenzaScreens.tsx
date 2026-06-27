@@ -2,17 +2,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, Divider, Text, TextInput } from 'react-native-paper';
+import { Button, Card, Dialog, Divider, Portal, Text, TextInput } from 'react-native-paper';
 import DateField from '../../components/DateField';
 import EquipaggioBlock from '../../components/EquipaggioBlock';
 import SelectableField from '../../components/SelectableField';
 import {
   addAssociazione,
+  deleteAssistenza,
   emptyEquipaggio,
   getAssistenzaById,
   getAssociazioniLookup,
-  getNextProgressivoAssistenza,
   getPersone,
+  previewProgressivoAssistenza,
   saveAssistenza,
   type AssistenzaInput,
   type AssistenzaRow,
@@ -73,8 +74,8 @@ export function AssistenzaFormScreen({ route, navigation }: FormProps) {
 
   useEffect(() => {
     if (isExisting.current) return;
-    getNextProgressivoAssistenza(associazioneId).then(setProgressivo);
-  }, [associazioneId]);
+    previewProgressivoAssistenza(associazioneId, data).then(setProgressivo);
+  }, [associazioneId, data]);
 
   const handleSave = useCallback(async () => {
     if (!associazioneId) return;
@@ -137,7 +138,8 @@ export function AssistenzaFormScreen({ route, navigation }: FormProps) {
         onChangeText={setDescrizione}
         mode="outlined"
         multiline
-        style={styles.input}
+        numberOfLines={4}
+        style={[styles.input, styles.multiline]}
       />
       <TextInput
         label="Note"
@@ -145,7 +147,8 @@ export function AssistenzaFormScreen({ route, navigation }: FormProps) {
         onChangeText={setNote}
         mode="outlined"
         multiline
-        style={styles.input}
+        numberOfLines={4}
+        style={[styles.input, styles.multiline]}
       />
 
       <Divider style={styles.divider} />
@@ -189,6 +192,7 @@ export function AssistenzaDetailScreen({ route, navigation }: DetailProps) {
   const { id } = route.params;
   const [assistenza, setAssistenza] = useState<AssistenzaRow | null>(null);
   const [persone, setPersone] = useState<Record<string, string>>({});
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     const [a, p] = await Promise.all([getAssistenzaById(id), getPersone()]);
@@ -273,6 +277,40 @@ export function AssistenzaDetailScreen({ route, navigation }: DetailProps) {
       >
         Modifica
       </Button>
+      <Button
+        mode="outlined"
+        icon="delete"
+        textColor="#F44336"
+        onPress={() => setConfirmDelete(true)}
+        style={styles.deleteBtn}
+      >
+        Elimina assistenza
+      </Button>
+
+      <Portal>
+        <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
+          <Dialog.Title>Elimina assistenza</Dialog.Title>
+          <Dialog.Content>
+            <Text>
+              Eliminare l’assistenza #{assistenza.numero_progressivo} di{' '}
+              {assistenza.associazione_nome ?? 'questa associazione'}?
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDelete(false)}>Annulla</Button>
+            <Button
+              textColor="#F44336"
+              onPress={async () => {
+                await deleteAssistenza(assistenza.id);
+                setConfirmDelete(false);
+                navigation.goBack();
+              }}
+            >
+              Elimina
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 }
@@ -283,6 +321,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textSecondary, marginBottom: 4 },
   dateBtn: { marginBottom: 12, borderColor: colors.border },
   input: { marginBottom: 12, backgroundColor: colors.surface },
+  multiline: { minHeight: 96 },
   readonlyBox: {
     backgroundColor: colors.surfaceVariant,
     borderRadius: 8,
@@ -313,4 +352,5 @@ const styles = StyleSheet.create({
   eqValue: { color: colors.textPrimary },
   empty: { color: colors.textSecondary, textAlign: 'center', marginTop: 48 },
   editBtnSecondary: { backgroundColor: colors.secondary },
+  deleteBtn: { marginTop: 12, borderColor: '#F44336' },
 });

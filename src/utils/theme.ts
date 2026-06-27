@@ -15,23 +15,22 @@ export const colors = {
   textSecondary: '#9E9E9E',
 } as const;
 
-/** Colori semantici dei codici chiamata / uscita. */
+/** Colori semantici dei codici chiamata / uscita (chiave in MAIUSCOLO). */
 export const codiceColors: Record<string, string> = {
   VERDE: '#4CAF50',
   GIALLO: '#FFC107',
   ROSSO: '#F44336',
-  verde: '#4CAF50',
-  giallo: '#FFC107',
-  rosso: '#F44336',
-  nero: '#424242',
-  vuoto: '#9E9E9E',
-  rifiuta: '#9C27B0',
+  NERO: '#424242',
+  VUOTO: '#9E9E9E',
+  RIFIUTO: '#9C27B0',
+  RIFIUTA: '#9C27B0',
+  DIMISSIONE: '#26A69A',
 };
 
-/** Ritorna il colore semantico di un codice, con fallback grigio. */
+/** Ritorna il colore semantico di un codice (case-insensitive), con fallback grigio. */
 export function getCodiceColor(codice?: string | null): string {
   if (!codice) return colors.textSecondary;
-  return codiceColors[codice] ?? colors.textSecondary;
+  return codiceColors[codice.toUpperCase()] ?? colors.textSecondary;
 }
 
 /** Tema Paper MD3 dark con override dei token principali. */

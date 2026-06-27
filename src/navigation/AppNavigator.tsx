@@ -8,6 +8,7 @@ import {
   AssistenzaFormScreen,
 } from '../screens/assistenze/AssistenzaScreens';
 import ImpostazioniScreen from '../screens/impostazioni/ImpostazioniScreen';
+import StatisticheScreen from '../screens/statistiche/StatisticheScreen';
 import TurniListScreen from '../screens/turni/TurniListScreen';
 import TurnoDetailScreen from '../screens/turni/TurnoDetailScreen';
 import TurnoFormScreen from '../screens/turni/TurnoFormScreen';
@@ -28,6 +29,7 @@ export type AssistenzeStackParamList = {
 export type TabParamList = {
   Turni: undefined;
   Assistenze: undefined;
+  Statistiche: undefined;
   Impostazioni: undefined;
 };
 
@@ -111,6 +113,19 @@ export default function AppNavigator() {
           tabBarActiveTintColor: colors.secondary,
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-heart" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Statistiche"
+        component={StatisticheScreen}
+        options={{
+          headerShown: true,
+          ...screenHeaderStyle,
+          title: 'Statistiche',
+          tabBarActiveTintColor: colors.secondary,
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="chart-bar" color={color} size={size} />
           ),
         }}
       />

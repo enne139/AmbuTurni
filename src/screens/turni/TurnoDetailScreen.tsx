@@ -2,19 +2,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, Divider, Text } from 'react-native-paper';
+import { Button, Card, Dialog, Divider, Portal, Text } from 'react-native-paper';
+import ServiziManager from '../../components/ServiziManager';
 import {
+  deleteTurno,
   getPersone,
-  getServiziByTurno,
   getTipologieTurnoLookup,
   getTurnoById,
   type EquipaggioFields,
-  type ServizioRow,
   type TurnoRow,
 } from '../../db/helpers';
 import type { TurniStackParamList } from '../../navigation/AppNavigator';
 import { formatDate, formatOre } from '../../utils/format';
-import { colors, getCodiceColor } from '../../utils/theme';
+import { colors } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<TurniStackParamList, 'TurnoDetail'>;
 
@@ -36,19 +36,17 @@ const RUOLI2: { key: keyof EquipaggioFields; label: string }[] = [
 export default function TurnoDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const [turno, setTurno] = useState<TurnoRow | null>(null);
-  const [servizi, setServizi] = useState<ServizioRow[]>([]);
   const [persone, setPersone] = useState<Record<string, string>>({});
   const [tipologie, setTipologie] = useState<Record<string, string>>({});
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
-    const [t, s, p, tip] = await Promise.all([
+    const [t, p, tip] = await Promise.all([
       getTurnoById(id),
-      getServiziByTurno(id),
       getPersone(),
       getTipologieTurnoLookup(),
     ]);
     setTurno(t);
-    setServizi(s);
     setPersone(Object.fromEntries(p.map((x) => [x.id, `${x.cognome} ${x.nome}`.trim()])));
     setTipologie(Object.fromEntries(tip.map((x) => [x.id, x.label])));
   }, [id]);
@@ -129,29 +127,8 @@ export default function TurnoDetailScreen({ route, navigation }: Props) {
         </>
       ) : null}
 
-      <Text variant="titleMedium" style={styles.section}>
-        Servizi ({servizi.length})
-      </Text>
-      {servizi.map((s) => (
-        <Card key={s.id} style={styles.servCard} mode="contained">
-          <View style={styles.servRow}>
-            <View style={[styles.stripe, { backgroundColor: getCodiceColor(s.codice_chiamata) }]} />
-            <View style={styles.servBody}>
-              <View style={styles.badgeRow}>
-                <View style={[styles.badge, { backgroundColor: getCodiceColor(s.codice_chiamata) }]}>
-                  <Text style={styles.badgeText}>{s.codice_chiamata}</Text>
-                </View>
-                <Text style={styles.arrow}>→</Text>
-                <View style={[styles.badge, { backgroundColor: getCodiceColor(s.codice_uscita) }]}>
-                  <Text style={styles.badgeText}>{s.codice_uscita?.toUpperCase()}</Text>
-                </View>
-              </View>
-              {s.ospedale_nome ? <Text style={styles.ospedale}>🏥 {s.ospedale_nome}</Text> : null}
-            </View>
-          </View>
-        </Card>
-      ))}
-      {servizi.length === 0 ? <Text style={styles.empty}>Nessun servizio.</Text> : null}
+      <Divider style={styles.divider} />
+      <ServiziManager turnoId={id} onChanged={load} />
 
       <Divider style={styles.divider} />
       <Button
@@ -162,6 +139,41 @@ export default function TurnoDetailScreen({ route, navigation }: Props) {
       >
         Modifica
       </Button>
+      <Button
+        mode="outlined"
+        icon="delete"
+        textColor="#F44336"
+        onPress={() => setConfirmDelete(true)}
+        style={styles.deleteBtn}
+      >
+        Elimina turno
+      </Button>
+
+      <Portal>
+        <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
+          <Dialog.Title>Elimina turno</Dialog.Title>
+          <Dialog.Content>
+            <Text>
+              Eliminare il turno #{turno.numero_progressivo} di{' '}
+              {turno.associazione_nome ?? 'questa associazione'}? Verranno eliminati anche tutti
+              i suoi servizi.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDelete(false)}>Annulla</Button>
+            <Button
+              textColor="#F44336"
+              onPress={async () => {
+                await deleteTurno(turno.id);
+                setConfirmDelete(false);
+                navigation.goBack();
+              }}
+            >
+              Elimina
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 }
@@ -195,7 +207,9 @@ const styles = StyleSheet.create({
   badgeText: { color: '#000000', fontWeight: '700', fontSize: 12 },
   arrow: { color: colors.textSecondary, fontSize: 16 },
   ospedale: { color: colors.textSecondary, marginTop: 6 },
+  servDescrizione: { color: colors.textPrimary, marginTop: 6 },
   empty: { color: colors.textSecondary, textAlign: 'center', marginTop: 12 },
   divider: { marginVertical: 20, backgroundColor: colors.border },
   editBtn: { backgroundColor: colors.primary },
+  deleteBtn: { marginTop: 12, borderColor: '#F44336' },
 });

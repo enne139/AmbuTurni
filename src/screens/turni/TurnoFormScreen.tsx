@@ -1,20 +1,19 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Divider, Text, TextInput } from 'react-native-paper';
 import DateField from '../../components/DateField';
 import EquipaggioBlock from '../../components/EquipaggioBlock';
 import MultiSelectableField from '../../components/MultiSelectableField';
 import SelectableField from '../../components/SelectableField';
-import ServiziList from '../../components/ServiziList';
 import {
   addAssociazione,
   addTipologiaTurno,
   emptyEquipaggio,
   getAssociazioniLookup,
-  getNextProgressivoTurno,
   getTipologieTurnoLookup,
   getTurnoById,
+  previewProgressivoTurno,
   saveTurno,
   type EquipaggioFields,
   type TurnoInput,
@@ -81,11 +80,11 @@ export default function TurnoFormScreen({ route, navigation }: Props) {
     })();
   }, [editId]);
 
-  // Calcola il progressivo in anteprima quando cambia l'associazione (solo nuovi turni).
+  // Anteprima del progressivo (rango per data) quando cambia associazione o data (solo nuovi).
   useEffect(() => {
     if (isExisting.current) return;
-    getNextProgressivoTurno(associazioneId).then(setProgressivo);
-  }, [associazioneId]);
+    previewProgressivoTurno(associazioneId, data).then(setProgressivo);
+  }, [associazioneId, data]);
 
   const buildInput = useCallback(
     (): TurnoInput => ({
@@ -102,29 +101,22 @@ export default function TurnoFormScreen({ route, navigation }: Props) {
     [turnoId, associazioneId, data, oreText, tipoIds, descrizione, note, equipaggio]
   );
 
-  // Garantisce un id del turno persistito (per aggiungere i servizi a un turno nuovo).
-  const ensureTurnoId = useCallback(async (): Promise<string> => {
-    if (turnoId) return turnoId;
-    if (!associazioneId) {
-      Alert.alert('Associazione richiesta', 'Seleziona prima l’associazione del turno.');
-      throw new Error('associazione mancante');
-    }
-    const id = await saveTurno(buildInput());
-    setTurnoId(id);
-    isExisting.current = true;
-    return id;
-  }, [turnoId, associazioneId, buildInput]);
-
   const handleSave = useCallback(async () => {
     if (!associazioneId) return;
     setSaving(true);
     try {
-      await saveTurno(buildInput());
-      navigation.goBack();
+      const savedId = await saveTurno(buildInput());
+      if (editId) {
+        // Modifica di un turno esistente: torna al dettaglio.
+        navigation.goBack();
+      } else {
+        // Nuovo turno: vai al dettaglio per gestire i servizi.
+        navigation.replace('TurnoDetail', { id: savedId });
+      }
     } finally {
       setSaving(false);
     }
-  }, [associazioneId, buildInput, navigation]);
+  }, [associazioneId, buildInput, navigation, editId]);
 
   return (
     <ScrollView
@@ -186,7 +178,8 @@ export default function TurnoFormScreen({ route, navigation }: Props) {
         onChangeText={setDescrizione}
         mode="outlined"
         multiline
-        style={styles.input}
+        numberOfLines={4}
+        style={[styles.input, styles.multiline]}
       />
       <TextInput
         label="Note"
@@ -194,18 +187,19 @@ export default function TurnoFormScreen({ route, navigation }: Props) {
         onChangeText={setNote}
         mode="outlined"
         multiline
-        style={styles.input}
+        numberOfLines={4}
+        style={[styles.input, styles.multiline]}
       />
 
       <Divider style={styles.divider} />
       <EquipaggioBlock value={equipaggio} onChange={setEquipaggio} />
 
       <Divider style={styles.divider} />
-      <ServiziList
-        turnoId={turnoId}
-        ensureTurnoId={ensureTurnoId}
-        onServiziChanged={setNumServizi}
-      />
+      <Text style={styles.serviziHint}>
+        {editId
+          ? 'I servizi si gestiscono dalla schermata di dettaglio del turno.'
+          : 'Dopo aver salvato potrai aggiungere e ordinare i servizi nella schermata di dettaglio.'}
+      </Text>
 
       <Button
         mode="contained"
@@ -225,6 +219,8 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 48 },
   label: { color: colors.textSecondary, marginBottom: 4 },
   input: { marginBottom: 12, backgroundColor: colors.surface },
+  multiline: { minHeight: 96 },
+  serviziHint: { color: colors.textSecondary, fontStyle: 'italic', marginBottom: 4 },
   readonlyRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   readonlyBox: {
     flex: 1,

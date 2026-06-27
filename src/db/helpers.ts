@@ -45,8 +45,14 @@ export interface Tipologia {
   is_synced: number;
 }
 
-export type CodiceChiamata = 'VERDE' | 'GIALLO' | 'ROSSO';
-export type CodiceUscita = 'verde' | 'giallo' | 'rosso' | 'nero' | 'vuoto' | 'rifiuta';
+export type CodiceChiamata = 'VERDE' | 'GIALLO' | 'ROSSO' | 'DIMISSIONE';
+export type CodiceUscita =
+  | 'VERDE'
+  | 'GIALLO'
+  | 'ROSSO'
+  | 'NERO'
+  | 'VUOTO'
+  | 'RIFIUTO';
 
 /** Campi equipaggio condivisi da turni e assistenze. */
 export interface EquipaggioFields {
@@ -90,6 +96,8 @@ export interface Servizio {
   codice_chiamata: CodiceChiamata | null;
   codice_uscita: CodiceUscita | null;
   ospedale_id: string | null;
+  descrizione: string | null;
+  ordine: number;
   created_at: string;
   updated_at: string;
   is_synced: number;
@@ -97,6 +105,7 @@ export interface Servizio {
 
 export interface ServizioRow extends Servizio {
   ospedale_nome: string | null;
+  ospedale_citta: string | null;
 }
 
 export interface Assistenza extends EquipaggioFields {
@@ -188,6 +197,14 @@ export async function addAssociazione(nome: string): Promise<LookupItem> {
   return { id, label: trimmed };
 }
 
+export async function updateAssociazione(id: string, nome: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE associazioni SET nome = ?, updated_at = ?, is_synced = 0 WHERE id = ?',
+    [nome.trim(), nowISO(), id]
+  );
+}
+
 export async function deleteAssociazione(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM associazioni WHERE id = ?', [id]);
@@ -234,6 +251,14 @@ export async function addPersonaFromText(text: string): Promise<LookupItem> {
   return addPersona(cognome, nome);
 }
 
+export async function updatePersona(id: string, cognome: string, nome: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE persone SET cognome = ?, nome = ?, updated_at = ?, is_synced = 0 WHERE id = ?',
+    [cognome.trim(), nome.trim(), nowISO(), id]
+  );
+}
+
 export async function deletePersona(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM persone WHERE id = ?', [id]);
@@ -248,9 +273,14 @@ export async function getOspedali(): Promise<Ospedale[]> {
   return db.getAllAsync<Ospedale>('SELECT * FROM ospedali ORDER BY nome COLLATE NOCASE');
 }
 
+/** Etichetta "Nome — Città" (o solo Nome se manca la città). */
+export function ospedaleLabel(nome: string, citta?: string | null): string {
+  return citta && citta.trim() ? `${nome} — ${citta}` : nome;
+}
+
 export async function getOspedaliLookup(): Promise<LookupItem[]> {
   const rows = await getOspedali();
-  return rows.map((r) => ({ id: r.id, label: r.nome }));
+  return rows.map((r) => ({ id: r.id, label: ospedaleLabel(r.nome, r.citta) }));
 }
 
 export async function addOspedale(nome: string, citta?: string): Promise<LookupItem> {
@@ -268,6 +298,14 @@ export async function addOspedale(nome: string, citta?: string): Promise<LookupI
     [id, trimmed, citta?.trim() ?? null, ts, ts]
   );
   return { id, label: trimmed };
+}
+
+export async function updateOspedale(id: string, nome: string, citta?: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE ospedali SET nome = ?, citta = ?, updated_at = ?, is_synced = 0 WHERE id = ?',
+    [nome.trim(), citta?.trim() ?? null, nowISO(), id]
+  );
 }
 
 export async function deleteOspedale(id: string): Promise<void> {
@@ -306,6 +344,14 @@ export async function addTipologiaTurno(nome: string): Promise<LookupItem> {
   return { id, label: trimmed };
 }
 
+export async function updateTipologiaTurno(id: string, nome: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE tipologie_turno SET nome = ?, updated_at = ?, is_synced = 0 WHERE id = ?',
+    [nome.trim(), nowISO(), id]
+  );
+}
+
 export async function getTipologieAssistenza(): Promise<Tipologia[]> {
   const db = await getDb();
   return db.getAllAsync<Tipologia>(
@@ -332,28 +378,69 @@ export async function addTipologiaAssistenza(nome: string): Promise<LookupItem> 
 
 // ---------------------------------------------------------------------------
 // PROGRESSIVI
+//
+// Il numero progressivo è il RANGO per data (crescente) all'interno
+// dell'associazione: il turno/assistenza più vecchio è #1. Viene ricalcolato
+// automaticamente a ogni inserimento, modifica o eliminazione, così resta
+// sempre corretto anche dopo cancellazioni o cambi di data.
 // ---------------------------------------------------------------------------
 
-export async function getNextProgressivoTurno(associazioneId: string | null): Promise<number> {
-  if (!associazioneId) return 1;
-  const db = await getDb();
-  const row = await db.getFirstAsync<{ c: number }>(
-    'SELECT COUNT(*) AS c FROM turni WHERE associazione_id = ?',
-    [associazioneId]
-  );
-  return (row?.c ?? 0) + 1;
-}
-
-export async function getNextProgressivoAssistenza(
-  associazioneId: string | null
+/** Anteprima del numero che avrebbe un turno con la data indicata (1-based). */
+export async function previewProgressivoTurno(
+  associazioneId: string | null,
+  data: string
 ): Promise<number> {
   if (!associazioneId) return 1;
   const db = await getDb();
   const row = await db.getFirstAsync<{ c: number }>(
-    'SELECT COUNT(*) AS c FROM assistenze WHERE associazione_id = ?',
-    [associazioneId]
+    'SELECT COUNT(*) AS c FROM turni WHERE associazione_id = ? AND data < ?',
+    [associazioneId, data]
   );
   return (row?.c ?? 0) + 1;
+}
+
+/** Anteprima del numero che avrebbe un'assistenza con la data indicata. */
+export async function previewProgressivoAssistenza(
+  associazioneId: string | null,
+  data: string
+): Promise<number> {
+  if (!associazioneId) return 1;
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>(
+    'SELECT COUNT(*) AS c FROM assistenze WHERE associazione_id = ? AND data < ?',
+    [associazioneId, data]
+  );
+  return (row?.c ?? 0) + 1;
+}
+
+/** Riassegna numero_progressivo a tutti i turni: rango per data nell'associazione. */
+async function recomputeProgressiviTurni(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE turni SET numero_progressivo = (
+       SELECT COUNT(*) FROM turni t2
+       WHERE t2.associazione_id = turni.associazione_id
+         AND (t2.data < turni.data
+              OR (t2.data = turni.data AND t2.created_at <= turni.created_at))
+     )
+     WHERE associazione_id IS NOT NULL`,
+    []
+  );
+}
+
+/** Riassegna numero_progressivo a tutte le assistenze: rango per data nell'associazione. */
+async function recomputeProgressiviAssistenze(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE assistenze SET numero_progressivo = (
+       SELECT COUNT(*) FROM assistenze a2
+       WHERE a2.associazione_id = assistenze.associazione_id
+         AND (a2.data < assistenze.data
+              OR (a2.data = assistenze.data AND a2.created_at <= assistenze.created_at))
+     )
+     WHERE associazione_id IS NOT NULL`,
+    []
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -425,11 +512,11 @@ export async function saveTurno(input: TurnoInput): Promise<string> {
         existing.id,
       ]
     );
+    await recomputeProgressiviTurni();
     return existing.id;
   }
 
   const id = input.id ?? uuidv4();
-  const progressivo = await getNextProgressivoTurno(input.associazione_id);
   await db.runAsync(
     `INSERT INTO turni (
       id, associazione_id, numero_progressivo, data, ore, tipologia_id, tipologie_extra,
@@ -437,11 +524,10 @@ export async function saveTurno(input: TurnoInput): Promise<string> {
       eq1_autista_id, eq1_cs_id, eq1_terzo_id, eq1_quarto_id, eq1_centralinista_id,
       eq2_autista_id, eq2_cs_id, eq2_terzo_id, eq2_quarto_id, eq2_centralinista_id,
       created_at, updated_at, is_synced
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    ) VALUES (?, ?, 0, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [
       id,
       input.associazione_id,
-      progressivo,
       input.data,
       input.ore,
       input.tipologia_id,
@@ -462,12 +548,14 @@ export async function saveTurno(input: TurnoInput): Promise<string> {
       ts,
     ]
   );
+  await recomputeProgressiviTurni();
   return id;
 }
 
 export async function deleteTurno(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM turni WHERE id = ?', [id]);
+  await recomputeProgressiviTurni();
 }
 
 // ---------------------------------------------------------------------------
@@ -477,11 +565,26 @@ export async function deleteTurno(id: string): Promise<void> {
 export async function getServiziByTurno(turnoId: string): Promise<ServizioRow[]> {
   const db = await getDb();
   return db.getAllAsync<ServizioRow>(
-    `SELECT s.*, o.nome AS ospedale_nome
+    `SELECT s.*, o.nome AS ospedale_nome, o.citta AS ospedale_citta
      FROM servizi s
      LEFT JOIN ospedali o ON o.id = s.ospedale_id
      WHERE s.turno_id = ?
-     ORDER BY s.created_at ASC`,
+     ORDER BY s.ordine ASC, s.created_at ASC`,
+    [turnoId]
+  );
+}
+
+/** Rinumera l'ordine dei servizi di un turno in 1..N (senza buchi). */
+async function resequenceServizi(turnoId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE servizi SET ordine = (
+       SELECT COUNT(*) FROM servizi s2
+       WHERE s2.turno_id = servizi.turno_id
+         AND (s2.ordine < servizi.ordine
+              OR (s2.ordine = servizi.ordine AND s2.created_at <= servizi.created_at))
+     )
+     WHERE turno_id = ?`,
     [turnoId]
   );
 }
@@ -506,23 +609,80 @@ export async function addServizio(
   turnoId: string,
   codiceChiamata: CodiceChiamata,
   codiceUscita: CodiceUscita,
-  ospedaleId: string | null
+  ospedaleId: string | null,
+  descrizione: string | null
 ): Promise<string> {
   const db = await getDb();
   const id = uuidv4();
   const ts = nowISO();
-  await db.runAsync(
-    `INSERT INTO servizi (id, turno_id, codice_chiamata, codice_uscita, ospedale_id, created_at, updated_at, is_synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
-    [id, turnoId, codiceChiamata, codiceUscita, ospedaleId, ts, ts]
+  const ordineRow = await db.getFirstAsync<{ n: number }>(
+    'SELECT COALESCE(MAX(ordine), 0) + 1 AS n FROM servizi WHERE turno_id = ?',
+    [turnoId]
   );
+  const ordine = ordineRow?.n ?? 1;
+  await db.runAsync(
+    `INSERT INTO servizi (id, turno_id, codice_chiamata, codice_uscita, ospedale_id, descrizione, ordine, created_at, updated_at, is_synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    [id, turnoId, codiceChiamata, codiceUscita, ospedaleId, descrizione, ordine, ts, ts]
+  );
+  await resequenceServizi(turnoId);
   await updateNumServizi(turnoId);
   return id;
+}
+
+/** Aggiorna i campi di un servizio esistente. */
+export async function updateServizio(
+  id: string,
+  codiceChiamata: CodiceChiamata,
+  codiceUscita: CodiceUscita,
+  ospedaleId: string | null,
+  descrizione: string | null
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE servizi SET codice_chiamata = ?, codice_uscita = ?, ospedale_id = ?, descrizione = ?,
+       updated_at = ?, is_synced = 0
+     WHERE id = ?`,
+    [codiceChiamata, codiceUscita, ospedaleId, descrizione, nowISO(), id]
+  );
+}
+
+/** Sposta un servizio su/giù scambiando il numero progressivo col vicino. */
+export async function moveServizio(
+  turnoId: string,
+  id: string,
+  direction: 'up' | 'down'
+): Promise<void> {
+  const db = await getDb();
+  const rows = await getServiziByTurno(turnoId);
+  const idx = rows.findIndex((r) => r.id === id);
+  if (idx < 0) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= rows.length) return;
+
+  const a = rows[idx];
+  const b = rows[swapIdx];
+  // Se per qualche motivo l'ordine coincide, forza valori distinti basati sulla posizione.
+  const aOrdine = a.ordine === b.ordine ? idx + 1 : a.ordine;
+  const bOrdine = a.ordine === b.ordine ? swapIdx + 1 : b.ordine;
+  const ts = nowISO();
+  await db.runAsync('UPDATE servizi SET ordine = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
+    bOrdine,
+    ts,
+    a.id,
+  ]);
+  await db.runAsync('UPDATE servizi SET ordine = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
+    aOrdine,
+    ts,
+    b.id,
+  ]);
+  await resequenceServizi(turnoId);
 }
 
 export async function deleteServizio(id: string, turnoId: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM servizi WHERE id = ?', [id]);
+  await resequenceServizi(turnoId);
   await updateNumServizi(turnoId);
 }
 
@@ -588,22 +748,21 @@ export async function saveAssistenza(input: AssistenzaInput): Promise<string> {
         existing.id,
       ]
     );
+    await recomputeProgressiviAssistenze();
     return existing.id;
   }
 
   const id = input.id ?? uuidv4();
-  const progressivo = await getNextProgressivoAssistenza(input.associazione_id);
   await db.runAsync(
     `INSERT INTO assistenze (
       id, associazione_id, numero_progressivo, data, ore, descrizione, note,
       eq1_autista_id, eq1_cs_id, eq1_terzo_id, eq1_quarto_id, eq1_centralinista_id,
       eq2_autista_id, eq2_cs_id, eq2_terzo_id, eq2_quarto_id, eq2_centralinista_id,
       created_at, updated_at, is_synced
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [
       id,
       input.associazione_id,
-      progressivo,
       input.data,
       input.ore,
       input.descrizione,
@@ -622,10 +781,66 @@ export async function saveAssistenza(input: AssistenzaInput): Promise<string> {
       ts,
     ]
   );
+  await recomputeProgressiviAssistenze();
   return id;
 }
 
 export async function deleteAssistenza(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM assistenze WHERE id = ?', [id]);
+  await recomputeProgressiviAssistenze();
+}
+
+// ---------------------------------------------------------------------------
+// STATISTICHE
+// ---------------------------------------------------------------------------
+
+export interface Statistiche {
+  turniTotali: number;
+  serviziTotali: number;
+  oreTurni: number;
+  assistenzeTotali: number;
+  oreAssistenze: number;
+  oreTotali: number;
+}
+
+/**
+ * Totali aggregati, opzionalmente filtrati per associazione (null = tutte).
+ */
+export async function getStatistiche(associazioneId: string | null): Promise<Statistiche> {
+  const db = await getDb();
+  const params: string[] = associazioneId ? [associazioneId] : [];
+
+  const turniRow = await db.getFirstAsync<{ c: number; ore: number | null }>(
+    `SELECT COUNT(*) AS c, COALESCE(SUM(ore), 0) AS ore FROM turni ${
+      associazioneId ? 'WHERE associazione_id = ?' : ''
+    }`,
+    params
+  );
+
+  const serviziRow = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM servizi s JOIN turni t ON t.id = s.turno_id ${
+      associazioneId ? 'WHERE t.associazione_id = ?' : ''
+    }`,
+    params
+  );
+
+  const assistRow = await db.getFirstAsync<{ c: number; ore: number | null }>(
+    `SELECT COUNT(*) AS c, COALESCE(SUM(ore), 0) AS ore FROM assistenze ${
+      associazioneId ? 'WHERE associazione_id = ?' : ''
+    }`,
+    params
+  );
+
+  const oreTurni = turniRow?.ore ?? 0;
+  const oreAssistenze = assistRow?.ore ?? 0;
+
+  return {
+    turniTotali: turniRow?.c ?? 0,
+    serviziTotali: serviziRow?.c ?? 0,
+    oreTurni,
+    assistenzeTotali: assistRow?.c ?? 0,
+    oreAssistenze,
+    oreTotali: oreTurni + oreAssistenze,
+  };
 }
