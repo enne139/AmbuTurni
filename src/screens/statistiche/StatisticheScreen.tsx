@@ -21,6 +21,7 @@ interface StatCard {
   accent: string;
 }
 
+/** Riepilogo numerico (turni/servizi/ore/assistenze) con filtro per associazione. */
 export default function StatisticheScreen() {
   const [associazioni, setAssociazioni] = useState<Associazione[]>([]);
   const [assocId, setAssocId] = useState<string | null>(null);

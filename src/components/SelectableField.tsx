@@ -41,11 +41,12 @@ export default function SelectableField({
   nullable,
   placeholder,
 }: SelectableFieldProps) {
-  const [visible, setVisible] = useState(false);
-  const [query, setQuery] = useState('');
-  const [items, setItems] = useState<LookupItem[]>([]);
+  const [visible, setVisible] = useState(false); // modal aperto?
+  const [query, setQuery] = useState(''); // testo di ricerca
+  const [items, setItems] = useState<LookupItem[]>([]); // valori caricati dal DB
   const [loading, setLoading] = useState(false);
 
+  // Apre il modal e (ri)carica la lista dei valori dal DB.
   const open = useCallback(async () => {
     setQuery('');
     setVisible(true);
@@ -59,17 +60,21 @@ export default function SelectableField({
 
   const close = useCallback(() => setVisible(false), []);
 
+  // Lista filtrata in base al testo di ricerca (case-insensitive).
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
     return items.filter((it) => it.label.toLowerCase().includes(q));
   }, [items, query]);
 
+  // True se la ricerca corrisponde esattamente a un valore già esistente:
+  // in tal caso non mostriamo il bottone "Aggiungi: …".
   const exactMatch = useMemo(
     () => items.some((it) => it.label.toLowerCase() === query.trim().toLowerCase()),
     [items, query]
   );
 
+  // Seleziona un valore esistente e chiude.
   const handleSelect = useCallback(
     (item: LookupItem) => {
       onSelect(item.id, item.label);
@@ -78,6 +83,7 @@ export default function SelectableField({
     [onSelect, close]
   );
 
+  // Crea un nuovo valore nel DB lookup, lo seleziona e chiude.
   const handleAdd = useCallback(async () => {
     const text = query.trim();
     if (!text) return;

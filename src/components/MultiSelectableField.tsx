@@ -57,20 +57,24 @@ export default function MultiSelectableField({
     [items, query]
   );
 
+  // Aggiunge o rimuove un valore dalla selezione (mantenendo allineati id e label).
   const toggle = useCallback(
     (item: LookupItem) => {
       const idx = values.indexOf(item.id);
       if (idx >= 0) {
+        // Già selezionato → lo rimuovo da entrambi gli array paralleli.
         const newIds = values.filter((v) => v !== item.id);
         const newLabels = displayValues.filter((_, i) => i !== idx);
         onChange(newIds, newLabels);
       } else {
+        // Non selezionato → lo aggiungo in coda.
         onChange([...values, item.id], [...displayValues, item.label]);
       }
     },
     [values, displayValues, onChange]
   );
 
+  // Rimuove la selezione tramite la "x" del chip.
   const removeChip = useCallback(
     (id: string) => {
       const idx = values.indexOf(id);
@@ -83,6 +87,7 @@ export default function MultiSelectableField({
     [values, displayValues, onChange]
   );
 
+  // Crea un nuovo valore nel DB, lo aggiunge alla selezione e ricarica la lista.
   const handleAdd = useCallback(async () => {
     const text = query.trim();
     if (!text) return;

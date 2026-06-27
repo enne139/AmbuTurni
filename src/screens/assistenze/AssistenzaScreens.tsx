@@ -29,6 +29,7 @@ import { colors } from '../../utils/theme';
 
 type FormProps = NativeStackScreenProps<AssistenzeStackParamList, 'AssistenzaForm'>;
 
+/** Form di creazione/modifica di un'assistenza (come il turno ma senza servizi/tipologia). */
 export function AssistenzaFormScreen({ route, navigation }: FormProps) {
   const editId = route.params?.id;
 
@@ -188,6 +189,7 @@ const RUOLI2: { key: keyof EquipaggioFields; label: string }[] = [
   { key: 'eq2_centralinista_id', label: 'Centralinista' },
 ];
 
+/** Dettaglio di un'assistenza: dati, equipaggio, pulsanti Modifica ed Elimina. */
 export function AssistenzaDetailScreen({ route, navigation }: DetailProps) {
   const { id } = route.params;
   const [assistenza, setAssistenza] = useState<AssistenzaRow | null>(null);

@@ -52,6 +52,10 @@ type EditTarget =
   | { kind: 'ospedale'; id: string; title: string }
   | { kind: 'tipologia'; id: string; title: string };
 
+/**
+ * Impostazioni: gestione anagrafiche (associazioni, persone, ospedali, tipologie)
+ * con accordion, dialog di modifica, e sezione Backup (esporta/importa JSON).
+ */
 export default function ImpostazioniScreen() {
   const [associazioni, setAssociazioni] = useState<Associazione[]>([]);
   const [persone, setPersone] = useState<Persona[]>([]);

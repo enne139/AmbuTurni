@@ -24,23 +24,29 @@ import { colors } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<TurniStackParamList, 'TurnoForm'>;
 
+/**
+ * Form di creazione/modifica turno. I servizi NON si gestiscono qui ma nel
+ * dettaglio: dopo aver salvato un turno nuovo si naviga al dettaglio.
+ */
 export default function TurnoFormScreen({ route, navigation }: Props) {
-  const editId = route.params?.id;
+  const editId = route.params?.id; // presente → modifica; assente → nuovo
 
   const [turnoId, setTurnoId] = useState<string | null>(editId ?? null);
   const [associazioneId, setAssociazioneId] = useState<string | null>(null);
   const [associazioneLabel, setAssociazioneLabel] = useState<string | undefined>(undefined);
   const [data, setData] = useState<string>(new Date().toISOString());
-  const [oreText, setOreText] = useState('');
+  const [oreText, setOreText] = useState(''); // ore come testo (decimale)
+  // "Tipo turno" è multi-valore: array paralleli di id e label.
   const [tipoIds, setTipoIds] = useState<string[]>([]);
   const [tipoLabels, setTipoLabels] = useState<string[]>([]);
-  const [progressivo, setProgressivo] = useState<number | null>(null);
+  const [progressivo, setProgressivo] = useState<number | null>(null); // anteprima sola lettura
   const [numServizi, setNumServizi] = useState(0);
   const [descrizione, setDescrizione] = useState('');
   const [note, setNote] = useState('');
   const [equipaggio, setEquipaggio] = useState<EquipaggioFields>(emptyEquipaggio());
   const [saving, setSaving] = useState(false);
 
+  // True se stiamo modificando un turno esistente: evita di ricalcolare l'anteprima del progressivo.
   const isExisting = useRef<boolean>(!!editId);
 
   // Carica il turno esistente (in modifica).
@@ -86,6 +92,8 @@ export default function TurnoFormScreen({ route, navigation }: Props) {
     previewProgressivoTurno(associazioneId, data).then(setProgressivo);
   }, [associazioneId, data]);
 
+  // Costruisce l'oggetto da salvare. Le tipologie selezionate (multi) sono mappate
+  // sullo schema: la prima va in tipologia_id, le restanti in tipologie_extra.
   const buildInput = useCallback(
     (): TurnoInput => ({
       id: turnoId ?? undefined,

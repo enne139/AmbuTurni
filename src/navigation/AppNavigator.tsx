@@ -14,6 +14,9 @@ import TurnoDetailScreen from '../screens/turni/TurnoDetailScreen';
 import TurnoFormScreen from '../screens/turni/TurnoFormScreen';
 import { colors } from '../utils/theme';
 
+// --- Tipi dei parametri di navigazione (rotte + parametri richiesti) ---
+// `id` opzionale nei form = inserimento nuovo; `id` presente = modifica.
+
 export type TurniStackParamList = {
   TurniList: undefined;
   TurnoDetail: { id: string };
@@ -37,12 +40,14 @@ const TurniStack = createNativeStackNavigator<TurniStackParamList>();
 const AssistenzeStack = createNativeStackNavigator<AssistenzeStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
+// Stile comune degli header/scena (coerente col tema scuro).
 const screenHeaderStyle = {
   headerStyle: { backgroundColor: colors.surface },
   headerTintColor: colors.textPrimary,
   contentStyle: { backgroundColor: colors.background },
 } as const;
 
+// Stack della sezione Turni: lista → dettaglio → form.
 function TurniNavigator() {
   return (
     <TurniStack.Navigator screenOptions={screenHeaderStyle}>
@@ -65,6 +70,7 @@ function TurniNavigator() {
   );
 }
 
+// Stack della sezione Assistenze: lista → dettaglio → form.
 function AssistenzeNavigator() {
   return (
     <AssistenzeStack.Navigator screenOptions={screenHeaderStyle}>
@@ -87,6 +93,8 @@ function AssistenzeNavigator() {
   );
 }
 
+// Navigatore radice: 4 tab in basso. Turni/Assistenze hanno uno stack interno
+// (header proprio); Statistiche/Impostazioni sono schermate singole con header.
 export default function AppNavigator() {
   return (
     <Tab.Navigator

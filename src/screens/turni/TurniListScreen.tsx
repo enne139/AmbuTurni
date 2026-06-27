@@ -11,21 +11,24 @@ import { formatDate, formatOre } from '../../utils/format';
 
 type Props = NativeStackScreenProps<TurniStackParamList, 'TurniList'>;
 
+/** Lista dei turni (ordinati per data decrescente) con ricerca, FAB e long-press per eliminare. */
 export default function TurniListScreen({ navigation }: Props) {
   const [turni, setTurni] = useState<TurnoRow[]>([]);
-  const [query, setQuery] = useState('');
-  const [toDelete, setToDelete] = useState<TurnoRow | null>(null);
+  const [query, setQuery] = useState(''); // testo della Searchbar
+  const [toDelete, setToDelete] = useState<TurnoRow | null>(null); // turno in attesa di conferma eliminazione
 
   const load = useCallback(async () => {
     setTurni(await getTurni());
   }, []);
 
+  // Ricarica i dati ogni volta che la schermata torna in primo piano.
   useFocusEffect(
     useCallback(() => {
       load();
     }, [load])
   );
 
+  // Filtro client-side per nome associazione o descrizione.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return turni;
@@ -36,6 +39,7 @@ export default function TurniListScreen({ navigation }: Props) {
     );
   }, [turni, query]);
 
+  // Conferma eliminazione dal dialog (aperto con long-press sulla card).
   const confirmDelete = useCallback(async () => {
     if (!toDelete) return;
     await deleteTurno(toDelete.id);

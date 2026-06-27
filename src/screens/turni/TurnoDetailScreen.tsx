@@ -33,12 +33,17 @@ const RUOLI2: { key: keyof EquipaggioFields; label: string }[] = [
   { key: 'eq2_centralinista_id', label: 'Centralinista' },
 ];
 
+/**
+ * Dettaglio di un turno: dati, equipaggio, gestione servizi (ServiziManager),
+ * più i pulsanti Modifica ed Elimina.
+ */
 export default function TurnoDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const [turno, setTurno] = useState<TurnoRow | null>(null);
+  // Mappe id→etichetta per risolvere persone ed eventuali tipologie nei nomi visualizzati.
   const [persone, setPersone] = useState<Record<string, string>>({});
   const [tipologie, setTipologie] = useState<Record<string, string>>({});
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false); // dialog conferma eliminazione
 
   const load = useCallback(async () => {
     const [t, p, tip] = await Promise.all([

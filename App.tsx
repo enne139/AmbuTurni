@@ -1,3 +1,7 @@
+// Entry point dell'app: inizializza il database e monta provider + navigazione.
+//
+// `react-native-get-random-values` DEVE essere importato per primo: fornisce
+// crypto.getRandomValues, richiesto da `uuid` per generare gli ID.
 import 'react-native-get-random-values';
 
 import { NavigationContainer, type Theme } from '@react-navigation/native';
@@ -10,6 +14,7 @@ import { initDatabase } from './src/db';
 import AppNavigator from './src/navigation/AppNavigator';
 import { colors, paperTheme } from './src/utils/theme';
 
+// Tema per React Navigation (allineato ai colori del tema Paper).
 const navTheme: Theme = {
   dark: true,
   colors: {
@@ -29,9 +34,12 @@ const navTheme: Theme = {
 };
 
 export default function App() {
+  // `ready` diventa true quando lo schema DB è pronto; `error` mostra eventuali
+  // problemi di inizializzazione (es. SQLite non disponibile).
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Inizializza il database una sola volta all'avvio.
   useEffect(() => {
     initDatabase()
       .then(() => setReady(true))
@@ -42,6 +50,7 @@ export default function App() {
     <SafeAreaProvider>
       <PaperProvider theme={paperTheme}>
         <StatusBar style="light" />
+        {/* Tre stati: errore DB → schermata errore; pronto → app; altrimenti spinner. */}
         {error ? (
           <View style={styles.center}>
             <Text style={styles.error}>Errore inizializzazione DB:{'\n'}{error}</Text>

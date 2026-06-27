@@ -10,21 +10,24 @@ import { colors } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AssistenzeStackParamList, 'AssistenzeList'>;
 
+/** Lista delle assistenze (data decrescente) con ricerca, FAB e long-press per eliminare. */
 export default function AssistezeListScreen({ navigation }: Props) {
   const [items, setItems] = useState<AssistenzaRow[]>([]);
-  const [query, setQuery] = useState('');
-  const [toDelete, setToDelete] = useState<AssistenzaRow | null>(null);
+  const [query, setQuery] = useState(''); // testo della Searchbar
+  const [toDelete, setToDelete] = useState<AssistenzaRow | null>(null); // assistenza da confermare
 
   const load = useCallback(async () => {
     setItems(await getAssistenze());
   }, []);
 
+  // Ricarica quando la schermata torna in focus.
   useFocusEffect(
     useCallback(() => {
       load();
     }, [load])
   );
 
+  // Filtro per nome associazione o descrizione.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
@@ -35,6 +38,7 @@ export default function AssistezeListScreen({ navigation }: Props) {
     );
   }, [items, query]);
 
+  // Conferma eliminazione dal dialog.
   const confirmDelete = useCallback(async () => {
     if (!toDelete) return;
     await deleteAssistenza(toDelete.id);

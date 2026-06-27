@@ -11,6 +11,10 @@ export interface LookupItem {
   label: string;
 }
 
+// Le interfacce seguenti rispecchiano 1:1 le righe delle tabelle definite in
+// schema.ts. I tipi *Row estendono la riga con campi denormalizzati (JOIN) usati
+// nelle liste/dettagli. I tipi *Input sono i dati editabili passati al salvataggio.
+
 export interface Associazione {
   id: string;
   nome: string;
