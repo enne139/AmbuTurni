@@ -11,25 +11,13 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    
-    # Configura il servizio Docker-in-Docker
-    services:
-      docker:
-        image: docker:dind
-        # Fornisce i privilegi necessari al container DinD per avviare il demone Docker
-        options: --privileged
-
+    runs-on: ubuntu-latest # Assicurati che questa etichetta corrisponda al tuo runner con Podman
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build & push sullo stesso Gitea (Docker DinD)
+      - name: Build & push sullo stesso Gitea (Podman)
         env:
-          # Variabile cruciale per dire al client Docker dove trovare il demone DinD
-          DOCKER_HOST: tcp://docker:2375
-          DOCKER_TLS_CERTDIR: "" # Disabilita TLS se non configurato (comune in ambienti locali/interni)
-          
           GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
           ACTOR: ${{ github.actor }}
@@ -38,24 +26,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Attendi un istante che il demone Docker sia effettivamente pronto
-          until docker info >/dev/null 2>&1; do
-            echo "In attesa del demone Docker..."
-            sleep 1
-          done
-
-          # Ricava host e owner (in minuscolo: il registry OCI richiede lowercase).
+          # Ricava host e owner
           HOST="${SERVER_URL#http://}"; HOST="${HOST#https://}"; HOST="${HOST%%/*}"
           OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           IMG="$HOST/$OWNER_LC/ambulanza-sync"
           TAG="${GITHUB_SHA::8}"
 
-          # Usa il PAT se fornito, altrimenti il token automatico.
           TOKEN="${REGISTRY_TOKEN:-$GITEA_TOKEN}"
 
           echo "Costruisco e pubblico $IMG:$TAG su $HOST"
-          docker build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
-          printf '%s' "$TOKEN" | docker login "$HOST" -u "$ACTOR" --password-stdin
-          docker push "$IMG:$TAG"
-          docker push "$IMG:latest"
+          
+          # Podman non ha bisogno di demoni o privilegiati di root
+          podman build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
+          printf '%s' "$TOKEN" | podman login "$HOST" -u "$ACTOR" --password-stdin
+          podman push "$IMG:$TAG"
+          podman push "$IMG:latest"
+          
           echo "Pubblicata: $IMG:$TAG  (e :latest)"
