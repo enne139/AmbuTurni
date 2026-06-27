@@ -11,38 +11,40 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    # Forza il job a girare dentro un container con Podman già pronto
-    container:
-      image: quay.io/podman/stable:latest
+    # Esegui sul runner self-hosted che ha podman installato
+    runs-on: [self-hosted, linux, podman]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build & push sullo stesso Gitea (Podman)
         env:
-          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Imposta questi secrets nel repo / org:
+          # REGISTRY_HOST es: gitea.example.com:3000
+          # REGISTRY_TOKEN token per push
+          REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
           ACTOR: ${{ github.actor }}
           OWNER: ${{ github.repository_owner }}
-          SERVER_URL: ${{ github.server_url }}
         run: |
           set -euo pipefail
 
-          # Ricava host e owner
-          HOST="${SERVER_URL#http://}"; HOST="${HOST#https://}"; HOST="${HOST%%/*}"
+          HOST="${REGISTRY_HOST}"
           OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           IMG="$HOST/$OWNER_LC/ambulanza-sync"
           TAG="${GITHUB_SHA::8}"
 
-          TOKEN="${REGISTRY_TOKEN:-$GITEA_TOKEN}"
+          TOKEN="${REGISTRY_TOKEN}"
 
           echo "Costruisco e pubblico $IMG:$TAG su $HOST"
-          
-          # Podman non ha bisogno di demoni o privilegiati di root
+
+          # Esegui build e push con podman disponibile sul runner
           podman build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
+
+          # Se il registry usa cert self-signed e sei in test, puoi aggiungere --tls-verify=false
           printf '%s' "$TOKEN" | podman login "$HOST" -u "$ACTOR" --password-stdin
           podman push "$IMG:$TAG"
           podman push "$IMG:latest"
-          
+
           echo "Pubblicata: $IMG:$TAG  (e :latest)"
