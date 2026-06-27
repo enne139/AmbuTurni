@@ -1,16 +1,3 @@
-# Action Gitea: costruisce e pubblica l'immagine del backend sul REGISTRY DELLO
-# STESSO GITEA (Packages → Container), usando il token automatico dell'action.
-#
-# Prerequisiti:
-#  - il runner deve avere `podman` disponibile e `runs-on` deve combaciare con
-#    un'etichetta del tuo runner (qui: ubuntu-latest);
-#  - nel Gitea deve essere abilitato il Container Registry (lo è di default);
-#  - l'utente che fa partire l'action (github.actor) deve poter scrivere i package
-#    del proprio owner. Se il token automatico non bastasse, crea un secret
-#    REGISTRY_TOKEN (PAT con scope write:package) e verrà usato al suo posto.
-#
-# Immagine prodotta: <host-gitea>/<owner>/ambulanza-sync:<sha> e :latest
-
 name: build-backend-image
 
 on:
@@ -25,13 +12,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # Configura il servizio Docker-in-Docker
+    services:
+      docker:
+        image: docker:dind
+        # Fornisce i privilegi necessari al container DinD per avviare il demone Docker
+        options: --privileged
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build & push sullo stesso Gitea (Podman)
+      - name: Build & push sullo stesso Gitea (Docker DinD)
         env:
-          # Token automatico dell'action; REGISTRY_TOKEN (PAT) usato come fallback se presente.
+          # Variabile cruciale per dire al client Docker dove trovare il demone DinD
+          DOCKER_HOST: tcp://docker:2375
+          DOCKER_TLS_CERTDIR: "" # Disabilita TLS se non configurato (comune in ambienti locali/interni)
+          
           GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
           ACTOR: ${{ github.actor }}
@@ -39,6 +37,12 @@ jobs:
           SERVER_URL: ${{ github.server_url }}
         run: |
           set -euo pipefail
+
+          # Attendi un istante che il demone Docker sia effettivamente pronto
+          until docker info >/dev/null 2>&1; do
+            echo "In attesa del demone Docker..."
+            sleep 1
+          done
 
           # Ricava host e owner (in minuscolo: il registry OCI richiede lowercase).
           HOST="${SERVER_URL#http://}"; HOST="${HOST#https://}"; HOST="${HOST%%/*}"
@@ -50,11 +54,8 @@ jobs:
           TOKEN="${REGISTRY_TOKEN:-$GITEA_TOKEN}"
 
           echo "Costruisco e pubblico $IMG:$TAG su $HOST"
-          
-          # SOSTITUITO PODMAN CON DOCKER
           docker build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
           printf '%s' "$TOKEN" | docker login "$HOST" -u "$ACTOR" --password-stdin
           docker push "$IMG:$TAG"
           docker push "$IMG:latest"
-          
           echo "Pubblicata: $IMG:$TAG  (e :latest)"

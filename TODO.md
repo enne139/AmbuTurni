@@ -1,0 +1,3 @@
+facendo un un punto alla volta, e per ogni punto un commit, chidi conferma su quali punti fare
+- [ ] ⚠️ Caso limite (in CLAUDE.md): dopo un import di backup, eventuali tombstone pregressi potrebbero rieliminare dati al primo sync. Se diventa un problema, posso azzerare i tombstone durante l'import., sistemare questa sistuazione
+- [ ] ok, al posto di fare la compilazione per android  sul cloud, voglio che mi crei un workflow che mi compili sul runner l'apk
