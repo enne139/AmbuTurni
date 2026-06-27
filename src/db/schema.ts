@@ -116,4 +116,10 @@ CREATE TABLE IF NOT EXISTS assistenze (
 CREATE INDEX IF NOT EXISTS idx_servizi_turno ON servizi(turno_id);
 CREATE INDEX IF NOT EXISTS idx_turni_assoc ON turni(associazione_id);
 CREATE INDEX IF NOT EXISTS idx_assistenze_assoc ON assistenze(associazione_id);
+
+-- Metadati di sincronizzazione (URL server, token JWT, ultimo cursore di pull).
+CREATE TABLE IF NOT EXISTS sync_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 `;

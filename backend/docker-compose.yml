@@ -1,0 +1,44 @@
+# Avvio del backend di sincronizzazione + PostgreSQL.
+# Compatibile con docker compose e podman-compose.
+#
+#   cp .env.example .env   # personalizza le credenziali
+#   podman-compose up -d   # (oppure: docker compose up -d)
+#
+# Le immagini usano il path completo del registry (richiesto da Podman).
+
+services:
+  db:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ambulanza
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ambulanza
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ambulanza -d ambulanza']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    # Immagine prodotta dalla action Gitea (vedi .gitea/workflows/build-backend.yml).
+    # Sovrascrivi SYNC_IMAGE nel file .env con il path del tuo registry.
+    image: ${SYNC_IMAGE:-gitea.example.com/owner/ambulanza-sync:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://ambulanza:${POSTGRES_PASSWORD:-change_me}@db:5432/ambulanza
+      JWT_SECRET: ${JWT_SECRET:-change_me_secret}
+      TOKEN_TTL: ${TOKEN_TTL:-30d}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change_me}
+    ports:
+      - '3000:3000'
+
+volumes:
+  pgdata:

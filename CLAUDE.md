@@ -69,13 +69,20 @@ src/
 │   ├── assistenze/             AssistezeList + AssistenzaScreens (Form + Detail)
 │   ├── statistiche/            StatisticheScreen
 │   └── impostazioni/           ImpostazioniScreen (anagrafiche + backup)
-├── sync/syncManager.ts         stub sync futura (server REST)
+├── sync/syncManager.ts         client di sincronizzazione (login JWT, push/pull, apply)
 ├── types/sql.js.d.ts           dichiarazione tipi per sql.js
 └── utils/
     ├── theme.ts                colori, tema Paper, getCodiceColor (case-insensitive)
     ├── format.ts               formatDate / formatOre / parseOre
     ├── backupIO.ts             salva/scegli file backup — NATIVE
     └── backupIO.web.ts         salva/scegli file backup — WEB (DOM)
+
+backend/                        API di sincronizzazione (Node + Express + PostgreSQL)
+├── src/{index,db,auth,sync}.js server, schema PG, login JWT, push/pull
+├── Dockerfile, .dockerignore
+├── docker-compose.yml          postgres + api
+└── .env.example, README.md
+.gitea/workflows/build-backend.yml  action (Podman) build+push immagine
 ```
 
 ---
@@ -123,6 +130,21 @@ src/
 
 ---
 
+## Backend / Sincronizzazione (cartella `backend/`)
+
+- **Stack**: Node.js + Express + PostgreSQL. Auth con **JWT** (login utente/password,
+  hash bcrypt; admin iniziale da `ADMIN_USERNAME`/`ADMIN_PASSWORD`).
+- **Modello dati**: tabella generica `records (table_name, id, data JSONB, …)` — il server
+  non conosce lo schema dell'app, quindi non va toccato se cambia. Conflitti **last-write-wins**.
+- **Endpoint**: `/health`, `POST /auth/login`, `POST /auth/users` (protetto),
+  `POST /sync/push`, `GET /sync/pull?since=ISO` (protetti da Bearer token).
+- **Client** (`src/sync/syncManager.ts`): `login()`, `syncNow()` (push righe con
+  `is_synced=0` → poi le marca; pull dopo `last_sync_at` → applica con FK off).
+  Config in tabella `sync_meta`. UI in **Impostazioni → Sincronizzazione**.
+- **Deploy**: `backend/docker-compose.yml` (postgres + api, ok con `podman-compose`).
+  L'immagine è costruita dalla action `.gitea/workflows/build-backend.yml` (Podman):
+  richiede i secret `REGISTRY_USER`/`REGISTRY_PASSWORD` e le var `REGISTRY`/`IMAGE_NAME`.
+
 ## Avvio & verifica
 
 ```bash
@@ -142,7 +164,9 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   inserisce/corregge da Impostazioni → Ospedali.
 - Bug "campi multiline su web" segnalato ma non riprodotto del tutto: tenere d'occhio.
 - Web + sql.js dipende dal CDN per il `.wasm`: valutare di bundlare il wasm per offline reale.
-- `syncManager.ts` è solo uno stub: la sync REST con backend (Node + PostgreSQL) è da fare;
-  usare i campi `is_synced` / `updated_at` già presenti su tutte le tabelle.
+- **Sync**: implementata (backend + client). Limite attuale: le **eliminazioni non si
+  propagano** (manca un meccanismo di tombstone lato client); il pull gestisce già i record
+  `deleted`, ma il client non li genera. Da aggiungere se serve.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
+- Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```

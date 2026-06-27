@@ -1,0 +1,47 @@
+# Action Gitea: costruisce e pubblica l'immagine del backend con Podman.
+#
+# Configura nel repository Gitea (Settings → Actions → Secrets/Variables):
+#   Variables:
+#     REGISTRY    es. gitea.example.com         (host del tuo Gitea / registry)
+#     IMAGE_NAME  es. owner/ambulanza-sync       (owner + nome immagine)
+#   Secrets:
+#     REGISTRY_USER      utente con permesso di scrittura sui package
+#     REGISTRY_PASSWORD  password o token (PAT) di quell'utente
+#
+# Nota: il runner deve avere il comando `podman` disponibile e `runs-on` deve
+# combaciare con un'etichetta del tuo runner (qui: ubuntu-latest).
+
+name: build-backend-image
+
+on:
+  push:
+    branches: [main, sviluppo]
+    paths:
+      - 'backend/**'
+      - '.gitea/workflows/build-backend.yml'
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build & push immagine (Podman)
+        env:
+          REGISTRY: ${{ vars.REGISTRY }}
+          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          IMG="$REGISTRY/$IMAGE_NAME"
+          TAG="${GITHUB_SHA::8}"
+          echo "Costruisco $IMG:$TAG"
+          podman build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
+          echo "$REGISTRY_PASSWORD" | podman login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          podman push "$IMG:$TAG"
+          podman push "$IMG:latest"
+          echo "Pubblicata: $IMG:$TAG e :latest"

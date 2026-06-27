@@ -34,6 +34,13 @@ import {
   type Persona,
   type Tipologia,
 } from '../../db/helpers';
+import {
+  getServerUrl,
+  isLoggedIn,
+  login as syncLogin,
+  logout as syncLogout,
+  syncNow,
+} from '../../sync/syncManager';
 import { pickBackup, saveBackup } from '../../utils/backupIO';
 import { colors } from '../../utils/theme';
 
@@ -81,17 +88,27 @@ export default function ImpostazioniScreen() {
   const [snack, setSnack] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ json: string; count: number } | null>(null);
 
+  // Stato sincronizzazione
+  const [serverUrl, setServerUrl] = useState('');
+  const [syncUser, setSyncUser] = useState('');
+  const [syncPass, setSyncPass] = useState('');
+  const [logged, setLogged] = useState(false);
+
   const load = useCallback(async () => {
-    const [a, p, o, t] = await Promise.all([
+    const [a, p, o, t, url, log] = await Promise.all([
       getAssociazioni(),
       getPersone(),
       getOspedali(),
       getTipologieTurno(),
+      getServerUrl(),
+      isLoggedIn(),
     ]);
     setAssociazioni(a);
     setPersone(p);
     setOspedali(o);
     setTipologie(t);
+    setServerUrl(url);
+    setLogged(log);
   }, []);
 
   useFocusEffect(
@@ -188,6 +205,40 @@ export default function ImpostazioniScreen() {
     } catch (e) {
       console.warn('[backup] import error:', e);
       setSnack('Errore durante l’importazione.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- Sincronizzazione: login / logout / sync ---
+  const handleLogin = async () => {
+    setBusy(true);
+    try {
+      await syncLogin(serverUrl, syncUser.trim(), syncPass);
+      setSyncPass('');
+      setLogged(true);
+      setSnack('Accesso eseguito.');
+    } catch (e) {
+      setSnack(e instanceof Error ? e.message : 'Login non riuscito.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await syncLogout();
+    setLogged(false);
+    setSnack('Disconnesso.');
+  };
+
+  const handleSync = async () => {
+    setBusy(true);
+    try {
+      const r = await syncNow();
+      await load();
+      setSnack(`Sincronizzazione completata: inviati ${r.pushed}, ricevuti ${r.pulled}.`);
+    } catch (e) {
+      setSnack(e instanceof Error ? e.message : 'Sincronizzazione fallita.');
     } finally {
       setBusy(false);
     }
@@ -430,6 +481,82 @@ export default function ImpostazioniScreen() {
             <Text style={styles.hint}>
               L’esportazione crea un file JSON con tutti i dati. L’importazione
               sostituisce completamente i dati attuali con quelli del file scelto.
+            </Text>
+          </View>
+        </List.Accordion>
+
+        <Divider />
+
+        {/* SINCRONIZZAZIONE COL SERVER */}
+        <List.Accordion title="Sincronizzazione" id="sync" titleStyle={styles.accTitle}>
+          <View style={styles.backupBox}>
+            <TextInput
+              label="Indirizzo server (es. https://mioserver:3000)"
+              value={serverUrl}
+              onChangeText={setServerUrl}
+              mode="outlined"
+              autoCapitalize="none"
+              keyboardType="url"
+              style={styles.flexInput}
+              dense
+              disabled={logged}
+            />
+            {!logged ? (
+              <>
+                <TextInput
+                  label="Utente"
+                  value={syncUser}
+                  onChangeText={setSyncUser}
+                  mode="outlined"
+                  autoCapitalize="none"
+                  style={styles.flexInput}
+                  dense
+                />
+                <TextInput
+                  label="Password"
+                  value={syncPass}
+                  onChangeText={setSyncPass}
+                  mode="outlined"
+                  secureTextEntry
+                  style={styles.flexInput}
+                  dense
+                />
+                <Button
+                  mode="contained"
+                  icon="login"
+                  onPress={handleLogin}
+                  disabled={busy || !serverUrl.trim() || !syncUser.trim() || !syncPass}
+                  style={styles.backupBtn}
+                >
+                  Accedi
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  mode="contained"
+                  icon="sync"
+                  onPress={handleSync}
+                  disabled={busy}
+                  loading={busy}
+                  style={styles.backupBtn}
+                >
+                  Sincronizza ora
+                </Button>
+                <Button
+                  mode="outlined"
+                  icon="logout"
+                  onPress={handleLogout}
+                  disabled={busy}
+                  style={styles.backupBtn}
+                >
+                  Disconnetti
+                </Button>
+              </>
+            )}
+            <Text style={styles.hint}>
+              I dati restano sul dispositivo; la sincronizzazione li condivide col server
+              protetto da login. Push: invia le tue modifiche; Pull: scarica quelle altrui.
             </Text>
           </View>
         </List.Accordion>
