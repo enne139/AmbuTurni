@@ -1,13 +1,10 @@
-# Action Gitea: costruisce e pubblica l'immagine del backend sul Container Registry
-# dello STESSO Gitea, usando Buildah.
+# Action Gitea: costruisce e pubblica l'immagine del backend con Buildah,
+# sul Container Registry dello stesso Gitea.
 #
-# Imposta nel repo (Settings → Actions → Secrets):
-#   REGISTRY_HOST      host del registry Gitea, es: gitea.example.com  (con porta se serve: gitea.example.com:3000)
-#   REGISTRY_USER      utente Gitea con permesso di scrittura sui package
+# Secrets richiesti (Settings → Actions → Secrets):
+#   REGISTRY_HOST      host del registry, es: gitea.maratuck.com
+#   REGISTRY_USER      utente Gitea con scrittura sui package
 #   REGISTRY_PASSWORD  password o token (PAT con scope write:package)
-#
-# Il runner deve avere buildah (o poterlo installare). Immagine prodotta:
-#   <REGISTRY_HOST>/<owner>/ambulanza-sync:<sha>  (+ :latest)
 
 name: build-backend-image
 
@@ -22,40 +19,25 @@ on:
 
 jobs:
   build:
-    # Esegui sul runner self-hosted che ha buildah/podman installato
+    # Runner self-hosted con buildah disponibile (o installabile)
     runs-on: ubuntu-latest
+    env:
+      # Percorso completo dell'immagine: <host>/<owner>/ambulanza-sync
+      IMAGE: ${{ secrets.REGISTRY_HOST }}/${{ github.repository_owner }}/ambulanza-sync
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Installa Buildah (se assente)
+      - name: Installa Buildah
+        run: sudo apt-get update && sudo apt-get install -y buildah
+
+      - name: Build dell'immagine
+        # Contesto ./backend (dove sta il Dockerfile). Tag = SHA del commit + latest.
+        run: buildah bud -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
+
+      - name: Push dell'immagine
         run: |
-          if ! command -v buildah >/dev/null 2>&1; then
-            apt-get update && apt-get install -y buildah
-          fi
-
-      - name: Build & push sullo stesso Gitea (Buildah)
-        env:
-          REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
-          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-          OWNER: ${{ github.repository_owner }}
-        run: |
-          set -euo pipefail
-
-          # Owner in minuscolo: il registry OCI richiede lowercase.
-          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          IMG="$REGISTRY_HOST/$OWNER_LC/ambulanza-sync"
-          TAG="${GITHUB_SHA::8}"
-
-          echo "Costruisco $IMG:$TAG dal contesto ./backend"
-          buildah bud -t "$IMG:$TAG" -t "$IMG:latest" ./backend
-
-          # In TEST, se il registry usa un certificato self-signed, aggiungi --tls-verify=false
-          # ai comandi 'buildah login' e 'buildah push'.
-          buildah login -u "$REGISTRY_USER" -p "$REGISTRY_PASSWORD" "$REGISTRY_HOST"
-          buildah push "$IMG:$TAG" "docker://$IMG:$TAG"
-          buildah push "$IMG:latest" "docker://$IMG:latest"
-
-          echo "Pubblicata: $IMG:$TAG  (e :latest)"
+          buildah login -u "${{ secrets.REGISTRY_USER }}" -p "${{ secrets.REGISTRY_PASSWORD }}" "${{ secrets.REGISTRY_HOST }}"
+          buildah push "$IMAGE:$GITHUB_SHA" "docker://$IMAGE:$GITHUB_SHA"
+          buildah push "$IMAGE:latest" "docker://$IMAGE:latest"
