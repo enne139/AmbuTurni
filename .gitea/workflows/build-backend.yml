@@ -24,6 +24,10 @@ jobs:
     env:
       # Percorso completo dell'immagine: <host>/<owner>/ambulanza-sync
       IMAGE: ${{ secrets.REGISTRY_HOST }}/${{ github.repository_owner }}/ambulanza-sync
+      # Buildah in un container NON privilegiato: niente user namespace (isolation
+      # chroot) e niente overlay (storage vfs), altrimenti unshare(CLONE_NEWUSER) fallisce.
+      BUILDAH_ISOLATION: chroot
+      STORAGE_DRIVER: vfs
 
     steps:
       - name: Checkout
@@ -34,10 +38,10 @@ jobs:
 
       - name: Build dell'immagine
         # Contesto ./backend (dove sta il Dockerfile). Tag = SHA del commit + latest.
-        run: buildah bud -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
+        run: buildah bud --isolation chroot --storage-driver vfs -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
 
       - name: Push dell'immagine
         run: |
           buildah login -u "${{ secrets.REGISTRY_USER }}" -p "${{ secrets.REGISTRY_PASSWORD }}" "${{ secrets.REGISTRY_HOST }}"
-          buildah push "$IMAGE:$GITHUB_SHA" "docker://$IMAGE:$GITHUB_SHA"
-          buildah push "$IMAGE:latest" "docker://$IMAGE:latest"
+          buildah --storage-driver vfs push "$IMAGE:$GITHUB_SHA" "docker://$IMAGE:$GITHUB_SHA"
+          buildah --storage-driver vfs push "$IMAGE:latest" "docker://$IMAGE:latest"
