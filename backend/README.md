@@ -54,14 +54,21 @@ npm run dev
 
 ## Build dell'immagine
 
-L'immagine viene creata dalla action `.gitea/workflows/build-backend.yml` (Podman) a ogni
-push su `backend/**` e pubblicata sul **Container Registry dello stesso Gitea**, usando il
-token automatico dell'action (nessun secret da configurare; serve solo che il runner abbia
-`podman`). Il tag prodotto è:
+L'immagine viene creata dalla action `.gitea/workflows/build-backend.yml` (Buildah) a ogni
+push su `backend/**` e pubblicata sul **Container Registry dello stesso Gitea**. Il runner
+deve avere `buildah` (o poterlo installare). Tag prodotto:
 
 ```
-<host-gitea>/<owner>/ambulanza-sync:<sha>   (+ :latest)
+<REGISTRY_HOST>/<owner>/ambulanza-sync:<sha>   (+ :latest)
 ```
+
+Secrets da impostare nel repo (Settings → Actions → Secrets):
+
+| Secret | Esempio | Note |
+|---|---|---|
+| `REGISTRY_HOST` | `gitea.example.com` | host del registry (con porta se serve, es. `:3000`) |
+| `REGISTRY_USER` | `laura` | utente Gitea con scrittura sui package |
+| `REGISTRY_PASSWORD` | *(token/PAT)* | password o PAT con scope `write:package` |
 
 Imposta poi `SYNC_IMAGE` nel `.env` con quel percorso, es.:
 

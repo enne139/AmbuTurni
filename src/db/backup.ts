@@ -109,6 +109,11 @@ export async function importData(json: string): Promise<number> {
         total += 1;
       }
     }
+
+    // Azzera i tombstone: dopo un restore i dati appena importati NON devono essere
+    // ri-eliminati al primo sync da eventuali cancellazioni pregresse non sincronizzate.
+    await db.execAsync('DELETE FROM deletions;');
+
     return total;
   } finally {
     await db.execAsync('PRAGMA foreign_keys = ON;');

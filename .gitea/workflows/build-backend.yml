@@ -1,3 +1,14 @@
+# Action Gitea: costruisce e pubblica l'immagine del backend sul Container Registry
+# dello STESSO Gitea, usando Buildah.
+#
+# Imposta nel repo (Settings → Actions → Secrets):
+#   REGISTRY_HOST      host del registry Gitea, es: gitea.example.com  (con porta se serve: gitea.example.com:3000)
+#   REGISTRY_USER      utente Gitea con permesso di scrittura sui package
+#   REGISTRY_PASSWORD  password o token (PAT con scope write:package)
+#
+# Il runner deve avere buildah (o poterlo installare). Immagine prodotta:
+#   <REGISTRY_HOST>/<owner>/ambulanza-sync:<sha>  (+ :latest)
+
 name: build-backend-image
 
 on:
@@ -11,40 +22,40 @@ on:
 
 jobs:
   build:
-    # Esegui sul runner self-hosted che ha podman installato
-    runs-on: self-hosted
+    # Esegui sul runner self-hosted che ha buildah/podman installato
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build & push sullo stesso Gitea (Podman)
+      - name: Installa Buildah (se assente)
+        run: |
+          if ! command -v buildah >/dev/null 2>&1; then
+            apt-get update && apt-get install -y buildah
+          fi
+
+      - name: Build & push sullo stesso Gitea (Buildah)
         env:
-          # Imposta questi secrets nel repo / org:
-          # REGISTRY_HOST es: gitea.example.com:3000
-          # REGISTRY_TOKEN token per push
           REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
-          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
-          ACTOR: ${{ github.actor }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
 
-          HOST="${REGISTRY_HOST}"
+          # Owner in minuscolo: il registry OCI richiede lowercase.
           OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          IMG="$HOST/$OWNER_LC/ambulanza-sync"
+          IMG="$REGISTRY_HOST/$OWNER_LC/ambulanza-sync"
           TAG="${GITHUB_SHA::8}"
 
-          TOKEN="${REGISTRY_TOKEN}"
+          echo "Costruisco $IMG:$TAG dal contesto ./backend"
+          buildah bud -t "$IMG:$TAG" -t "$IMG:latest" ./backend
 
-          echo "Costruisco e pubblico $IMG:$TAG su $HOST"
-
-          # Esegui build e push con podman disponibile sul runner
-          podman build -t "$IMG:$TAG" -t "$IMG:latest" ./backend
-
-          # Se il registry usa cert self-signed e sei in test, puoi aggiungere --tls-verify=false
-          printf '%s' "$TOKEN" | podman login "$HOST" -u "$ACTOR" --password-stdin
-          podman push "$IMG:$TAG"
-          podman push "$IMG:latest"
+          # In TEST, se il registry usa un certificato self-signed, aggiungi --tls-verify=false
+          # ai comandi 'buildah login' e 'buildah push'.
+          buildah login -u "$REGISTRY_USER" -p "$REGISTRY_PASSWORD" "$REGISTRY_HOST"
+          buildah push "$IMG:$TAG" "docker://$IMG:$TAG"
+          buildah push "$IMG:latest" "docker://$IMG:latest"
 
           echo "Pubblicata: $IMG:$TAG  (e :latest)"
