@@ -194,8 +194,11 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   build-tools 35, **NDK 27.1.12297006 + CMake 3.22.1** (necessari per `newArchEnabled`).
   L'APK è firmato col keystore di **debug** (come il profilo EAS "preview"): installabile in
   sideload, NON adatto al Play Store senza un keystore reale (istruzioni in coda al workflow).
-  Trigger: manuale o tag `v*`; output come **artifact** `ambulanza-turni-apk`. Serve un runner
-  Linux x86_64 con Node, rete e disco/RAM adeguati (1ª build scarica l'NDK, ~1 GB).
+  Trigger: manuale o tag `v*`. **Output**: l'APK è pubblicato come **generic package** nel
+  Package Registry di Gitea (repo → Packages → `ambulanza-turni`), NON come artifact —
+  `actions/upload-artifact@v4` non è supportato dal backend di Gitea. Serve il secret
+  `REGISTRY_TOKEN` (lo stesso del workflow backend, scope `write:package`). Runner Linux
+  x86_64 con Node, rete e disco/RAM adeguati (1ª build scarica l'NDK, ~1 GB).
   **Tuning per runner con poca RAM (~4 GB):** il workflow builda la sola ABI `arm64-v8a`
   (lavoro C++ ~4× minore, APK più piccolo; niente 32-bit/emulatori x86) e limita Gradle
   (heap 2 GB, no parallel, max 2 worker) per evitare l'OOM. Su 4 GB resta consigliato

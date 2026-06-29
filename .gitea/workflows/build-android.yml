@@ -15,7 +15,12 @@
 #
 # Requisiti runner: runner Linux con Node (per le action JS), accesso a Internet
 # (scarica JDK/SDK/NDK), e spazio disco/RAM adeguati (toolchain Android + bundling
-# JS + compilazione C++ del codegen). Gli artifacts devono essere abilitati sull'istanza.
+# JS + compilazione C++ del codegen).
+#
+# Output: l'APK è pubblicato come "generic package" nel Package Registry di Gitea
+# (NON come artifact: upload-artifact@v4 non è supportato dal backend di Gitea). Serve
+# quindi il secret REGISTRY_TOKEN (PAT con scope write:package), lo stesso del workflow
+# backend. Scaricabile da: repo -> Packages -> ambulanza-turni.
 #
 # Tuning per runner con poca RAM (~4 GB): lo step "Tuning Gradle" builda la sola ABI
 # arm64-v8a e limita heap/worker per evitare l'OOM (vedi commenti nello step). Su 4 GB
@@ -113,12 +118,31 @@ jobs:
           cd android
           ./gradlew assembleRelease --no-daemon
 
-      - name: Pubblica l'APK come artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ambulanza-turni-apk
-          path: android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+      - name: Pubblica l'APK nel Package Registry (generic)
+        # actions/upload-artifact@v4 NON è supportato dal backend artifacts di Gitea
+        # (protocollo "Artifacts v4"): pubblichiamo invece l'APK come "generic package"
+        # via API REST, riusando il PAT REGISTRY_TOKEN (lo stesso del registry immagini,
+        # scope write:package). Host e schema si ricavano da GITHUB_SERVER_URL.
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          APK=$(ls android/app/build/outputs/apk/release/*.apk | head -n1)
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # Versione del package = tag (es. v1.0.0) sui build da tag, altrimenti dev-<sha>.
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="dev-${GITHUB_SHA::7}"
+          fi
+          FILENAME="ambulanza-turni-${VERSION}.apk"
+          URL="${GITHUB_SERVER_URL}/api/packages/${OWNER}/generic/ambulanza-turni/${VERSION}/${FILENAME}"
+          echo "Carico $APK -> $URL"
+          # Best-effort: rimuove una versione omonima da run precedenti (evita il 409 al
+          # ricaricamento dello stesso tag); il 404 se non esiste viene ignorato.
+          curl -fsSL -X DELETE --user "${{ github.actor }}:${REGISTRY_TOKEN}" "$URL" || true
+          curl -fsSL --user "${{ github.actor }}:${REGISTRY_TOKEN}" --upload-file "$APK" "$URL"
+          echo "APK pubblicato come package generico 'ambulanza-turni' versione $VERSION ($FILENAME)"
 
 # --- Distribuzione su Play Store (firma con keystore reale) -------------------
 # L'APK qui prodotto è firmato col keystore di DEBUG. Per una build firmata "di
