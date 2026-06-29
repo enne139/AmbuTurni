@@ -179,9 +179,11 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   Serve un runner con accesso al daemon Docker (socket `/var/run/docker.sock` montato
   oppure Docker-in-Docker). Imposta poi `SYNC_IMAGE` nel `.env` del compose con
   `<host-gitea>/<owner>/ambulanza-sync`.
-  Nota build: si usa `docker buildx build --push` (build+push in un solo step). Con un
-  `docker build` + `docker push` separati, sul runner con driver `docker-container`
-  l'immagine non finisce nello store locale e il push dà `image not known`.
+  Nota build: si costruisce con `docker buildx build --builder default --load` (immagine
+  nello store locale del daemon) e si fa il `docker push` in uno step separato. Il builder
+  `docker-container` non va bene qui: non carica l'immagine in locale (push → `image not
+  known`) e gira in un container con rete isolata che non raggiunge il registry (push →
+  `connection refused`), mentre il `docker login`/`push` dal job container funzionano.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```
