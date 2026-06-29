@@ -110,8 +110,22 @@ export async function importData(json: string): Promise<number> {
       }
     }
 
-    // Azzera i tombstone: dopo un restore i dati appena importati NON devono essere
-    // ri-eliminati al primo sync da eventuali cancellazioni pregresse non sincronizzate.
+    // Dopo un restore i dati importati diventano la "verità" da propagare in sync:
+    // li marchiamo non sincronizzati (is_synced = 0) e con updated_at = adesso. Così al
+    // primo push vincono il last-write-wins del server (client_updated_at più recente) e
+    // SOVRASCRIVONO eventuali tombstone remoti — cancellazioni propagate da altri
+    // dispositivi PRIMA del restore. Senza il bump di updated_at il push manterrebbe il
+    // timestamp (vecchio) del backup: il tombstone server resterebbe più recente e al
+    // primo pull ri-eliminerebbe i dati appena importati.
+    // (Nota: con forte sfasamento di orologi tra dispositivi il last-write-wins resta
+    // intrinsecamente best-effort.)
+    const now = new Date().toISOString();
+    for (const t of INSERT_ORDER) {
+      await db.runAsync(`UPDATE ${t} SET is_synced = 0, updated_at = ?`, [now]);
+    }
+
+    // Azzera i tombstone LOCALI: cancellazioni pregresse non ancora sincronizzate non
+    // devono essere ripush-ate ed eliminare i dati appena importati al primo sync.
     await db.execAsync('DELETE FROM deletions;');
 
     return total;

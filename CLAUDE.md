@@ -169,8 +169,11 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
 - **Sync**: implementata (backend + client), incluse le **eliminazioni** tramite tombstone
   (tabella locale `deletions`): le delete locali registrano un tombstone, il push lo invia con
   `deleted=true`, gli altri dispositivi lo applicano col pull. Cancellando un turno si crea il
-  tombstone anche per i suoi servizi (rimossi in cascata). Nota: dopo un import/restore del
-  backup, eventuali tombstone pregressi potrebbero ri-eliminare dati al primo sync (caso limite).
+  tombstone anche per i suoi servizi (rimossi in cascata). **Restore + sync**: `importData()`
+  azzera i `deletions` locali e marca i dati importati `is_synced=0` con `updated_at=adesso`,
+  così al primo push vincono il last-write-wins e sovrascrivono eventuali tombstone già sul
+  server (altrimenti li ri-eliminerebbero al pull). Il restore diventa quindi "autorevole" e
+  ri-propaga i dati; resta best-effort con forte sfasamento di orologi tra dispositivi.
 - L'immagine del backend è pubblicata sul **registry dello stesso Gitea** dall'action
   (`.gitea/workflows/build-backend.yml`, **Docker**). Host del registry ricavato da
   `GITHUB_SERVER_URL`; login con `${{ github.actor }}` + il PAT nel secret
