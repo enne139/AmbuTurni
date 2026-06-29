@@ -195,7 +195,12 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   L'APK è firmato col keystore di **debug** (come il profilo EAS "preview"): installabile in
   sideload, NON adatto al Play Store senza un keystore reale (istruzioni in coda al workflow).
   Trigger: manuale o tag `v*`; output come **artifact** `ambulanza-turni-apk`. Serve un runner
-  Linux con Node, rete e disco/RAM adeguati (1ª build scarica l'NDK, ~1 GB).
+  Linux x86_64 con Node, rete e disco/RAM adeguati (1ª build scarica l'NDK, ~1 GB).
+  **Tuning per runner con poca RAM (~4 GB):** il workflow builda la sola ABI `arm64-v8a`
+  (lavoro C++ ~4× minore, APK più piccolo; niente 32-bit/emulatori x86) e limita Gradle
+  (heap 2 GB, no parallel, max 2 worker) per evitare l'OOM. Su 4 GB resta consigliato
+  aggiungere **swap sul host** (es. `/swapfile` da 6 GB), specie se sulla stessa VPS girano
+  già Gitea + Postgres + backend.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```
