@@ -1,8 +1,10 @@
 # Action Gitea: costruisce e pubblica l'immagine del backend con Docker,
 # sul Container Registry della STESSA istanza Gitea.
 #
-# Non servono secret manuali: si usa il token integrato che Gitea fornisce a ogni
-# workflow (GITHUB_TOKEN) e l'host dell'istanza (GITHUB_SERVER_URL).
+# L'host del registry si ricava da GITHUB_SERVER_URL (niente secret per l'host).
+# Per l'autenticazione serve UN solo secret: REGISTRY_TOKEN = un PAT Gitea con
+# scope write:package (Settings -> Applications -> Generate New Token). Il token
+# integrato GITHUB_TOKEN NON basta: non ha i permessi sui package (-> unauthorized).
 #
 # Richiede un runner con accesso al daemon Docker (socket /var/run/docker.sock
 # montato, oppure Docker-in-Docker).
@@ -37,8 +39,8 @@ jobs:
           echo "IMAGE=$REGISTRY/$OWNER/ambulanza-sync" >> "$GITHUB_ENV"
 
       - name: Login al registry
-        # Token integrato via stdin: utente = chi ha lanciato il workflow.
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+        # PAT via stdin: utente = chi ha lanciato il workflow (proprietario del token).
+        run: echo "${{ secrets.REGISTRY_TOKEN }}" | docker login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
 
       - name: Build dell'immagine
         # Contesto ./backend (dove sta il Dockerfile). Tag = SHA del commit + latest.

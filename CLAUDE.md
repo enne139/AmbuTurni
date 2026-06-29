@@ -143,9 +143,9 @@ backend/                        API di sincronizzazione (Node + Express + Postgr
   Config in tabella `sync_meta`. UI in **Impostazioni → Sincronizzazione**.
 - **Deploy**: `backend/docker-compose.yml` (postgres + api, ok con `podman-compose`).
   L'immagine è costruita dalla action `.gitea/workflows/build-backend.yml` (**Docker**),
-  pubblicata sul registry della **stessa istanza Gitea** usando il **token integrato**
-  (`GITHUB_TOKEN`) e l'host ricavato da `GITHUB_SERVER_URL`: niente secret manuali.
-  Serve solo un runner con accesso al daemon Docker.
+  pubblicata sul registry della **stessa istanza Gitea**. L'host si ricava da
+  `GITHUB_SERVER_URL`; per l'auth serve **un solo secret** `REGISTRY_TOKEN` (PAT con
+  scope `write:package`) — il token integrato non basta. Serve un runner con Docker.
 
 ## Avvio & verifica
 
@@ -172,13 +172,13 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   tombstone anche per i suoi servizi (rimossi in cascata). Nota: dopo un import/restore del
   backup, eventuali tombstone pregressi potrebbero ri-eliminare dati al primo sync (caso limite).
 - L'immagine del backend è pubblicata sul **registry dello stesso Gitea** dall'action
-  (`.gitea/workflows/build-backend.yml`, **Docker**). Autenticazione con il **token
-  integrato** del workflow (`GITHUB_TOKEN` + `github.actor`); host del registry ricavato
-  da `GITHUB_SERVER_URL`: **niente secret manuali da configurare**. Serve un runner con
-  accesso al daemon Docker (socket `/var/run/docker.sock` montato oppure Docker-in-Docker).
-  Imposta poi `SYNC_IMAGE` nel `.env` del compose con `<host-gitea>/<owner>/ambulanza-sync`.
-  Nota: se il token integrato non avesse lo scope di scrittura sui package, ripiegare su un
-  PAT (`write:package`) passato come secret.
+  (`.gitea/workflows/build-backend.yml`, **Docker**). Host del registry ricavato da
+  `GITHUB_SERVER_URL`; login con `${{ github.actor }}` + il PAT nel secret
+  **`REGISTRY_TOKEN`** (scope `write:package`). Il token integrato `GITHUB_TOKEN` dà
+  `unauthorized` sul push (non ha i permessi package), quindi il PAT è obbligatorio.
+  Serve un runner con accesso al daemon Docker (socket `/var/run/docker.sock` montato
+  oppure Docker-in-Docker). Imposta poi `SYNC_IMAGE` nel `.env` del compose con
+  `<host-gitea>/<owner>/ambulanza-sync`.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```
