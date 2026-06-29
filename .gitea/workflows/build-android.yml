@@ -67,8 +67,12 @@ jobs:
 
       - name: Installa componenti SDK (platform, build-tools, NDK, CMake)
         # Licenze accettate in modo non interattivo. NDK+CMake servono per la New Arch.
+        # ( yes || true ): quando sdkmanager chiude lo stdin, `yes` muore di SIGPIPE
+        # (exit 141) e con `pipefail` farebbe fallire lo step pur avendo accettato le
+        # licenze; il `|| true` assorbe SOLO quel caso, mentre l'exit di sdkmanager
+        # (lato destro della pipe) resta significativo se fallisce davvero.
         run: |
-          yes | sdkmanager --licenses >/dev/null
+          ( yes 2>/dev/null || true ) | sdkmanager --licenses >/dev/null
           sdkmanager \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
