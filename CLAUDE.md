@@ -39,7 +39,7 @@
 | ID | `uuid` + `react-native-get-random-values` |
 | File backup | `expo-file-system` + `expo-sharing` + `expo-document-picker` (native) / DOM (web) |
 | Linguaggio | TypeScript strict |
-| Build | EAS (`preview` → APK, `production` → app-bundle) |
+| Build | EAS (`preview` → APK, `production` → app-bundle) **oppure** APK sul runner Gitea (`.gitea/workflows/build-android.yml`) |
 
 ---
 
@@ -83,6 +83,7 @@ backend/                        API di sincronizzazione (Node + Express + Postgr
 ├── docker-compose.yml          postgres + api
 └── .env.example, README.md
 .gitea/workflows/build-backend.yml  action (Docker) build+push immagine
+.gitea/workflows/build-android.yml   action: compila l'APK Android sul runner (prebuild+Gradle)
 ```
 
 ---
@@ -187,6 +188,14 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   `docker-container` non va bene qui: non carica l'immagine in locale (push → `image not
   known`) e gira in un container con rete isolata che non raggiunge il registry (push →
   `connection refused`), mentre il `docker login`/`push` dal job container funzionano.
+- **Build APK sul runner** (`.gitea/workflows/build-android.yml`, alternativa a EAS cloud):
+  progetto Expo managed → il workflow fa `npm ci` + `expo prebuild --platform android` +
+  `gradlew assembleRelease`. Toolchain installata via action: JDK 17, Android SDK 35,
+  build-tools 35, **NDK 27.1.12297006 + CMake 3.22.1** (necessari per `newArchEnabled`).
+  L'APK è firmato col keystore di **debug** (come il profilo EAS "preview"): installabile in
+  sideload, NON adatto al Play Store senza un keystore reale (istruzioni in coda al workflow).
+  Trigger: manuale o tag `v*`; output come **artifact** `ambulanza-turni-apk`. Serve un runner
+  Linux con Node, rete e disco/RAM adeguati (1ª build scarica l'NDK, ~1 GB).
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```
