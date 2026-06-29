@@ -1,5 +1,8 @@
-# Action Gitea: costruisce e pubblica l'immagine del backend con Buildah,
+# Action Gitea: costruisce e pubblica l'immagine del backend con Docker,
 # sul Container Registry dello stesso Gitea.
+#
+# Richiede un runner con accesso al daemon Docker (socket /var/run/docker.sock
+# montato, oppure Docker-in-Docker).
 #
 # Secrets richiesti (Settings → Actions → Secrets):
 #   REGISTRY_HOST      host del registry, es: gitea.maratuck.com
@@ -19,29 +22,24 @@ on:
 
 jobs:
   build:
-    # Runner self-hosted con buildah disponibile (o installabile)
     runs-on: ubuntu-latest
     env:
       # Percorso completo dell'immagine: <host>/<owner>/ambulanza-sync
       IMAGE: ${{ secrets.REGISTRY_HOST }}/${{ github.repository_owner }}/ambulanza-sync
-      # Buildah in un container NON privilegiato: niente user namespace (isolation
-      # chroot) e niente overlay (storage vfs), altrimenti unshare(CLONE_NEWUSER) fallisce.
-      BUILDAH_ISOLATION: chroot
-      STORAGE_DRIVER: vfs
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Installa Buildah
-        run: sudo apt-get update && sudo apt-get install -y buildah
+      - name: Login al registry
+        # Password via stdin per non lasciarla nei log/processi.
+        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login -u "${{ secrets.REGISTRY_USER }}" --password-stdin "${{ secrets.REGISTRY_HOST }}"
 
       - name: Build dell'immagine
         # Contesto ./backend (dove sta il Dockerfile). Tag = SHA del commit + latest.
-        run: buildah bud --isolation chroot --storage-driver vfs -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
+        run: docker build -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
 
       - name: Push dell'immagine
         run: |
-          buildah login -u "${{ secrets.REGISTRY_USER }}" -p "${{ secrets.REGISTRY_PASSWORD }}" "${{ secrets.REGISTRY_HOST }}"
-          buildah --storage-driver vfs push "$IMAGE:$GITHUB_SHA" "docker://$IMAGE:$GITHUB_SHA"
-          buildah --storage-driver vfs push "$IMAGE:latest" "docker://$IMAGE:latest"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"

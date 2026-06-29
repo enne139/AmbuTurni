@@ -82,7 +82,7 @@ backend/                        API di sincronizzazione (Node + Express + Postgr
 ├── Dockerfile, .dockerignore
 ├── docker-compose.yml          postgres + api
 └── .env.example, README.md
-.gitea/workflows/build-backend.yml  action (Buildah) build+push immagine
+.gitea/workflows/build-backend.yml  action (Docker) build+push immagine
 ```
 
 ---
@@ -142,8 +142,9 @@ backend/                        API di sincronizzazione (Node + Express + Postgr
   `is_synced=0` → poi le marca; pull dopo `last_sync_at` → applica con FK off).
   Config in tabella `sync_meta`. UI in **Impostazioni → Sincronizzazione**.
 - **Deploy**: `backend/docker-compose.yml` (postgres + api, ok con `podman-compose`).
-  L'immagine è costruita dalla action `.gitea/workflows/build-backend.yml` (**Buildah**):
-  richiede i secret `REGISTRY_HOST`/`REGISTRY_USER`/`REGISTRY_PASSWORD`.
+  L'immagine è costruita dalla action `.gitea/workflows/build-backend.yml` (**Docker**):
+  richiede i secret `REGISTRY_HOST`/`REGISTRY_USER`/`REGISTRY_PASSWORD` e un runner con
+  accesso al daemon Docker.
 
 ## Avvio & verifica
 
@@ -170,8 +171,9 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   tombstone anche per i suoi servizi (rimossi in cascata). Nota: dopo un import/restore del
   backup, eventuali tombstone pregressi potrebbero ri-eliminare dati al primo sync (caso limite).
 - L'immagine del backend è pubblicata sul **registry dello stesso Gitea** dall'action
-  (`.gitea/workflows/build-backend.yml`, **Buildah**). Servono i secret `REGISTRY_HOST`,
-  `REGISTRY_USER`, `REGISTRY_PASSWORD` e un runner con `buildah`. Imposta poi `SYNC_IMAGE`
+  (`.gitea/workflows/build-backend.yml`, **Docker**). Servono i secret `REGISTRY_HOST`,
+  `REGISTRY_USER`, `REGISTRY_PASSWORD` e un runner con accesso al daemon Docker (socket
+  `/var/run/docker.sock` montato oppure Docker-in-Docker). Imposta poi `SYNC_IMAGE`
   nel `.env` del compose con `<host-gitea>/<owner>/ambulanza-sync`.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
