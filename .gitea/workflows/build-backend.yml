@@ -1,13 +1,11 @@
 # Action Gitea: costruisce e pubblica l'immagine del backend con Docker,
-# sul Container Registry dello stesso Gitea.
+# sul Container Registry della STESSA istanza Gitea.
+#
+# Non servono secret manuali: si usa il token integrato che Gitea fornisce a ogni
+# workflow (GITHUB_TOKEN) e l'host dell'istanza (GITHUB_SERVER_URL).
 #
 # Richiede un runner con accesso al daemon Docker (socket /var/run/docker.sock
 # montato, oppure Docker-in-Docker).
-#
-# Secrets richiesti (Settings → Actions → Secrets):
-#   REGISTRY_HOST      host del registry, es: gitea.maratuck.com
-#   REGISTRY_USER      utente Gitea con scrittura sui package
-#   REGISTRY_PASSWORD  password o token (PAT con scope write:package)
 
 name: build-backend-image
 
@@ -23,17 +21,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # Percorso completo dell'immagine: <host>/<owner>/ambulanza-sync
-      IMAGE: ${{ secrets.REGISTRY_HOST }}/${{ github.repository_owner }}/ambulanza-sync
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepara variabili registry
+        # Host del registry = host di questa istanza Gitea, senza schema http/https.
+        # Owner in minuscolo perché i nomi immagine Docker devono essere lowercase.
+        run: |
+          REGISTRY="${GITHUB_SERVER_URL#http://}"
+          REGISTRY="${REGISTRY#https://}"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "REGISTRY=$REGISTRY" >> "$GITHUB_ENV"
+          echo "IMAGE=$REGISTRY/$OWNER/ambulanza-sync" >> "$GITHUB_ENV"
+
       - name: Login al registry
-        # Password via stdin per non lasciarla nei log/processi.
-        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login -u "${{ secrets.REGISTRY_USER }}" --password-stdin "${{ secrets.REGISTRY_HOST }}"
+        # Token integrato via stdin: utente = chi ha lanciato il workflow.
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
 
       - name: Build dell'immagine
         # Contesto ./backend (dove sta il Dockerfile). Tag = SHA del commit + latest.
