@@ -42,11 +42,9 @@ jobs:
         # PAT via stdin: utente = chi ha lanciato il workflow (proprietario del token).
         run: echo "${{ secrets.REGISTRY_TOKEN }}" | docker login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
 
-      - name: Build dell'immagine
+      - name: Build e push dell'immagine
+        # Build + push in un unico step con buildx: con il driver docker-container
+        # un "docker build" normale non carica l'immagine nello store locale, quindi
+        # un push separato darebbe "image not known". Con --push va dritta al registry.
         # Contesto ./backend (dove sta il Dockerfile). Tag = SHA del commit + latest.
-        run: docker build -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
-
-      - name: Push dell'immagine
-        run: |
-          docker push "$IMAGE:$GITHUB_SHA"
-          docker push "$IMAGE:latest"
+        run: docker buildx build --push -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" ./backend
