@@ -184,39 +184,29 @@ class _TurnoFormState extends State<TurnoForm> {
             const SizedBox(height: 20),
 
             // --- Tipologia ---
+            // Chip con selezione singola (radio): tocca per selezionare,
+            // tocca di nuovo per deselezionare. Nessun dropdown: più immediato
+            // con poche tipologie come in questo caso d'uso.
             _Sezione(titolo: 'Tipologia'),
-            _DropdownAnag<TipologiaTurno>(
-              valore: _tipologiaId,
-              items: anag.tipologieTurno,
-              label: (t) => t.nome,
-              id: (t) => t.id,
-              hint: 'Seleziona tipologia',
-              nullable: true,
-              onChanged: (v) => setState(() => _tipologiaId = v),
-            ),
-            // FilterChip per le tipologie "extra" (es. turno BLS + BLSD insieme).
-            // Le tipologie escluse dalla selezione principale appaiono come chip
-            // multi-select; vengono serializzate come JSON array nella colonna tipologie_extra.
-            if (anag.tipologieTurno.isNotEmpty) ...[
-              const SizedBox(height: 8),
+            if (anag.tipologieTurno.isNotEmpty)
               Wrap(
                 spacing: 8,
+                runSpacing: 4,
                 children: anag.tipologieTurno
-                    .where((t) => t.id != _tipologiaId)
                     .map((t) => FilterChip(
                           label: Text(t.nome),
-                          selected: _tipologieExtra.contains(t.id),
+                          selected: _tipologiaId == t.id,
                           onSelected: (sel) => setState(() {
-                            if (sel) {
-                              _tipologieExtra.add(t.id);
-                            } else {
-                              _tipologieExtra.remove(t.id);
-                            }
+                            _tipologiaId = sel ? t.id : null;
+                            // Rimuovi dalle extra se era lì
+                            _tipologieExtra.remove(t.id);
                           }),
                         ))
                     .toList(),
-              ),
-            ],
+              )
+            else
+              const Text('Nessuna tipologia configurata',
+                  style: TextStyle(color: Colors.white38, fontSize: 13)),
             const SizedBox(height: 20),
 
             // --- Equipaggio 1ª parte ---
