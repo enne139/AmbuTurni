@@ -194,16 +194,12 @@ Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refres
   build-tools 35, **NDK 27.1.12297006 + CMake 3.22.1** (necessari per `newArchEnabled`).
   L'APK è firmato col keystore di **debug** (come il profilo EAS "preview"): installabile in
   sideload, NON adatto al Play Store senza un keystore reale (istruzioni in coda al workflow).
-  Trigger: manuale o tag `v*`. **Output**: l'APK è pubblicato come **generic package** nel
-  Package Registry di Gitea (repo → Packages → `ambulanza-turni`), NON come artifact —
-  `actions/upload-artifact@v4` non è supportato dal backend di Gitea. Serve il secret
-  `REGISTRY_TOKEN` (lo stesso del workflow backend, scope `write:package`). Runner Linux
-  x86_64 con Node, rete e disco/RAM adeguati (1ª build scarica l'NDK, ~1 GB).
-  **Tuning per runner con poca RAM (~4 GB):** il workflow builda la sola ABI `arm64-v8a`
-  (lavoro C++ ~4× minore, APK più piccolo; niente 32-bit/emulatori x86) e limita Gradle
-  (heap 2 GB, no parallel, max 2 worker) per evitare l'OOM. Su 4 GB resta consigliato
-  aggiungere **swap sul host** (es. `/swapfile` da 6 GB), specie se sulla stessa VPS girano
-  già Gitea + Postgres + backend.
+  Trigger: manuale o tag `v*`. **Runner**: `runs-on: android` → gira sul runner self-hosted
+  registrato con label `android` (es. act_runner in Docker sul PC). Immagine consigliata
+  `catthehacker/ubuntu:act-latest` (Node + apt/curl/unzip), x86_64, ≥ 8 GB RAM e ~20 GB
+  liberi (1ª build scarica l'NDK, ~1 GB). **Output**: l'APK è caricato come **artifact**
+  `ambulanza-turni-apk` con `actions/upload-artifact@v3` (su Gitea va la **v3**: il backend
+  artifacts non supporta il protocollo della v4). Nessun secret necessario.
 - Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
 - Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
 ```
