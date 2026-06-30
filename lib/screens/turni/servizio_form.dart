@@ -32,6 +32,9 @@ class _ServizioFormState extends State<ServizioForm> {
     _caricaDati();
   }
 
+  /// Carica i dati del servizio esistente in modalità modifica.
+  /// Rilegge tutti i servizi del turno e filtra per ID: più semplice che
+  /// aggiungere una getServizioById dedicata per un caso così raro.
   Future<void> _caricaDati() async {
     if (widget.servizioId != null) {
       final servizi = await getServizi(widget.turnoId);

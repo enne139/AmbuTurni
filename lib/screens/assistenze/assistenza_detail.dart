@@ -124,6 +124,7 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
       a.eq2AutostaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
       a.eq2QuartoId != null || a.eq2CentralinistaId != null;
 
+  /// Mostra solo i ruoli valorizzati, omettendo quelli null per non sprecare spazio.
   List<Widget> _eqRows(AnagraficheProvider anag, String? aut, String? cs, String? terzo, String? quarto, String? central) {
     final roles = {'Autista': aut, 'CS': cs, 'Terzo': terzo, 'Quarto': quarto, 'Centralinista': central};
     return roles.entries

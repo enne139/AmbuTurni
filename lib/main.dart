@@ -12,11 +12,14 @@ void main() async {
   runApp(const AmbulanzaTurniApp());
 }
 
+/// Widget radice dell'app.
 class AmbulanzaTurniApp extends StatelessWidget {
   const AmbulanzaTurniApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Tre provider separati per scope diversi: Anagrafiche è globale e cambia
+    // poco; Turni e Assistenze hanno ciascuno il proprio filtro e ciclo di vita.
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AnagraficheProvider()),

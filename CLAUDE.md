@@ -10,14 +10,16 @@
 
 1. **Branch:** i commit di questo rewrite vanno su **`flutter-rewrite`**. L'app originale RN
    è su `main`/`sviluppo` e non va toccata da qui.
-2. **Tieni aggiornato questo file:** ogni volta che cambi struttura o prendi una decisione
-   tecnica, aggiorna `CLAUDE.md` nello stesso commit.
+2. **Aggiorna sempre questo file:** ogni volta che cambi struttura, aggiungi una funzionalità
+   o prendi una decisione tecnica, aggiorna `CLAUDE.md` nello **stesso commit**.
 3. **Commenta il codice in italiano:** ogni funzione/widget non banale deve avere un commento
-   che spiega *cosa* fa e *perché* (non il *come*: quello è già leggibile dal codice).
-4. **Verifica prima di chiudere:** `flutter analyze` deve uscire senza errori (`error`).
+   che spiega *perché* (non il *come*: quello è già leggibile dal codice).
+   I commenti vanno aggiunti **nella stessa sessione** in cui scrivi il codice.
+4. **Fai il commit dopo ogni modifica:** ogni feature, fix o refactor va salvato in un commit
+   subito, con messaggio in stile Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`)
+   e testo in italiano. Non accumulare più modifiche in un unico commit generico.
+5. **Verifica prima di chiudere:** `flutter analyze` deve uscire senza errori (`error`).
    Gli `info` warning minori sono accettabili.
-5. **Convenzione commit (Conventional Commits):** `feat:`, `fix:`, `chore:`, `docs:`.
-   Messaggi in italiano.
 
 ---
 

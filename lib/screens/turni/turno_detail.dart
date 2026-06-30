@@ -58,6 +58,7 @@ class _TurnoDetailState extends State<TurnoDetail> {
     _carica();
   }
 
+  /// Sposta un servizio su o giù di una posizione e ricarica la lista.
   Future<void> _sposta(int from, int to) async {
     await spostaServizio(widget.turnoId, from, to);
     _carica();
@@ -145,6 +146,8 @@ class _TurnoDetailState extends State<TurnoDetail> {
     );
   }
 
+  /// Nasconde la sezione equipaggio se nessuna persona è stata assegnata,
+  /// per non mostrare una card vuota a chi non usa il campo.
   bool _hasEquipaggio(Turno t) =>
       t.eq1AutostaId != null || t.eq1CsId != null || t.eq1TerzoId != null ||
       t.eq1QuartoId != null || t.eq1CentralinistaId != null ||

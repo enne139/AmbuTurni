@@ -120,6 +120,8 @@ class _TurniListState extends State<TurniList> {
   }
 }
 
+/// Card di un turno nella lista: mostra numero progressivo, data, associazione,
+/// tipologia, ore e contatore servizi. Long-press per eliminare.
 class _TurnoCard extends StatelessWidget {
   final Turno turno;
   final VoidCallback onTap;
