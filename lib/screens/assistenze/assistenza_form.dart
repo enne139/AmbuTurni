@@ -41,6 +41,9 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
     _caricaDati();
   }
 
+  /// Carica i dati dell'assistenza se siamo in modalità modifica.
+  /// `mounted` check dopo l'await: se l'utente preme Back prima che la query finisca
+  /// il widget non è più nell'albero e setState lancerebbe un'eccezione.
   Future<void> _caricaDati() async {
     if (widget.assistenzaId != null) {
       final a = await getAssistenzaById(widget.assistenzaId!);

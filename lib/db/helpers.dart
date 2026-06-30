@@ -1,24 +1,33 @@
+// Tutte le funzioni CRUD dell'app. Ogni funzione che scrive invalida
+// is_synced = 0 così il sync manager sa cosa deve spingere al server.
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'database.dart';
 import 'models.dart';
 
-// Generatore UUID usato per tutti gli id locali.
+// UUID v4 casuale — garantisce unicità senza coordinazione col server,
+// compatibile con l'id TEXT PRIMARY KEY usato anche su PostgreSQL.
 const _uuid = Uuid();
 String newId() => _uuid.v4();
 
+// ISO 8601 UTC: formato identico a quello usato dal backend Node per i
+// campi updated_at, così i confronti di timestamp funzionano cross-platform.
 String _now() => DateTime.now().toUtc().toIso8601String();
 
 // ---------------------------------------------------------------------------
 // ANAGRAFICHE
 // ---------------------------------------------------------------------------
 
+/// Restituisce tutte le associazioni ordinate per nome.
 Future<List<Associazione>> getAssociazioni() async {
   final db = await getDb();
   final rows = await db.query('associazioni', orderBy: 'nome ASC');
   return rows.map(Associazione.fromMap).toList();
 }
 
+/// Inserisce o aggiorna un'associazione.
+/// Se [id] è null viene creata una nuova riga con un UUID fresco;
+/// altrimenti viene aggiornata la riga esistente (rename).
 Future<void> saveAssociazione(String nome, {String? id}) async {
   final db = await getDb();
   final now = _now();
@@ -45,6 +54,7 @@ Future<void> deleteAssociazione(String id) async {
   await db.delete('associazioni', where: 'id = ?', whereArgs: [id]);
 }
 
+/// Restituisce tutte le persone ordinate per cognome poi nome.
 Future<List<Persona>> getPersone() async {
   final db = await getDb();
   final rows = await db.query('persone', orderBy: 'cognome ASC, nome ASC');
@@ -117,6 +127,9 @@ Future<List<TipologiaTurno>> getTipologieTurno() async {
   return rows.map(TipologiaTurno.fromMap).toList();
 }
 
+/// Inserisce o rinomina una tipologia turno.
+/// Le tipologie non si eliminano (spec originale): potrebbero essere
+/// associate a turni esistenti e romperebbe la foreign key.
 Future<void> saveTipologiaTurno(String nome, {String? id}) async {
   final db = await getDb();
   final now = _now();
@@ -142,8 +155,9 @@ Future<void> saveTipologiaTurno(String nome, {String? id}) async {
 // TURNI
 // ---------------------------------------------------------------------------
 
-/// Restituisce i turni ordinati per data decrescente, con JOIN su associazione
-/// e tipologia per avere i nomi già disponibili senza query aggiuntive.
+/// Restituisce i turni ordinati per data decrescente.
+/// LEFT JOIN su associazioni e tipologie_turno per denormalizzare i nomi
+/// ed evitare N+1 query nelle liste (un'unica query basta per tutto).
 Future<List<Turno>> getTurni({String? associazioneId}) async {
   final db = await getDb();
   final where = associazioneId != null ? 'WHERE t.associazione_id = ?' : '';
@@ -161,6 +175,7 @@ Future<List<Turno>> getTurni({String? associazioneId}) async {
   return rows.map(Turno.fromMap).toList();
 }
 
+/// Restituisce un singolo turno con i campi denormalizzati, o null se non esiste.
 Future<Turno?> getTurnoById(String id) async {
   final db = await getDb();
   final rows = await db.rawQuery('''
@@ -176,30 +191,37 @@ Future<Turno?> getTurnoById(String id) async {
   return Turno.fromMap(rows.first);
 }
 
-/// Salva (insert o update) un turno e ricalcola la numerazione progressiva.
+/// Salva un turno (insert or replace) e ricalcola la numerazione progressiva
+/// dell'associazione. ConflictAlgorithm.replace = upsert: funziona sia per
+/// la creazione che per la modifica senza distinguere i due casi in SQL.
 Future<void> saveTurno(Turno turno) async {
   final db = await getDb();
   final now = _now();
-  final map = turno.toMap()..['updated_at'] = now..['is_synced'] = 0;
-  await db.insert(
-    'turni',
-    map,
-    conflictAlgorithm: ConflictAlgorithm.replace,
-  );
+  final map = turno.toMap()
+    ..['updated_at'] = now
+    ..['is_synced'] = 0;
+  await db.insert('turni', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  // La numerazione va ricalcolata dopo ogni salvataggio perché l'ordine
+  // per data potrebbe essere cambiato (es. si modifica la data di un turno).
   await _ricalcolaNumerazioneTurni(db, turno.associazioneId);
 }
 
+/// Elimina un turno (i servizi figli vengono eliminati via ON DELETE CASCADE).
+/// Legge associazione_id prima di cancellare perché dopo la DELETE non è più
+/// disponibile, ma serve per ricalcolare la numerazione progressiva.
 Future<void> deleteTurno(String id) async {
   final db = await getDb();
-  // Legge associazione_id prima di cancellare per ricalcolare.
-  final rows = await db.query('turni', columns: ['associazione_id'], where: 'id = ?', whereArgs: [id]);
-  final assocId = rows.isNotEmpty ? rows.first['associazione_id'] as String? : null;
+  final rows = await db.query('turni',
+      columns: ['associazione_id'], where: 'id = ?', whereArgs: [id]);
+  final assocId =
+      rows.isNotEmpty ? rows.first['associazione_id'] as String? : null;
   await db.delete('turni', where: 'id = ?', whereArgs: [id]);
   await _ricalcolaNumerazioneTurni(db, assocId);
 }
 
-/// Ricalcola numero_progressivo per tutti i turni di una associazione,
-/// ordinati per data crescente (il più vecchio = #1).
+/// Ricalcola numero_progressivo per tutti i turni di un'associazione.
+/// Il turno più vecchio (data ASC) riceve il numero 1; in caso di data
+/// uguale si usa created_at come discriminante per stabilità.
 Future<void> _ricalcolaNumerazioneTurni(dynamic db, String? assocId) async {
   if (assocId == null) return;
   final rows = await db.query(
@@ -210,12 +232,8 @@ Future<void> _ricalcolaNumerazioneTurni(dynamic db, String? assocId) async {
     orderBy: 'data ASC, created_at ASC',
   );
   for (int i = 0; i < rows.length; i++) {
-    await db.update(
-      'turni',
-      {'numero_progressivo': i + 1},
-      where: 'id = ?',
-      whereArgs: [rows[i]['id']],
-    );
+    await db.update('turni', {'numero_progressivo': i + 1},
+        where: 'id = ?', whereArgs: [rows[i]['id']]);
   }
 }
 
@@ -223,7 +241,8 @@ Future<void> _ricalcolaNumerazioneTurni(dynamic db, String? assocId) async {
 // SERVIZI
 // ---------------------------------------------------------------------------
 
-/// Restituisce i servizi di un turno con JOIN sull'ospedale, ordinati per ordine.
+/// Restituisce i servizi di un turno ordinati per campo `ordine`.
+/// LEFT JOIN su ospedali per denormalizzare nome e città (mostrati in lista).
 Future<List<Servizio>> getServizi(String turnoId) async {
   final db = await getDb();
   final rows = await db.rawQuery('''
@@ -238,10 +257,13 @@ Future<List<Servizio>> getServizi(String turnoId) async {
   return rows.map(Servizio.fromMap).toList();
 }
 
+/// Salva un servizio e aggiorna il contatore num_servizi nel turno padre.
 Future<void> saveServizio(Servizio servizio) async {
   final db = await getDb();
   final now = _now();
-  final map = servizio.toMap()..['updated_at'] = now..['is_synced'] = 0;
+  final map = servizio.toMap()
+    ..['updated_at'] = now
+    ..['is_synced'] = 0;
   await db.insert('servizi', map, conflictAlgorithm: ConflictAlgorithm.replace);
   await _aggiornaNumServizi(db, servizio.turnoId);
 }
@@ -252,24 +274,31 @@ Future<void> deleteServizio(String id, String turnoId) async {
   await _aggiornaNumServizi(db, turnoId);
 }
 
-/// Aggiorna il contatore num_servizi nel turno padre.
+/// Mantiene num_servizi nel turno denormalizzato per evitare una COUNT(*)
+/// a ogni rendering della lista turni (che mostra "N serv." sul card).
 Future<void> _aggiornaNumServizi(dynamic db, String turnoId) async {
   final count = Sqflite.firstIntValue(
-    await db.rawQuery('SELECT COUNT(*) FROM servizi WHERE turno_id = ?', [turnoId]),
+    await db.rawQuery(
+        'SELECT COUNT(*) FROM servizi WHERE turno_id = ?', [turnoId]),
   );
-  await db.update('turni', {'num_servizi': count ?? 0}, where: 'id = ?', whereArgs: [turnoId]);
+  await db.update('turni', {'num_servizi': count ?? 0},
+      where: 'id = ?', whereArgs: [turnoId]);
 }
 
-/// Sposta un servizio di una posizione (su o giù) aggiornando i campi ordine.
-Future<void> spostaServizio(String turnoId, int fromIndex, int toIndex) async {
+/// Scambia i valori del campo `ordine` di due servizi adiacenti tramite
+/// batch atomico — evita lo stato temporaneo in cui due righe hanno lo
+/// stesso ordine, che causerebbe instabilità nell'ordinamento.
+Future<void> spostaServizio(
+    String turnoId, int fromIndex, int toIndex) async {
   final db = await getDb();
   final servizi = await getServizi(turnoId);
   if (fromIndex < 0 || fromIndex >= servizi.length) return;
   if (toIndex < 0 || toIndex >= servizi.length) return;
   final batch = db.batch();
-  // Scambia gli ordini dei due servizi.
-  batch.update('servizi', {'ordine': toIndex}, where: 'id = ?', whereArgs: [servizi[fromIndex].id]);
-  batch.update('servizi', {'ordine': fromIndex}, where: 'id = ?', whereArgs: [servizi[toIndex].id]);
+  batch.update('servizi', {'ordine': toIndex},
+      where: 'id = ?', whereArgs: [servizi[fromIndex].id]);
+  batch.update('servizi', {'ordine': fromIndex},
+      where: 'id = ?', whereArgs: [servizi[toIndex].id]);
   await batch.commit(noResult: true);
 }
 
@@ -277,9 +306,12 @@ Future<void> spostaServizio(String turnoId, int fromIndex, int toIndex) async {
 // ASSISTENZE
 // ---------------------------------------------------------------------------
 
+/// Come getTurni ma per le assistenze; LEFT JOIN solo su associazioni
+/// perché le assistenze non hanno tipologia né servizi.
 Future<List<Assistenza>> getAssistenze({String? associazioneId}) async {
   final db = await getDb();
-  final where = associazioneId != null ? 'WHERE a.associazione_id = ?' : '';
+  final where =
+      associazioneId != null ? 'WHERE a.associazione_id = ?' : '';
   final args = associazioneId != null ? [associazioneId] : [];
   final rows = await db.rawQuery('''
     SELECT a.*,
@@ -308,20 +340,27 @@ Future<Assistenza?> getAssistenzaById(String id) async {
 Future<void> saveAssistenza(Assistenza assistenza) async {
   final db = await getDb();
   final now = _now();
-  final map = assistenza.toMap()..['updated_at'] = now..['is_synced'] = 0;
-  await db.insert('assistenze', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  final map = assistenza.toMap()
+    ..['updated_at'] = now
+    ..['is_synced'] = 0;
+  await db.insert('assistenze', map,
+      conflictAlgorithm: ConflictAlgorithm.replace);
   await _ricalcolaNumerazioneAssistenze(db, assistenza.associazioneId);
 }
 
 Future<void> deleteAssistenza(String id) async {
   final db = await getDb();
-  final rows = await db.query('assistenze', columns: ['associazione_id'], where: 'id = ?', whereArgs: [id]);
-  final assocId = rows.isNotEmpty ? rows.first['associazione_id'] as String? : null;
+  final rows = await db.query('assistenze',
+      columns: ['associazione_id'], where: 'id = ?', whereArgs: [id]);
+  final assocId =
+      rows.isNotEmpty ? rows.first['associazione_id'] as String? : null;
   await db.delete('assistenze', where: 'id = ?', whereArgs: [id]);
   await _ricalcolaNumerazioneAssistenze(db, assocId);
 }
 
-Future<void> _ricalcolaNumerazioneAssistenze(dynamic db, String? assocId) async {
+/// Stessa logica di _ricalcolaNumerazioneTurni ma per le assistenze.
+Future<void> _ricalcolaNumerazioneAssistenze(
+    dynamic db, String? assocId) async {
   if (assocId == null) return;
   final rows = await db.query(
     'assistenze',
@@ -331,12 +370,8 @@ Future<void> _ricalcolaNumerazioneAssistenze(dynamic db, String? assocId) async 
     orderBy: 'data ASC, created_at ASC',
   );
   for (int i = 0; i < rows.length; i++) {
-    await db.update(
-      'assistenze',
-      {'numero_progressivo': i + 1},
-      where: 'id = ?',
-      whereArgs: [rows[i]['id']],
-    );
+    await db.update('assistenze', {'numero_progressivo': i + 1},
+        where: 'id = ?', whereArgs: [rows[i]['id']]);
   }
 }
 
@@ -344,6 +379,7 @@ Future<void> _ricalcolaNumerazioneAssistenze(dynamic db, String? assocId) async 
 // STATISTICHE
 // ---------------------------------------------------------------------------
 
+/// Contenitore dei dati aggregati mostrati nella schermata Statistiche.
 class StatisticheData {
   final int totTurni;
   final int totServizi;
@@ -362,17 +398,25 @@ class StatisticheData {
   double get oreTotali => oreTurni + oreAssistenze;
 }
 
+/// Esegue tre query aggregate in parallelo (turni, servizi, assistenze).
+/// COALESCE(SUM(ore), 0) gestisce il caso in cui nessuna riga ha ore valorizzate:
+/// senza COALESCE SQLite restituirebbe NULL, che in Dart diventerebbe un crash.
 Future<StatisticheData> getStatistiche({String? associazioneId}) async {
   final db = await getDb();
-  final whereT = associazioneId != null ? 'WHERE associazione_id = ?' : '';
+  final whereT =
+      associazioneId != null ? 'WHERE associazione_id = ?' : '';
   final args = associazioneId != null ? [associazioneId] : [];
 
   final turniRows = await db.rawQuery(
-      'SELECT COUNT(*) AS cnt, COALESCE(SUM(ore),0) AS ore FROM turni $whereT', args);
+      'SELECT COUNT(*) AS cnt, COALESCE(SUM(ore),0) AS ore FROM turni $whereT',
+      args);
   final serviziRows = await db.rawQuery(
-      'SELECT COUNT(*) AS cnt FROM servizi s LEFT JOIN turni t ON t.id = s.turno_id $whereT', args);
+      'SELECT COUNT(*) AS cnt FROM servizi s '
+      'LEFT JOIN turni t ON t.id = s.turno_id $whereT',
+      args);
   final assRows = await db.rawQuery(
-      'SELECT COUNT(*) AS cnt, COALESCE(SUM(ore),0) AS ore FROM assistenze $whereT', args);
+      'SELECT COUNT(*) AS cnt, COALESCE(SUM(ore),0) AS ore FROM assistenze $whereT',
+      args);
 
   return StatisticheData(
     totTurni: (turniRows.first['cnt'] as int?) ?? 0,

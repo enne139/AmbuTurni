@@ -45,6 +45,9 @@ class _TurnoFormState extends State<TurnoForm> {
     _caricaDati();
   }
 
+  /// Carica i dati del turno esistente se siamo in modalità modifica.
+  /// Il check `mounted` dopo l'await previene eccezioni se il widget
+  /// viene smontato mentre la query è in corso (es. l'utente preme Back).
   Future<void> _caricaDati() async {
     if (widget.turnoId != null) {
       final t = await getTurnoById(widget.turnoId!);
@@ -75,6 +78,9 @@ class _TurnoFormState extends State<TurnoForm> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// Salva il turno nel DB usando l'id esistente (modifica) o un UUID nuovo (create).
+  /// L'associazione è l'unico campo obbligatorio: senza di essa la numerazione
+  /// progressiva e il filtro lista non funzionerebbero correttamente.
   Future<void> _salva() async {
     if (!_formKey.currentState!.validate()) return;
     if (_associazioneId == null) {
@@ -188,6 +194,9 @@ class _TurnoFormState extends State<TurnoForm> {
               nullable: true,
               onChanged: (v) => setState(() => _tipologiaId = v),
             ),
+            // FilterChip per le tipologie "extra" (es. turno BLS + BLSD insieme).
+            // Le tipologie escluse dalla selezione principale appaiono come chip
+            // multi-select; vengono serializzate come JSON array nella colonna tipologie_extra.
             if (anag.tipologieTurno.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(

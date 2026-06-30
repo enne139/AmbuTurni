@@ -3,7 +3,8 @@ import '../db/helpers.dart';
 import '../db/models.dart';
 
 /// Provider per le anagrafiche (associazioni, persone, ospedali, tipologie).
-/// Caricato all'avvio e invalidato dopo ogni modifica.
+/// Caricato all'avvio in AppNavigator e richiamato dopo ogni modifica nelle
+/// Impostazioni; i widget che mostrano nomi al posto di ID lo leggono in sola lettura.
 class AnagraficheProvider extends ChangeNotifier {
   List<Associazione> associazioni = [];
   List<Persona> persone = [];
@@ -21,6 +22,9 @@ class AnagraficheProvider extends ChangeNotifier {
   }
 
   bool get caricato => _caricato;
+
+  // I metodi byId* usano try/catch invece di firstWhereOrNull perché quest'ultimo
+  // richiede il package collection; evitare dipendenze extra mantiene il pubspec pulito.
 
   Associazione? byIdAssociazione(String? id) {
     if (id == null) return null;
@@ -59,7 +63,8 @@ class AnagraficheProvider extends ChangeNotifier {
   }
 }
 
-/// Provider per la lista turni.
+/// Provider per la lista turni. Mantiene il filtro associazione attivo
+/// tra una navigazione e l'altra (ricarica() lo riusa senza doverlo ripassare).
 class TurniProvider extends ChangeNotifier {
   List<Turno> turni = [];
   String? _filtroAssociazioneId;
@@ -72,13 +77,14 @@ class TurniProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ricarica con lo stesso filtro già impostato (usato dopo create/edit/delete).
   Future<void> ricarica() async {
     turni = await getTurni(associazioneId: _filtroAssociazioneId);
     notifyListeners();
   }
 }
 
-/// Provider per la lista assistenze.
+/// Provider per la lista assistenze. Stesso pattern di TurniProvider.
 class AssistezeProvider extends ChangeNotifier {
   List<Assistenza> assistenze = [];
   String? _filtroAssociazioneId;
@@ -91,6 +97,7 @@ class AssistezeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ricarica con lo stesso filtro già impostato.
   Future<void> ricarica() async {
     assistenze = await getAssistenze(associazioneId: _filtroAssociazioneId);
     notifyListeners();

@@ -13,7 +13,7 @@
 2. **Tieni aggiornato questo file:** ogni volta che cambi struttura o prendi una decisione
    tecnica, aggiorna `CLAUDE.md` nello stesso commit.
 3. **Commenta il codice in italiano:** ogni funzione/widget non banale deve avere un commento
-   che spiega *cosa* fa e *perché*.
+   che spiega *cosa* fa e *perché* (non il *come*: quello è già leggibile dal codice).
 4. **Verifica prima di chiudere:** `flutter analyze` deve uscire senza errori (`error`).
    Gli `info` warning minori sono accettabili.
 5. **Convenzione commit (Conventional Commits):** `feat:`, `fix:`, `chore:`, `docs:`.
@@ -26,7 +26,8 @@
 | Ruolo | Libreria |
 |---|---|
 | Framework | Flutter 3.22.3 (Dart 3.4.4) |
-| DB | `sqflite` (SQLite nativo Android) |
+| DB Android | `sqflite` (SQLite nativo) |
+| DB Desktop | `sqflite_common_ffi` (SQLite via FFI, usato su Windows/Linux/macOS) |
 | State management | `provider` (ChangeNotifier) |
 | Date | `intl` (DateFormat) |
 | ID | `uuid` v4 |
@@ -48,7 +49,8 @@ lib/
 ├── db/
 │   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
 │   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
-│   └── helpers.dart               TUTTE le funzioni CRUD + StatisticheData
+│   ├── helpers.dart               TUTTE le funzioni CRUD + StatisticheData
+│   └── backup.dart                exportBackup() + importBackup() via share_plus/file_picker
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider
 ├── navigation/
@@ -68,10 +70,11 @@ lib/
     ├── statistiche/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     └── impostazioni/
-        └── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie via dialog
+        └── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
 
 backend/                            API sync Node+Express+PostgreSQL (invariata)
 .gitea/workflows/build-backend.yml  CI Docker per il backend (invariata)
+windows/                            progetto CMake generato da flutter create --platforms windows
 ```
 
 ---
@@ -79,13 +82,19 @@ backend/                            API sync Node+Express+PostgreSQL (invariata)
 ## Schema DB
 
 Identico all'app React Native (stesse tabelle, stessi CHECK, stessi indici) — così un
-eventuale import/export JSON è compatibile tra le due versioni dell'app.
+import/export JSON è compatibile tra le due versioni dell'app.
 
 Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
 `tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
-Le migrazioni sono idempotenti: girando `CREATE TABLE IF NOT EXISTS` a ogni apertura.
+Le migrazioni sono idempotenti: `CREATE TABLE IF NOT EXISTS` a ogni apertura.
+
+### Desktop (Windows/Linux/macOS)
+
+`getDb()` rileva la piattaforma e chiama `sqfliteFfiInit()` + imposta
+`databaseFactory = databaseFactoryFfi` prima di aprire il DB. Su Android usa il
+driver nativo; nessuna distinzione nel resto del codice.
 
 ---
 
@@ -95,33 +104,52 @@ Le migrazioni sono idempotenti: girando `CREATE TABLE IF NOT EXISTS` a ogni aper
 flutter pub get
 flutter analyze          # deve passare senza errori (exit 0)
 flutter run              # su device Android connesso o emulatore
+flutter run -d windows   # per test rapido su Windows (richiede Visual Studio)
 flutter build apk        # APK debug/release
 ```
 
 ## Gradle / Java
 
-La build Android richiede **Gradle 8.7+** (aggiornato in `gradle-wrapper.properties`)
-per la compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) andrà
-aggiornato per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
+La build Android richiede **Gradle 8.10.2** (`gradle-wrapper.properties`) per la
+compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) andrà aggiornato
+per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
+
+## Decisioni tecniche rilevanti
+
+- **sqflite_common_ffi**: aggiunto per Windows; su Android è un no-op ma mantiene
+  un codice identico su tutte le piattaforme.
+- **ConflictAlgorithm.replace** negli insert: upsert idiomatico di sqflite; equivale a
+  `INSERT OR REPLACE INTO` e funziona sia per create che per update.
+- **tipologie_extra**: `List<String>` in Dart, serializzata come `TEXT` JSON nel DB
+  (`jsonEncode`/`jsonDecode` in `models.dart`). Stessa scelta dell'app RN originale.
+- **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
+  usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
+- **PRAGMA foreign_keys = OFF** durante l'import backup: permette di svuotare tutte
+  le tabelle nell'ordine corretto senza violare i vincoli FK durante il delete.
+
+---
 
 ## Funzionalità implementate
 
-- Turni: lista ordinata per data desc, filtro associazione, create/edit/delete, form
-  completo (assoc. obbligatoria, data, ore, tipologia + extra, equipaggio 1ª/2ª parte).
-- Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
-- Assistenze: identico ai turni ma senza tipologia né servizi.
-- Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
+- ✅ Turni: lista ordinata per data desc, filtro associazione, create/edit/delete, form
+  completo (assoc. obbligatoria, data, ore, tipologia + extra chip, equipaggio 1ª/2ª parte).
+- ✅ Equipaggio: UI a colonna singola con label del ruolo sempre visibile a sinistra
+  (redesign rispetto alla griglia 2-colonne originale in cui le label sparivano dopo selezione).
+- ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
+- ✅ Assistenze: identico ai turni ma senza tipologia né servizi.
+- ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
   con filtro per associazione (chip).
-- Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
+- ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
   tipologie turno (rinominabili, non eliminabili come da spec originale).
-- Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
+- ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
+- ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
+- ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
 
 ## TODO (differenze rispetto all'app originale)
 
-- [ ] Backup export/import JSON
-- [ ] Sincronizzazione backend (syncManager)
-- [ ] Workflow CI build-android.yml aggiornato per Flutter
-- [ ] Tipologie assistenza (tabella esiste, UI non ancora implementata)
+- [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+- [ ] Workflow CI build-android.yml aggiornato per Flutter (`flutter build apk`)
+- [ ] Tipologie assistenza (tabella esiste, UI in impostazioni non ancora implementata)
 - [ ] `cambio_meta` (campo per equipaggio a cambio metà turno)
 - [ ] Long-press + Dismissible sulle card per eliminazione più rapida
-- [ ] Test unitari per helpers.dart
+- [ ] Test unitari per `helpers.dart`
