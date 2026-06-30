@@ -1,0 +1,47 @@
+name: ambulanza_turni
+description: App per la gestione di turni e assistenze in ambulanza. Offline-first, Android, tema scuro.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # SQLite locale
+  sqflite: ^2.3.3
+  path: ^1.9.0
+
+  # Percorsi di sistema (Documents, cache…)
+  path_provider: ^2.1.3
+
+  # State management semplice con ChangeNotifier
+  provider: ^6.1.2
+
+  # Formattazione date
+  intl: ^0.19.0
+
+  # Generazione UUID per gli id locali
+  uuid: ^4.4.0
+
+  # Condivisione file (export backup)
+  share_plus: ^9.0.0
+
+  # Selezione file (import backup)
+  file_picker: ^8.0.7
+
+  # HTTP per la sincronizzazione col backend
+  http: ^1.2.1
+
+  # Preferenze persistenti (es. URL server, ultimo sync)
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
