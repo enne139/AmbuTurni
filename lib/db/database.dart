@@ -1,5 +1,7 @@
-import 'package:sqflite/sqflite.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Schema SQL locale — identico a quello del branch React Native (schema.ts).
 const _schema = '''
@@ -132,8 +134,14 @@ CREATE TABLE IF NOT EXISTS deletions (
 Database? _db;
 
 /// Restituisce l'istanza aperta del DB, inizializzandola se necessario.
+/// Su desktop (Windows/Linux/macOS) usa sqflite_common_ffi perché sqflite
+/// nativo non è disponibile fuori da Android/iOS.
 Future<Database> getDb() async {
   if (_db != null) return _db!;
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,

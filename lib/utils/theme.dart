@@ -45,7 +45,7 @@ ThemeData buildDarkTheme() {
       foregroundColor: Colors.white,
       elevation: 0,
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: kSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -97,7 +97,7 @@ ThemeData buildDarkTheme() {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
     dividerColor: kCardBorder,
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       backgroundColor: kSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),

@@ -10,8 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # SQLite locale
+  # SQLite locale (nativo su Android, FFI su Windows/desktop)
   sqflite: ^2.3.3
+  sqflite_common_ffi: ^2.3.3
   path: ^1.9.0
 
   # Percorsi di sistema (Documents, cache…)

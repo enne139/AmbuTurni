@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../db/backup.dart';
 import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
@@ -16,6 +17,8 @@ class ImpostazioniScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: const [
+          _SezioneBackup(),
+          Divider(height: 32),
           _SezioneAssociazioni(),
           Divider(height: 32),
           _SezionePersone(),
@@ -265,6 +268,121 @@ class _SezioneAnag<T> extends StatelessWidget {
                     ),
                 ]),
               )),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Backup / Ripristino
+// ---------------------------------------------------------------------------
+
+class _SezioneBackup extends StatefulWidget {
+  const _SezioneBackup();
+  @override
+  State<_SezioneBackup> createState() => _SezioneBackupState();
+}
+
+class _SezioneBackupState extends State<_SezioneBackup> {
+  bool _busy = false;
+
+  Future<void> _export() async {
+    setState(() => _busy = true);
+    try {
+      await exportBackup();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore export: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _import() async {
+    // Chiede conferma prima di sovrascrivere tutti i dati.
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Importa backup'),
+        content: const Text(
+          'L\'import sovrascrive TUTTI i dati locali con quelli del file scelto. '
+          'Questa operazione non è reversibile.\n\nContinuare?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Importa', style: TextStyle(color: kPrimary)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final msg = await importBackup();
+    if (!mounted) return;
+    setState(() => _busy = false);
+
+    // Ricarica tutti i provider dopo l'import.
+    if (mounted) {
+      context.read<AnagraficheProvider>().carica();
+      context.read<TurniProvider>().ricarica();
+      context.read<AssistezeProvider>().ricarica();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(children: [
+            const Icon(Icons.backup, size: 18, color: kPrimary),
+            const SizedBox(width: 8),
+            const Text('Backup / Ripristino', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+          ]),
+        ),
+        if (_busy)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LinearProgressIndicator(),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text('Esporta JSON'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: kPrimary,
+                    side: const BorderSide(color: kPrimary),
+                  ),
+                  onPressed: _export,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.download, size: 18),
+                  label: const Text('Importa JSON'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                  ),
+                  onPressed: _import,
+                ),
+              ),
+            ]),
+          ),
       ],
     );
   }
