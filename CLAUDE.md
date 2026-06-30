@@ -126,6 +126,10 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   (`jsonEncode`/`jsonDecode` in `models.dart`). Stessa scelta dell'app RN originale.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
+- **Creazione inline con valore sentinella `__new__`**: nei dropdown persona e ospedale
+  un item speciale con `value: '__new__'` viene intercettato nell'`onChanged` del parent;
+  il parent apre un dialog, salva con un UUID pre-generato, ricarica il provider e
+  chiama `setState` con il nuovo ID — così la voce appare già selezionata dopo il reload.
 - **PRAGMA foreign_keys = OFF** durante l'import backup: permette di svuotare tutte
   le tabelle nell'ordine corretto senza violare i vincoli FK durante il delete.
 
@@ -144,6 +148,8 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
 - ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
   tipologie turno (rinominabili, non eliminabili come da spec originale).
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
+- ✅ Creazione inline da dropdown: nei campi equipaggio (persona) e ospedale compare la voce
+  "Aggiungi..." che apre un dialog di creazione al volo, salva e auto-seleziona la nuova voce.
 - ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
 - ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
 

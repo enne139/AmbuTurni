@@ -78,6 +78,58 @@ class _TurnoFormState extends State<TurnoForm> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// Apre un dialog per creare una nuova persona al volo senza uscire dal form.
+  /// Genera l'ID prima del salvataggio così, dopo il reload del provider,
+  /// possiamo auto-selezionare la riga appena creata con setter(id).
+  Future<void> _nuovaPersona(void Function(String?) setter) async {
+    final cognCtrl = TextEditingController();
+    final nomeCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nuova persona'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: cognCtrl,
+            decoration: const InputDecoration(labelText: 'Cognome'),
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: nomeCtrl,
+            decoration: const InputDecoration(labelText: 'Nome'),
+            textCapitalization: TextCapitalization.words,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final cognome = cognCtrl.text.trim();
+    final nome = nomeCtrl.text.trim();
+    if (cognome.isEmpty || nome.isEmpty) return;
+    final id = newId();
+    await savePersona(cognome, nome, id: id);
+    if (!mounted) return;
+    await context.read<AnagraficheProvider>().carica();
+    setState(() => setter(id));
+  }
+
+  /// Gestisce la selezione di un ruolo equipaggio: se l'utente sceglie la
+  /// voce speciale '__new__' avvia la creazione inline, altrimenti aggiorna
+  /// il campo direttamente.
+  void _gestisciPersona(String? val, void Function(String?) setter) {
+    if (val == '__new__') {
+      _nuovaPersona(setter);
+    } else {
+      setState(() => setter(val));
+    }
+  }
+
   /// Salva il turno nel DB usando l'id esistente (modifica) o un UUID nuovo (create).
   /// L'associazione è l'unico campo obbligatorio: senza di essa la numerazione
   /// progressiva e il filtro lista non funzionerebbero correttamente.
@@ -218,11 +270,11 @@ class _TurnoFormState extends State<TurnoForm> {
               terzo: _eq1Terzo,
               quarto: _eq1Quarto,
               centralinista: _eq1Central,
-              onAutista: (v) => setState(() => _eq1Autista = v),
-              onCs: (v) => setState(() => _eq1Cs = v),
-              onTerzo: (v) => setState(() => _eq1Terzo = v),
-              onQuarto: (v) => setState(() => _eq1Quarto = v),
-              onCentralinista: (v) => setState(() => _eq1Central = v),
+              onAutista: (v) => _gestisciPersona(v, (id) => _eq1Autista = id),
+              onCs: (v) => _gestisciPersona(v, (id) => _eq1Cs = id),
+              onTerzo: (v) => _gestisciPersona(v, (id) => _eq1Terzo = id),
+              onQuarto: (v) => _gestisciPersona(v, (id) => _eq1Quarto = id),
+              onCentralinista: (v) => _gestisciPersona(v, (id) => _eq1Central = id),
             ),
             const SizedBox(height: 20),
 
@@ -235,11 +287,11 @@ class _TurnoFormState extends State<TurnoForm> {
               terzo: _eq2Terzo,
               quarto: _eq2Quarto,
               centralinista: _eq2Central,
-              onAutista: (v) => setState(() => _eq2Autista = v),
-              onCs: (v) => setState(() => _eq2Cs = v),
-              onTerzo: (v) => setState(() => _eq2Terzo = v),
-              onQuarto: (v) => setState(() => _eq2Quarto = v),
-              onCentralinista: (v) => setState(() => _eq2Central = v),
+              onAutista: (v) => _gestisciPersona(v, (id) => _eq2Autista = id),
+              onCs: (v) => _gestisciPersona(v, (id) => _eq2Cs = id),
+              onTerzo: (v) => _gestisciPersona(v, (id) => _eq2Terzo = id),
+              onQuarto: (v) => _gestisciPersona(v, (id) => _eq2Quarto = id),
+              onCentralinista: (v) => _gestisciPersona(v, (id) => _eq2Central = id),
             ),
             const SizedBox(height: 20),
 
@@ -403,6 +455,16 @@ class _EquipaggioGrid extends StatelessWidget {
                                   value: p.id,
                                   child: Text(p.nomeCompleto),
                                 )),
+                            // Voce speciale: intercettata da _gestisciPersona
+                            // nel parent per aprire il dialog di creazione.
+                            const DropdownMenuItem(
+                              value: '__new__',
+                              child: Row(children: [
+                                Icon(Icons.add, size: 14, color: kPrimary),
+                                SizedBox(width: 6),
+                                Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
+                              ]),
+                            ),
                           ],
                           onChanged: r.onChange,
                         ),
