@@ -147,6 +147,8 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   con filtro per associazione (chip).
 - ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
   tipologie turno (rinominabili, non eliminabili come da spec originale).
+  Ogni sezione è collassata di default, con badge contatore sempre visibile,
+  pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
 - ✅ Creazione inline da dropdown: nei campi equipaggio (persona) e ospedale compare la voce
   "Aggiungi..." che apre un dialog di creazione al volo, salva e auto-seleziona la nuova voce.

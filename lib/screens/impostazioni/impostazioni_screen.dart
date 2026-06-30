@@ -7,6 +7,7 @@ import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
 
 /// Schermata Impostazioni: CRUD di associazioni, persone, ospedali, tipologie.
+/// Ogni sezione è collassata di default e ha una barra di ricerca interna.
 class ImpostazioniScreen extends StatelessWidget {
   const ImpostazioniScreen({super.key});
 
@@ -18,14 +19,15 @@ class ImpostazioniScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: const [
           _SezioneBackup(),
-          Divider(height: 32),
+          Divider(height: 24),
           _SezioneAssociazioni(),
-          Divider(height: 32),
+          Divider(height: 1),
           _SezionePersone(),
-          Divider(height: 32),
+          Divider(height: 1),
           _SezioneOspedali(),
-          Divider(height: 32),
+          Divider(height: 1),
           _SezioneTipologie(),
+          SizedBox(height: 24),
         ],
       ),
     );
@@ -97,9 +99,9 @@ class _SezionePersone extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: Text(p == null ? 'Nuova persona' : 'Modifica persona'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: cognCtrl, decoration: const InputDecoration(labelText: 'Cognome')),
+          TextField(controller: cognCtrl, decoration: const InputDecoration(labelText: 'Cognome'), textCapitalization: TextCapitalization.words),
           const SizedBox(height: 12),
-          TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome')),
+          TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
@@ -151,9 +153,9 @@ class _SezioneOspedali extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: Text(o == null ? 'Nuovo ospedale' : 'Modifica ospedale'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome')),
+          TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
           const SizedBox(height: 12),
-          TextField(controller: cittaCtrl, decoration: const InputDecoration(labelText: 'Città (opzionale)')),
+          TextField(controller: cittaCtrl, decoration: const InputDecoration(labelText: 'Città (opzionale)'), textCapitalization: TextCapitalization.words),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
@@ -201,10 +203,13 @@ class _SezioneTipologie extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Sezione generica (lista + FAB add + swipe/popup edit/delete)
+// Sezione generica collassabile con ricerca
 // ---------------------------------------------------------------------------
 
-class _SezioneAnag<T> extends StatelessWidget {
+/// Sezione con header cliccabile (collassa/espande), contatore badge,
+/// pulsante + sempre accessibile e campo ricerca quando espansa.
+/// Collassata di default per non sovraccaricare la schermata con liste lunghe.
+class _SezioneAnag<T> extends StatefulWidget {
   final String titolo;
   final IconData icon;
   final List<T> items;
@@ -226,48 +231,145 @@ class _SezioneAnag<T> extends StatelessWidget {
   });
 
   @override
+  State<_SezioneAnag<T>> createState() => _SezioneAnagState<T>();
+}
+
+class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
+  bool _expanded = false;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Filtra la lista per il testo corrente cercando in label e sublabel.
+  List<T> get _filtered {
+    if (_query.isEmpty) return widget.items;
+    final q = _query.toLowerCase();
+    return widget.items.where((item) {
+      return widget.labelOf(item).toLowerCase().contains(q) ||
+          (widget.sublabelOf(item)?.toLowerCase().contains(q) ?? false);
+    }).toList();
+  }
+
+  /// Resetta la ricerca quando si chiude la sezione così riaprendo è pulita.
+  void _toggle() {
+    setState(() {
+      _expanded = !_expanded;
+      if (!_expanded) {
+        _query = '';
+        _searchCtrl.clear();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = _filtered;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(children: [
-                Icon(icon, size: 18, color: kPrimary),
+        // Header: tutta la riga collassa/espande tranne il tasto +
+        InkWell(
+          onTap: _toggle,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              children: [
+                Icon(widget.icon, size: 18, color: kPrimary),
                 const SizedBox(width: 8),
-                Text(titolo, style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-              ]),
-              IconButton(icon: const Icon(Icons.add, size: 20), onPressed: onAdd),
-            ],
+                Expanded(
+                  child: Text(
+                    widget.titolo,
+                    style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                ),
+                // Badge col numero di elementi totali (visibile anche da collassato)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: kPrimary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${widget.items.length}',
+                    style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                // Pulsante aggiunta sempre visibile (non richiede di espandere prima)
+                IconButton(
+                  icon: const Icon(Icons.add, size: 20, color: Colors.white70),
+                  onPressed: widget.onAdd,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Aggiungi',
+                ),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+              ],
+            ),
           ),
         ),
-        if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Text('Nessun elemento', style: TextStyle(color: Colors.white38, fontSize: 13)),
-          )
-        else
-          ...items.map((item) => ListTile(
-                dense: true,
-                title: Text(labelOf(item)),
-                subtitle: sublabelOf(item) != null ? Text(sublabelOf(item)!, style: const TextStyle(color: Colors.white54)) : null,
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
-                    onPressed: () => onEdit(item),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  if (onDelete != null)
+        // Contenuto (solo quando espanso)
+        if (_expanded) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: 'Cerca in ${widget.titolo.toLowerCase()}...',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: () => setState(() {
+                          _query = '';
+                          _searchCtrl.clear();
+                        }),
+                      )
+                    : null,
+              ),
+              onChanged: (v) => setState(() => _query = v),
+            ),
+          ),
+          if (filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                _query.isEmpty ? 'Nessun elemento' : 'Nessun risultato per "$_query"',
+                style: const TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            )
+          else
+            ...filtered.map((item) => ListTile(
+                  dense: true,
+                  title: Text(widget.labelOf(item)),
+                  subtitle: widget.sublabelOf(item) != null
+                      ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
+                      : null,
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                     IconButton(
-                      icon: const Icon(Icons.delete, size: 18, color: kPrimary),
-                      onPressed: () => onDelete!(item),
+                      icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
+                      onPressed: () => widget.onEdit(item),
                       visualDensity: VisualDensity.compact,
                     ),
-                ]),
-              )),
+                    if (widget.onDelete != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete, size: 18, color: kPrimary),
+                        onPressed: () => widget.onDelete!(item),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ]),
+                )),
+          const SizedBox(height: 4),
+        ],
       ],
     );
   }
@@ -401,7 +503,12 @@ Future<void> _dialogNome(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(titolo),
-      content: TextField(controller: ctrl, decoration: InputDecoration(labelText: campo)),
+      content: TextField(
+        controller: ctrl,
+        decoration: InputDecoration(labelText: campo),
+        textCapitalization: TextCapitalization.words,
+        autofocus: true,
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
         TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
