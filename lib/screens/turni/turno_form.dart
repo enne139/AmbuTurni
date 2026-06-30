@@ -335,7 +335,8 @@ class _DropdownAnag<T> extends StatelessWidget {
   }
 }
 
-// Grid a 2 colonne per i 5 campi equipaggio.
+/// Sezione equipaggio: ogni ruolo ha la propria riga con label fissa a sinistra
+/// (sempre visibile anche dopo la selezione) e dropdown a destra.
 class _EquipaggioGrid extends StatelessWidget {
   final List<Persona> persone;
   final String? autista, cs, terzo, quarto, centralinista;
@@ -355,35 +356,67 @@ class _EquipaggioGrid extends StatelessWidget {
     required this.onCentralinista,
   });
 
-  Widget _campo(String label, String? val, ValueChanged<String?> onChange) =>
-      _DropdownAnag<Persona>(
-        valore: val,
-        items: persone,
-        label: (p) => p.nomeCompleto,
-        id: (p) => p.id,
-        hint: label,
-        nullable: true,
-        onChanged: onChange,
-      );
-
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(children: [
-          Expanded(child: _campo('Autista', autista, onAutista)),
-          const SizedBox(width: 10),
-          Expanded(child: _campo('Capo Servizio', cs, onCs)),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: _campo('Terzo', terzo, onTerzo)),
-          const SizedBox(width: 10),
-          Expanded(child: _campo('Quarto', quarto, onQuarto)),
-        ]),
-        const SizedBox(height: 10),
-        _campo('Centralinista', centralinista, onCentralinista),
-      ],
+    final ruoli = [
+      (icona: Icons.drive_eta, label: 'Autista', val: autista, onChange: onAutista),
+      (icona: Icons.medical_services, label: 'Capo Servizio', val: cs, onChange: onCs),
+      (icona: Icons.person, label: 'Terzo', val: terzo, onChange: onTerzo),
+      (icona: Icons.person_outline, label: 'Quarto', val: quarto, onChange: onQuarto),
+      (icona: Icons.headset_mic, label: 'Centralinista', val: centralinista, onChange: onCentralinista),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: kCardBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: ruoli.asMap().entries.map((entry) {
+          final i = entry.key;
+          final r = entry.value;
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(r.icona, size: 16, color: Colors.white38),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 110,
+                      child: Text(
+                        r.label,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: r.val,
+                          isExpanded: true,
+                          dropdownColor: kSurface,
+                          hint: const Text('—', style: TextStyle(color: Colors.white38)),
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('—')),
+                            ...persone.map((p) => DropdownMenuItem(
+                                  value: p.id,
+                                  child: Text(p.nomeCompleto),
+                                )),
+                          ],
+                          onChanged: r.onChange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (i < ruoli.length - 1) const Divider(height: 1, indent: 12, endIndent: 12),
+            ],
+          );
+        }).toList(),
+      ),
     );
   }
 }

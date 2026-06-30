@@ -197,31 +197,56 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
         child: Text(t, style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
       );
 
-  Widget _drop(String hint, String? val, List<Persona> p, ValueChanged<String?> onChange) =>
-      DropdownButtonFormField<String>(
-        value: val,
-        hint: Text(hint),
-        dropdownColor: kSurface,
-        decoration: const InputDecoration(),
-        items: [const DropdownMenuItem(value: null, child: Text('—')), ...p.map((x) => DropdownMenuItem(value: x.id, child: Text(x.nomeCompleto)))],
-        onChanged: onChange,
-      );
-
-  Widget _eqGrid(List<Persona> p, String? aut, String? cs, String? terzo, String? quarto, String? central, bool prima) => Column(
-    children: [
-      Row(children: [
-        Expanded(child: _drop('Autista', aut, p, (v) => setState(() => prima ? _eq1Autista = v : _eq2Autista = v))),
-        const SizedBox(width: 10),
-        Expanded(child: _drop('Capo Servizio', cs, p, (v) => setState(() => prima ? _eq1Cs = v : _eq2Cs = v))),
-      ]),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(child: _drop('Terzo', terzo, p, (v) => setState(() => prima ? _eq1Terzo = v : _eq2Terzo = v))),
-        const SizedBox(width: 10),
-        Expanded(child: _drop('Quarto', quarto, p, (v) => setState(() => prima ? _eq1Quarto = v : _eq2Quarto = v))),
-      ]),
-      const SizedBox(height: 10),
-      _drop('Centralinista', central, p, (v) => setState(() => prima ? _eq1Central = v : _eq2Central = v)),
-    ],
-  );
+  /// Equipaggio con label fissa sempre visibile a sinistra del dropdown.
+  Widget _eqGrid(List<Persona> p, String? aut, String? cs, String? terzo, String? quarto, String? central, bool prima) {
+    final ruoli = [
+      (icona: Icons.drive_eta, label: 'Autista', val: aut, onChange: (String? v) => setState(() => prima ? _eq1Autista = v : _eq2Autista = v)),
+      (icona: Icons.medical_services, label: 'Capo Servizio', val: cs, onChange: (String? v) => setState(() => prima ? _eq1Cs = v : _eq2Cs = v)),
+      (icona: Icons.person, label: 'Terzo', val: terzo, onChange: (String? v) => setState(() => prima ? _eq1Terzo = v : _eq2Terzo = v)),
+      (icona: Icons.person_outline, label: 'Quarto', val: quarto, onChange: (String? v) => setState(() => prima ? _eq1Quarto = v : _eq2Quarto = v)),
+      (icona: Icons.headset_mic, label: 'Centralinista', val: central, onChange: (String? v) => setState(() => prima ? _eq1Central = v : _eq2Central = v)),
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: kCardBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: ruoli.asMap().entries.map((entry) {
+          final i = entry.key;
+          final r = entry.value;
+          return Column(children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(children: [
+                Icon(r.icona, size: 16, color: Colors.white38),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 110,
+                  child: Text(r.label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                ),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: r.val,
+                      isExpanded: true,
+                      dropdownColor: kSurface,
+                      hint: const Text('—', style: TextStyle(color: Colors.white38)),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('—')),
+                        ...p.map((x) => DropdownMenuItem(value: x.id, child: Text(x.nomeCompleto))),
+                      ],
+                      onChanged: r.onChange,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+            if (i < ruoli.length - 1) const Divider(height: 1, indent: 12, endIndent: 12),
+          ]);
+        }).toList(),
+      ),
+    );
+  }
 }
