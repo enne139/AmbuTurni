@@ -173,6 +173,54 @@ Future<void> spostaTipologia(int fromIndex, int toIndex) async {
   await batch.commit(noResult: true);
 }
 
+Future<List<TipologiaAssistenza>> getTipologieAssistenza() async {
+  final db = await getDb();
+  final rows =
+      await db.query('tipologie_assistenza', orderBy: 'ordine ASC, nome ASC');
+  return rows.map(TipologiaAssistenza.fromMap).toList();
+}
+
+/// Inserisce o rinomina una tipologia assistenza.
+/// Le tipologie non si eliminano per evitare FK violation su assistenze esistenti.
+Future<void> saveTipologiaAssistenza(String nome, {String? id}) async {
+  final db = await getDb();
+  final now = _now();
+  if (id == null) {
+    final count = (await db
+            .rawQuery('SELECT COUNT(*) AS n FROM tipologie_assistenza'))[0]['n']
+        as int;
+    await db.insert('tipologie_assistenza', {
+      'id': newId(),
+      'nome': nome,
+      'ordine': count,
+      'created_at': now,
+      'updated_at': now,
+      'is_synced': 0,
+    });
+  } else {
+    await db.update(
+      'tipologie_assistenza',
+      {'nome': nome, 'updated_at': now, 'is_synced': 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+}
+
+/// Scambia l'ordine di due tipologie assistenza adiacenti, stesso pattern di spostaTipologia.
+Future<void> spostaTipologiaAssistenza(int fromIndex, int toIndex) async {
+  final db = await getDb();
+  final list = await getTipologieAssistenza();
+  if (fromIndex < 0 || fromIndex >= list.length) return;
+  if (toIndex < 0 || toIndex >= list.length) return;
+  final batch = db.batch();
+  batch.update('tipologie_assistenza', {'ordine': toIndex},
+      where: 'id = ?', whereArgs: [list[fromIndex].id]);
+  batch.update('tipologie_assistenza', {'ordine': fromIndex},
+      where: 'id = ?', whereArgs: [list[toIndex].id]);
+  await batch.commit(noResult: true);
+}
+
 // ---------------------------------------------------------------------------
 // TURNI
 // ---------------------------------------------------------------------------

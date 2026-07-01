@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS tipologie_turno (
 CREATE TABLE IF NOT EXISTS tipologie_assistenza (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL UNIQUE,
+  ordine INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
@@ -191,11 +192,23 @@ Future<void> _runMigrations(Database db) async {
   try {
     await db.execute(
         'ALTER TABLE tipologie_turno ADD COLUMN ordine INTEGER DEFAULT 0');
-    // Prima apertura post-migrazione: assegna ordine sequenziale in base al nome.
     final rows = await db.query('tipologie_turno', orderBy: 'nome ASC');
     final batch = db.batch();
     for (int i = 0; i < rows.length; i++) {
       batch.update('tipologie_turno', {'ordine': i},
+          where: 'id = ?', whereArgs: [rows[i]['id']]);
+    }
+    await batch.commit(noResult: true);
+  } catch (_) {}
+
+  // Migrazione: aggiunge la colonna ordine a tipologie_assistenza.
+  try {
+    await db.execute(
+        'ALTER TABLE tipologie_assistenza ADD COLUMN ordine INTEGER DEFAULT 0');
+    final rows = await db.query('tipologie_assistenza', orderBy: 'nome ASC');
+    final batch = db.batch();
+    for (int i = 0; i < rows.length; i++) {
+      batch.update('tipologie_assistenza', {'ordine': i},
           where: 'id = ?', whereArgs: [rows[i]['id']]);
     }
     await batch.commit(noResult: true);

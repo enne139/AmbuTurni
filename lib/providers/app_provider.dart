@@ -10,6 +10,7 @@ class AnagraficheProvider extends ChangeNotifier {
   List<Persona> persone = [];
   List<Ospedale> ospedali = [];
   List<TipologiaTurno> tipologieTurno = [];
+  List<TipologiaAssistenza> tipologieAssistenza = [];
   bool _caricato = false;
 
   Future<void> carica() async {
@@ -17,6 +18,7 @@ class AnagraficheProvider extends ChangeNotifier {
     persone = await getPersone();
     ospedali = await getOspedali();
     tipologieTurno = await getTipologieTurno();
+    tipologieAssistenza = await getTipologieAssistenza();
     _caricato = true;
     notifyListeners();
   }
