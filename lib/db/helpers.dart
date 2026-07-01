@@ -228,7 +228,10 @@ Future<void> saveTurno(Turno turno) async {
   if (exists.isEmpty) {
     await db.insert('turni', map);
   } else {
-    await db.update('turni', map, where: 'id = ?', whereArgs: [turno.id]);
+    // 'id' escluso dalla SET: includerlo innesca i trigger FK di SQLite anche a
+    // parità di valore, attivando ON DELETE CASCADE sui servizi figli.
+    final updateMap = Map<String, dynamic>.from(map)..remove('id');
+    await db.update('turni', updateMap, where: 'id = ?', whereArgs: [turno.id]);
   }
   // La numerazione va ricalcolata dopo ogni salvataggio perché l'ordine
   // per data potrebbe essere cambiato (es. si modifica la data di un turno).
@@ -293,7 +296,15 @@ Future<void> saveServizio(Servizio servizio) async {
   final map = servizio.toMap()
     ..['updated_at'] = now
     ..['is_synced'] = 0;
-  await db.insert('servizi', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  final exists = await db.query('servizi',
+      columns: ['id'], where: 'id = ?', whereArgs: [servizio.id], limit: 1);
+  if (exists.isEmpty) {
+    await db.insert('servizi', map);
+  } else {
+    final updateMap = Map<String, dynamic>.from(map)..remove('id');
+    await db.update('servizi', updateMap,
+        where: 'id = ?', whereArgs: [servizio.id]);
+  }
   await _aggiornaNumServizi(db, servizio.turnoId);
 }
 
@@ -377,7 +388,8 @@ Future<void> saveAssistenza(Assistenza assistenza) async {
   if (exists.isEmpty) {
     await db.insert('assistenze', map);
   } else {
-    await db.update('assistenze', map,
+    final updateMap = Map<String, dynamic>.from(map)..remove('id');
+    await db.update('assistenze', updateMap,
         where: 'id = ?', whereArgs: [assistenza.id]);
   }
   await _ricalcolaNumerazioneAssistenze(db, assistenza.associazioneId);
