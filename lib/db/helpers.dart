@@ -234,9 +234,12 @@ Future<void> saveTurno(Turno turno) async {
   if (exists.isEmpty) {
     await db.insert('turni', map);
   } else {
-    // 'id' escluso dalla SET: includerlo innesca i trigger FK di SQLite anche a
-    // parità di valore, attivando ON DELETE CASCADE sui servizi figli.
-    final updateMap = Map<String, dynamic>.from(map)..remove('id');
+    // 'id' escluso: includerlo innesca ON DELETE CASCADE sui servizi figli.
+    // 'num_servizi' escluso: è gestito esclusivamente da _aggiornaNumServizi;
+    // includerlo azzererebbe il contatore ogni volta che si modifica il turno.
+    final updateMap = Map<String, dynamic>.from(map)
+      ..remove('id')
+      ..remove('num_servizi');
     await db.update('turni', updateMap, where: 'id = ?', whereArgs: [turno.id]);
   }
   // La numerazione va ricalcolata dopo ogni salvataggio perché l'ordine
