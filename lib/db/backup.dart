@@ -84,6 +84,28 @@ Future<String> importBackup() async {
   final version = payload['version'] as int? ?? 0;
   if (version < 1) return 'Formato backup non supportato (versione $version).';
 
+  // Compatibilità con il formato legacy React Native: nell'app RN le tabelle
+  // erano annidate sotto la chiave "tables" invece che al livello radice.
+  final Map<String, dynamic> tables;
+  if (payload.containsKey('tables')) {
+    tables = Map<String, dynamic>.from(payload['tables'] as Map);
+  } else {
+    tables = payload;
+  }
+
+  // Normalizza le date dei turni: l'app RN salvava "YYYY-MM-DDT00:00:00.000Z"
+  // (ISO datetime), l'app Flutter si aspetta "YYYY-MM-DD" (solo data).
+  if (tables['turni'] is List) {
+    tables['turni'] = (tables['turni'] as List).map((row) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final data = map['data'];
+      if (data is String && data.length > 10) {
+        map['data'] = data.substring(0, 10);
+      }
+      return map;
+    }).toList();
+  }
+
   final db = await getDb();
 
   // Elimina tutti i dati nell'ordine corretto (FK-safe).
@@ -94,7 +116,7 @@ Future<String> importBackup() async {
     }
     // Reinserisce ogni tabella presente nel backup.
     for (final table in _backupTables) {
-      final rows = payload[table];
+      final rows = tables[table];
       if (rows == null) continue;
       for (final row in (rows as List)) {
         try {
