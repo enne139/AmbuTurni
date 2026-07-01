@@ -52,23 +52,106 @@ Future<String?> exportBackup() async {
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
   final ts = DateTime.now().millisecondsSinceEpoch;
-  final fileName = 'ambulanza_backup_$ts.json';
+  return _salvaFile(json, 'ambulanza_backup_$ts.json', 'Backup Ambulanza Turni');
+}
 
+/// Esporta i turni in formato leggibile: ID sostituiti con nomi, servizi
+/// annidati dentro ogni turno, tipologie come lista di stringhe.
+/// Utile per consultare i dati fuori dall'app senza interpretare UUID.
+Future<String?> exportSemplificato() async {
+  final db = await getDb();
+
+  // Lookup table: ID → nome leggibile.
+  final assocMap = {for (final r in await db.query('associazioni')) r['id'] as String: r['nome'] as String};
+  final personeMap = {
+    for (final r in await db.query('persone'))
+      r['id'] as String: '${r['cognome']} ${r['nome']}'
+  };
+  final tipologieMap = {for (final r in await db.query('tipologie_turno')) r['id'] as String: r['nome'] as String};
+
+  // Converte un ID persona nullable nel nome completo (null se assente).
+  String? p(dynamic id) => id == null ? null : personeMap[id as String];
+
+  final turniRows = await db.query('turni', orderBy: 'data DESC, created_at DESC');
+  final List<Map<String, dynamic>> risultato = [];
+
+  for (final t in turniRows) {
+    final turnoId = t['id'] as String;
+
+    // Tipologie: primaria + extra → lista di nomi.
+    final tipIds = <String>[];
+    final pid = t['tipologia_id'] as String?;
+    if (pid != null) tipIds.add(pid);
+    final extraRaw = (t['tipologie_extra'] as String?) ?? '';
+    if (extraRaw.isNotEmpty) {
+      final decoded = extraRaw.replaceAll('[', '').replaceAll(']', '');
+      if (decoded.isNotEmpty) {
+        tipIds.addAll(decoded.split(',').map((e) => e.trim().replaceAll('"', '')).where((e) => e.isNotEmpty));
+      }
+    }
+
+    // Servizi annidati.
+    final serviziRows = await db.rawQuery('''
+      SELECT s.*, o.nome AS ospedale_nome
+      FROM servizi s
+      LEFT JOIN ospedali o ON o.id = s.ospedale_id
+      WHERE s.turno_id = ?
+      ORDER BY s.ordine ASC
+    ''', [turnoId]);
+
+    risultato.add({
+      'associazione': assocMap[t['associazione_id'] as String? ?? ''],
+      'numero_progressivo': t['numero_progressivo'],
+      'data': t['data'],
+      'ore': t['ore'],
+      'tipologie': tipIds.map((id) => tipologieMap[id]).whereType<String>().toList(),
+      'num_servizi': t['num_servizi'],
+      'cambio_meta': (t['cambio_meta'] as int?) == 1,
+      'descrizione': t['descrizione'],
+      'note': t['note'],
+      'eq1_autista': p(t['eq1_autista_id']),
+      'eq1_cs': p(t['eq1_cs_id']),
+      'eq1_terzo': p(t['eq1_terzo_id']),
+      'eq1_quarto': p(t['eq1_quarto_id']),
+      'eq1_centralinista': p(t['eq1_centralinista_id']),
+      'eq2_autista': p(t['eq2_autista_id']),
+      'eq2_cs': p(t['eq2_cs_id']),
+      'eq2_terzo': p(t['eq2_terzo_id']),
+      'eq2_quarto': p(t['eq2_quarto_id']),
+      'eq2_centralinista': p(t['eq2_centralinista_id']),
+      'servizi': serviziRows.map((s) => {
+        'codice_chiamata': s['codice_chiamata'],
+        'codice_uscita': s['codice_uscita'],
+        'ospedale': s['ospedale_nome'],
+        'descrizione': s['descrizione'],
+        'ordine': s['ordine'],
+      }).toList(),
+    });
+  }
+
+  final json = const JsonEncoder.withIndent('  ').convert({'turni': risultato});
+  final ts = DateTime.now().millisecondsSinceEpoch;
+  return _salvaFile(json, 'ambulanza_turni_$ts.json', 'Export Turni Ambulanza');
+}
+
+/// Helper condiviso: salva il testo [contenuto] su filesystem.
+/// Desktop → dialog "Salva come"; mobile → share sheet.
+Future<String?> _salvaFile(String contenuto, String nomeFile, String shareText) async {
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Salva backup',
-      fileName: fileName,
+      dialogTitle: 'Salva file',
+      fileName: nomeFile,
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
     if (outputPath == null) return null;
-    await File(outputPath).writeAsString(json, encoding: utf8);
+    await File(outputPath).writeAsString(contenuto, encoding: utf8);
     return outputPath;
   } else {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$fileName');
-    await file.writeAsString(json, encoding: utf8);
-    await Share.shareXFiles([XFile(file.path)], text: 'Backup Ambulanza Turni');
+    final file = File('${dir.path}/$nomeFile');
+    await file.writeAsString(contenuto, encoding: utf8);
+    await Share.shareXFiles([XFile(file.path)], text: shareText);
     return file.path;
   }
 }

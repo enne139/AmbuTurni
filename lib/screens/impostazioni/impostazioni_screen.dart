@@ -454,6 +454,25 @@ class _SezioneBackupState extends State<_SezioneBackup> {
     }
   }
 
+  Future<void> _exportSemplificato() async {
+    setState(() => _busy = true);
+    try {
+      final path = await exportSemplificato();
+      if (mounted) {
+        final msg = path != null ? 'Export leggibile salvato.' : 'Export annullato.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore export: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _import() async {
     // Chiede conferma prima di sovrascrivere tutti i dati.
     final ok = await showDialog<bool>(
@@ -510,28 +529,43 @@ class _SezioneBackupState extends State<_SezioneBackup> {
         else
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Esporta JSON'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: kPrimary,
-                    side: const BorderSide(color: kPrimary),
+            child: Column(children: [
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text('Esporta JSON'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kPrimary,
+                      side: const BorderSide(color: kPrimary),
+                    ),
+                    onPressed: _export,
                   ),
-                  onPressed: _export,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Importa JSON'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Colors.white24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('Importa JSON'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                    ),
+                    onPressed: _import,
                   ),
-                  onPressed: _import,
+                ),
+              ]),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.table_rows_outlined, size: 18),
+                  label: const Text('Esporta JSON leggibile (solo turni)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white54,
+                    side: const BorderSide(color: Colors.white12),
+                  ),
+                  onPressed: _exportSemplificato,
                 ),
               ),
             ]),
