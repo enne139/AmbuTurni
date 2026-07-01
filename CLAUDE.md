@@ -152,6 +152,11 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
   Le tipologie assistenza non sono esposte in UI (tabella DB mantenuta per compatibilità backup).
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
+  Desktop (Windows/Linux/macOS): usa `FilePicker.saveFile()` invece di share_plus.
+  Logica di salvataggio centralizzata in `_salvaFile()` in `backup.dart`.
+- ✅ Export JSON leggibile (solo turni): `exportSemplificato()` produce un JSON con nomi
+  al posto degli UUID (associazione, persone, ospedali, tipologie) e servizi annidati
+  dentro ogni turno. Pulsante dedicato nella sezione Backup di Impostazioni.
 - ✅ Combobox con ricerca per equipaggio e ospedale: `PersonaPicker` e `OspedalePicker`
   in `widgets/anag_pickers.dart` permettono di filtrare la lista digitando e di creare
   nuove voci al volo tramite "Aggiungi..." (auto-selezione dopo creazione inclusa).
@@ -166,5 +171,7 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
 ## TODO (differenze rispetto all'app originale)
 
 - [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
-- [ ] voglio poter scegliere un colore per vedere facimente l'associazione, stessa cosa per la tipologia
-- [ ] come mai i turni non hanno la il numero progressivo cerretto
+- ✅ Colori per associazioni e tipologie: palette 11 colori in Impostazioni, dot colorato in
+  lista, accento nei chip filtro statistiche e FilterChip form turno.
+- ✅ Numerazione progressiva corretta: ricalcolo automatico dopo importBackup() via
+  `ricalcolaTutteLeNumerazioni()`; normal save/delete già aggiornano in tempo reale.
