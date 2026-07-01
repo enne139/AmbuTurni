@@ -102,15 +102,19 @@ class _PersonaPickerState extends State<PersonaPicker> {
     final cognome = cognCtrl.text.trim();
     final nome = nomeCtrl.text.trim();
     if (cognome.isEmpty || nome.isEmpty) return;
-    final id = newId();
-    await savePersona(cognome, nome, id: id);
+    // Salva senza passare l'id: savePersona con id esegue un UPDATE (aggiorna una riga
+    // esistente), ma qui la riga non esiste ancora → zero righe aggiornate, niente salvato.
+    await savePersona(cognome, nome);
     if (!mounted) return;
     await context.read<AnagraficheProvider>().carica();
     if (!mounted) return;
-    final p = context.read<AnagraficheProvider>().byIdPersona(id);
+    // Trova la nuova persona per nome nella lista ricaricata.
+    final p = context.read<AnagraficheProvider>().persone
+        .where((p) => p.cognome == cognome && p.nome == nome)
+        .firstOrNull;
     if (p != null) {
       _ctrl.text = p.nomeCompleto;
-      widget.onChanged(id);
+      widget.onChanged(p.id);
     }
   }
 
@@ -272,15 +276,17 @@ class _OspedalePickerState extends State<OspedalePicker> {
     final nome = nomeCtrl.text.trim();
     if (nome.isEmpty) return;
     final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
-    final id = newId();
-    await saveOspedale(nome, citta, id: id);
+    // Salva senza id per fare INSERT (stessa ragione di _creaPersona).
+    await saveOspedale(nome, citta);
     if (!mounted) return;
     await context.read<AnagraficheProvider>().carica();
     if (!mounted) return;
-    final o = context.read<AnagraficheProvider>().byIdOspedale(id);
+    final o = context.read<AnagraficheProvider>().ospedali
+        .where((o) => o.nome == nome && o.citta == citta)
+        .firstOrNull;
     if (o != null) {
       _ctrl.text = o.label;
-      widget.onChanged(id);
+      widget.onChanged(o.id);
     }
   }
 
