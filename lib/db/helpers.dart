@@ -213,16 +213,23 @@ Future<Turno?> getTurnoById(String id) async {
   return Turno.fromMap(rows.first);
 }
 
-/// Salva un turno (insert or replace) e ricalcola la numerazione progressiva
-/// dell'associazione. ConflictAlgorithm.replace = upsert: funziona sia per
-/// la creazione che per la modifica senza distinguere i due casi in SQL.
+/// Salva un turno e ricalcola la numerazione progressiva dell'associazione.
 Future<void> saveTurno(Turno turno) async {
   final db = await getDb();
   final now = _now();
   final map = turno.toMap()
     ..['updated_at'] = now
     ..['is_synced'] = 0;
-  await db.insert('turni', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  // INSERT OR REPLACE cancella la riga e la reinserisce, innescando ON DELETE CASCADE
+  // sui servizi figli. Si distingue invece tra INSERT (nuovo) e UPDATE (esistente)
+  // per non perdere i servizi associati al turno in modifica.
+  final exists = await db.query('turni',
+      columns: ['id'], where: 'id = ?', whereArgs: [turno.id], limit: 1);
+  if (exists.isEmpty) {
+    await db.insert('turni', map);
+  } else {
+    await db.update('turni', map, where: 'id = ?', whereArgs: [turno.id]);
+  }
   // La numerazione va ricalcolata dopo ogni salvataggio perché l'ordine
   // per data potrebbe essere cambiato (es. si modifica la data di un turno).
   await _ricalcolaNumerazioneTurni(db, turno.associazioneId);
@@ -365,8 +372,14 @@ Future<void> saveAssistenza(Assistenza assistenza) async {
   final map = assistenza.toMap()
     ..['updated_at'] = now
     ..['is_synced'] = 0;
-  await db.insert('assistenze', map,
-      conflictAlgorithm: ConflictAlgorithm.replace);
+  final exists = await db.query('assistenze',
+      columns: ['id'], where: 'id = ?', whereArgs: [assistenza.id], limit: 1);
+  if (exists.isEmpty) {
+    await db.insert('assistenze', map);
+  } else {
+    await db.update('assistenze', map,
+        where: 'id = ?', whereArgs: [assistenza.id]);
+  }
   await _ricalcolaNumerazioneAssistenze(db, assistenza.associazioneId);
 }
 
