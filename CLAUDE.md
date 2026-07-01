@@ -126,10 +126,11 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   (`jsonEncode`/`jsonDecode` in `models.dart`). Stessa scelta dell'app RN originale.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
-- **Creazione inline con valore sentinella `__new__`**: nei dropdown persona e ospedale
-  un item speciale con `value: '__new__'` viene intercettato nell'`onChanged` del parent;
-  il parent apre un dialog, salva con un UUID pre-generato, ricarica il provider e
-  chiama `setState` con il nuovo ID — così la voce appare già selezionata dopo il reload.
+- **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
+  ospedale si usa `RawAutocomplete<T>` con controller+focus esterni; filtra la lista
+  in tempo reale e include una voce fissa "Aggiungi..." in fondo che apre un dialog di
+  creazione inline. L'aggiornamento del campo dopo la creazione avviene in `didUpdateWidget`
+  via `addPostFrameCallback` per evitare modifiche al controller durante il build.
 - **PRAGMA foreign_keys = OFF** durante l'import backup: permette di svuotare tutte
   le tabelle nell'ordine corretto senza violare i vincoli FK durante il delete.
 
@@ -150,8 +151,9 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   Ogni sezione è collassata di default, con badge contatore sempre visibile,
   pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
-- ✅ Creazione inline da dropdown: nei campi equipaggio (persona) e ospedale compare la voce
-  "Aggiungi..." che apre un dialog di creazione al volo, salva e auto-seleziona la nuova voce.
+- ✅ Combobox con ricerca per equipaggio e ospedale: `PersonaPicker` e `OspedalePicker`
+  in `widgets/anag_pickers.dart` permettono di filtrare la lista digitando e di creare
+  nuove voci al volo tramite "Aggiungi..." (auto-selezione dopo creazione inclusa).
 - ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
 - ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
 

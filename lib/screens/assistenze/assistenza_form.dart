@@ -5,6 +5,7 @@ import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
+import '../../widgets/anag_pickers.dart';
 
 /// Form per creare o modificare un'assistenza.
 class AssistenzaForm extends StatefulWidget {
@@ -39,54 +40,6 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
     _noteCtrl = TextEditingController();
     _dataCtrl = TextEditingController(text: todayIso());
     _caricaDati();
-  }
-
-  /// Apre un dialog per creare una nuova persona al volo. Stessa logica di
-  /// TurnoForm: genera l'ID prima del save per auto-selezionarlo dopo il reload.
-  Future<void> _nuovaPersona(void Function(String?) setter) async {
-    final cognCtrl = TextEditingController();
-    final nomeCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nuova persona'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: cognCtrl,
-            decoration: const InputDecoration(labelText: 'Cognome'),
-            textCapitalization: TextCapitalization.words,
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: nomeCtrl,
-            decoration: const InputDecoration(labelText: 'Nome'),
-            textCapitalization: TextCapitalization.words,
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final cognome = cognCtrl.text.trim();
-    final nome = nomeCtrl.text.trim();
-    if (cognome.isEmpty || nome.isEmpty) return;
-    final id = newId();
-    await savePersona(cognome, nome, id: id);
-    if (!mounted) return;
-    await context.read<AnagraficheProvider>().carica();
-    setState(() => setter(id));
-  }
-
-  void _gestisciPersona(String? val, void Function(String?) setter) {
-    if (val == '__new__') {
-      _nuovaPersona(setter);
-    } else {
-      setState(() => setter(val));
-    }
   }
 
   /// Carica i dati dell'assistenza se siamo in modalità modifica.
@@ -248,14 +201,14 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
         child: Text(t, style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
       );
 
-  /// Equipaggio con label fissa sempre visibile a sinistra del dropdown.
+  /// Equipaggio con label fissa sempre visibile a sinistra del combobox.
   Widget _eqGrid(List<Persona> p, String? aut, String? cs, String? terzo, String? quarto, String? central, bool prima) {
     final ruoli = [
-      (icona: Icons.drive_eta, label: 'Autista', val: aut, onChange: (String? v) => _gestisciPersona(v, (id) => prima ? _eq1Autista = id : _eq2Autista = id)),
-      (icona: Icons.medical_services, label: 'Capo Servizio', val: cs, onChange: (String? v) => _gestisciPersona(v, (id) => prima ? _eq1Cs = id : _eq2Cs = id)),
-      (icona: Icons.person, label: 'Terzo', val: terzo, onChange: (String? v) => _gestisciPersona(v, (id) => prima ? _eq1Terzo = id : _eq2Terzo = id)),
-      (icona: Icons.person_outline, label: 'Quarto', val: quarto, onChange: (String? v) => _gestisciPersona(v, (id) => prima ? _eq1Quarto = id : _eq2Quarto = id)),
-      (icona: Icons.headset_mic, label: 'Centralinista', val: central, onChange: (String? v) => _gestisciPersona(v, (id) => prima ? _eq1Central = id : _eq2Central = id)),
+      (icona: Icons.drive_eta, label: 'Autista', val: aut, onChange: (String? v) => setState(() => prima ? _eq1Autista = v : _eq2Autista = v)),
+      (icona: Icons.medical_services, label: 'Capo Servizio', val: cs, onChange: (String? v) => setState(() => prima ? _eq1Cs = v : _eq2Cs = v)),
+      (icona: Icons.person, label: 'Terzo', val: terzo, onChange: (String? v) => setState(() => prima ? _eq1Terzo = v : _eq2Terzo = v)),
+      (icona: Icons.person_outline, label: 'Quarto', val: quarto, onChange: (String? v) => setState(() => prima ? _eq1Quarto = v : _eq2Quarto = v)),
+      (icona: Icons.headset_mic, label: 'Centralinista', val: central, onChange: (String? v) => setState(() => prima ? _eq1Central = v : _eq2Central = v)),
     ];
     return Container(
       decoration: BoxDecoration(
@@ -277,27 +230,10 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
                   child: Text(r.label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 ),
                 Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: r.val,
-                      isExpanded: true,
-                      dropdownColor: kSurface,
-                      hint: const Text('—', style: TextStyle(color: Colors.white38)),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('—')),
-                        ...p.map((x) => DropdownMenuItem(value: x.id, child: Text(x.nomeCompleto))),
-                        const DropdownMenuItem(
-                          value: '__new__',
-                          child: Row(children: [
-                            Icon(Icons.add, size: 14, color: kPrimary),
-                            SizedBox(width: 6),
-                            Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
-                          ]),
-                        ),
-                      ],
-                      onChanged: r.onChange,
-                    ),
+                  child: PersonaPicker(
+                    persone: p,
+                    selectedId: r.val,
+                    onChanged: r.onChange,
                   ),
                 ),
               ]),

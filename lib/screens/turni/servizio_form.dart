@@ -4,6 +4,7 @@ import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
+import '../../widgets/anag_pickers.dart';
 
 /// Form per aggiungere o modificare un servizio di un turno.
 class ServizioForm extends StatefulWidget {
@@ -30,46 +31,6 @@ class _ServizioFormState extends State<ServizioForm> {
     super.initState();
     _descCtrl = TextEditingController();
     _caricaDati();
-  }
-
-  /// Apre un dialog per creare un nuovo ospedale al volo, lo salva e
-  /// lo auto-seleziona nel campo ospedale del servizio.
-  Future<void> _nuovoOspedale() async {
-    final nomeCtrl = TextEditingController();
-    final cittaCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nuovo ospedale'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: nomeCtrl,
-            decoration: const InputDecoration(labelText: 'Nome'),
-            textCapitalization: TextCapitalization.words,
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: cittaCtrl,
-            decoration: const InputDecoration(labelText: 'Città (opzionale)'),
-            textCapitalization: TextCapitalization.words,
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final nome = nomeCtrl.text.trim();
-    if (nome.isEmpty) return;
-    final id = newId();
-    final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
-    await saveOspedale(nome, citta, id: id);
-    if (!mounted) return;
-    await context.read<AnagraficheProvider>().carica();
-    setState(() => _ospedaleId = id);
   }
 
   /// Carica i dati del servizio esistente in modalità modifica.
@@ -164,30 +125,10 @@ class _ServizioFormState extends State<ServizioForm> {
           // Ospedale
           const Text('Ospedale', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: _ospedaleId,
-            hint: const Text('Seleziona ospedale (opzionale)'),
-            dropdownColor: kSurface,
-            decoration: const InputDecoration(),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('—')),
-              ...anag.ospedali.map((o) => DropdownMenuItem(value: o.id, child: Text(o.label))),
-              const DropdownMenuItem(
-                value: '__new__',
-                child: Row(children: [
-                  Icon(Icons.add, size: 14, color: kPrimary),
-                  SizedBox(width: 6),
-                  Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
-                ]),
-              ),
-            ],
-            onChanged: (v) {
-              if (v == '__new__') {
-                _nuovoOspedale();
-              } else {
-                setState(() => _ospedaleId = v);
-              }
-            },
+          OspedalePicker(
+            ospedali: anag.ospedali,
+            selectedId: _ospedaleId,
+            onChanged: (v) => setState(() => _ospedaleId = v),
           ),
           const SizedBox(height: 20),
 

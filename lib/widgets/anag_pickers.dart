@@ -1,0 +1,382 @@
+// Picker con ricerca inline (combobox) per persone e ospedali.
+// Usa RawAutocomplete con controller esterno così il widget padre può aggiornare
+// la selezione (es. dopo la creazione inline) e il campo si aggiorna da solo.
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../db/helpers.dart';
+import '../db/models.dart';
+import '../providers/app_provider.dart';
+import '../utils/theme.dart';
+
+// ---------------------------------------------------------------------------
+// PersonaPicker
+// ---------------------------------------------------------------------------
+
+/// Combobox con ricerca per selezionare una persona dall'anagrafica.
+/// Mostra "Aggiungi..." in fondo alla lista per creare una nuova persona al volo.
+class PersonaPicker extends StatefulWidget {
+  final List<Persona> persone;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  const PersonaPicker({
+    super.key,
+    required this.persone,
+    this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  State<PersonaPicker> createState() => _PersonaPickerState();
+}
+
+class _PersonaPickerState extends State<PersonaPicker> {
+  late TextEditingController _ctrl;
+  late FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: _nomeOf(widget.selectedId));
+    _focus = FocusNode();
+  }
+
+  /// Quando il parent aggiorna selectedId (es. dopo la creazione di una nuova persona)
+  /// aggiorna il testo del campo nel prossimo frame per evitare modifiche durante build.
+  @override
+  void didUpdateWidget(PersonaPicker old) {
+    super.didUpdateWidget(old);
+    if (old.selectedId != widget.selectedId) {
+      final name = _nomeOf(widget.selectedId);
+      if (_ctrl.text != name) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _ctrl.text = name;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  String _nomeOf(String? id) {
+    if (id == null) return '';
+    return widget.persone.where((p) => p.id == id).firstOrNull?.nomeCompleto ?? '';
+  }
+
+  /// Apre il dialog di creazione persona, salva, ricarica il provider
+  /// e auto-seleziona la nuova voce nel campo.
+  Future<void> _creaPersona() async {
+    _focus.unfocus();
+    // Reimposta subito il testo alla selezione corrente per non mostrare la voce "Aggiungi..."
+    _ctrl.text = _nomeOf(widget.selectedId);
+
+    final cognCtrl = TextEditingController();
+    final nomeCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nuova persona'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: cognCtrl,
+            decoration: const InputDecoration(labelText: 'Cognome'),
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: nomeCtrl,
+            decoration: const InputDecoration(labelText: 'Nome'),
+            textCapitalization: TextCapitalization.words,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final cognome = cognCtrl.text.trim();
+    final nome = nomeCtrl.text.trim();
+    if (cognome.isEmpty || nome.isEmpty) return;
+    final id = newId();
+    await savePersona(cognome, nome, id: id);
+    if (!mounted) return;
+    await context.read<AnagraficheProvider>().carica();
+    final p = context.read<AnagraficheProvider>().byIdPersona(id);
+    if (p != null) {
+      _ctrl.text = p.nomeCompleto;
+      widget.onChanged(id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Persona>(
+      textEditingController: _ctrl,
+      focusNode: _focus,
+      displayStringForOption: (p) => p.nomeCompleto,
+      optionsBuilder: (tev) {
+        final q = tev.text.toLowerCase();
+        // Lista completa se il campo è vuoto, altrimenti filtra per sottostringa.
+        return q.isEmpty
+            ? widget.persone
+            : widget.persone.where((p) => p.nomeCompleto.toLowerCase().contains(q));
+      },
+      onSelected: (p) => widget.onChanged(p.id),
+      fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
+        controller: ctrl,
+        focusNode: focus,
+        style: const TextStyle(color: Colors.white, fontSize: 13),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: '—',
+          hintStyle: const TextStyle(color: Colors.white38),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          suffixIcon: widget.selectedId != null
+              ? InkWell(
+                  onTap: () {
+                    ctrl.clear();
+                    focus.unfocus();
+                    widget.onChanged(null);
+                  },
+                  child: const Icon(Icons.clear, size: 14, color: Colors.white38),
+                )
+              : null,
+        ),
+      ),
+      optionsViewBuilder: (ctx, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          color: kSurface,
+          elevation: 8,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220, maxWidth: 260),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              children: [
+                ...options.map(
+                  (p) => InkWell(
+                    onTap: () => onSelected(p),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Text(p.nomeCompleto, style: const TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                ),
+                // Voce fissa in fondo per creare una nuova persona senza uscire dal form.
+                InkWell(
+                  onTap: _creaPersona,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(children: [
+                      Icon(Icons.add, size: 14, color: kPrimary),
+                      SizedBox(width: 8),
+                      Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// OspedalePicker
+// ---------------------------------------------------------------------------
+
+/// Combobox con ricerca per selezionare un ospedale.
+/// Stesso pattern di PersonaPicker ma per gli ospedali.
+class OspedalePicker extends StatefulWidget {
+  final List<Ospedale> ospedali;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  const OspedalePicker({
+    super.key,
+    required this.ospedali,
+    this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  State<OspedalePicker> createState() => _OspedalePickerState();
+}
+
+class _OspedalePickerState extends State<OspedalePicker> {
+  late TextEditingController _ctrl;
+  late FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: _labelOf(widget.selectedId));
+    _focus = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(OspedalePicker old) {
+    super.didUpdateWidget(old);
+    if (old.selectedId != widget.selectedId) {
+      final label = _labelOf(widget.selectedId);
+      if (_ctrl.text != label) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _ctrl.text = label;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// La label dell'ospedale include la città tra parentesi se presente.
+  String _labelOf(String? id) {
+    if (id == null) return '';
+    return widget.ospedali.where((o) => o.id == id).firstOrNull?.label ?? '';
+  }
+
+  Future<void> _creaOspedale() async {
+    _focus.unfocus();
+    _ctrl.text = _labelOf(widget.selectedId);
+
+    final nomeCtrl = TextEditingController();
+    final cittaCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nuovo ospedale'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: nomeCtrl,
+            decoration: const InputDecoration(labelText: 'Nome'),
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: cittaCtrl,
+            decoration: const InputDecoration(labelText: 'Città (opzionale)'),
+            textCapitalization: TextCapitalization.words,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final nome = nomeCtrl.text.trim();
+    if (nome.isEmpty) return;
+    final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
+    final id = newId();
+    await saveOspedale(nome, citta, id: id);
+    if (!mounted) return;
+    await context.read<AnagraficheProvider>().carica();
+    final o = context.read<AnagraficheProvider>().byIdOspedale(id);
+    if (o != null) {
+      _ctrl.text = o.label;
+      widget.onChanged(id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Ospedale>(
+      textEditingController: _ctrl,
+      focusNode: _focus,
+      displayStringForOption: (o) => o.label,
+      optionsBuilder: (tev) {
+        final q = tev.text.toLowerCase();
+        return q.isEmpty
+            ? widget.ospedali
+            : widget.ospedali.where((o) =>
+                o.nome.toLowerCase().contains(q) ||
+                (o.citta?.toLowerCase().contains(q) ?? false));
+      },
+      onSelected: (o) => widget.onChanged(o.id),
+      fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
+        controller: ctrl,
+        focusNode: focus,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Cerca ospedale...',
+          hintStyle: const TextStyle(color: Colors.white38),
+          prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white38),
+          suffixIcon: widget.selectedId != null
+              ? InkWell(
+                  onTap: () {
+                    ctrl.clear();
+                    focus.unfocus();
+                    widget.onChanged(null);
+                  },
+                  child: const Icon(Icons.clear, size: 16, color: Colors.white38),
+                )
+              : null,
+        ),
+      ),
+      optionsViewBuilder: (ctx, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          color: kSurface,
+          elevation: 8,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 250),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              children: [
+                ...options.map(
+                  (o) => InkWell(
+                    onTap: () => onSelected(o),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(o.nome, style: const TextStyle(fontSize: 14)),
+                          if (o.citta != null)
+                            Text(o.citta!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: _creaOspedale,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(children: [
+                      Icon(Icons.add, size: 14, color: kPrimary),
+                      SizedBox(width: 8),
+                      Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
