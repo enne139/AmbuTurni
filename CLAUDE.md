@@ -147,7 +147,7 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
 - ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
   con filtro per associazione (chip).
 - ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
-  tipologie turno (rinominabili, non eliminabili come da spec originale).
+  tipologie turno + tipologie assistenza (rinominabili, riordinabili ↑↓, non eliminabili).
   Ogni sezione è collassata di default, con badge contatore sempre visibile,
   pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
@@ -156,12 +156,12 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   nuove voci al volo tramite "Aggiungi..." (auto-selezione dopo creazione inclusa).
 - ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
 - ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
+- ✅ Tipologie multi-select nel form turno: FilterChip, ordine personalizzabile.
+- ✅ `cambio_meta`: toggle SwitchListTile nel form, visibile nel dettaglio turno.
+- ✅ Dismissible swipe-to-delete: gesto sinistra con conferma su lista turni e assistenze.
+- ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
+- ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
 
 ## TODO (differenze rispetto all'app originale)
 
 - [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
-- [ ] Workflow CI build-android.yml aggiornato per Flutter (`flutter build apk`)
-- [ ] Tipologie assistenza (tabella esiste, UI in impostazioni non ancora implementata)
-- [ ] `cambio_meta` (campo per equipaggio a cambio metà turno)
-- [ ] Long-press + Dismissible sulle card per eliminazione più rapida
-- [ ] Test unitari per `helpers.dart`
