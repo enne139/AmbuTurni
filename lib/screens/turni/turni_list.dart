@@ -97,17 +97,53 @@ class _TurniListState extends State<TurniList> {
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
               itemCount: turni.length,
-              itemBuilder: (ctx, i) => _TurnoCard(
-                turno: turni[i],
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turni[i].id)),
-                  );
-                  if (mounted) context.read<TurniProvider>().ricarica();
-                },
-                onLongPress: () => _elimina(turni[i]),
-              ),
+              itemBuilder: (ctx, i) {
+                final turno = turni[i];
+                return Dismissible(
+                  key: ValueKey(turno.id),
+                  direction: DismissDirection.endToStart,
+                  // Conferma prima di rimuovere: se l'utente annulla, l'item torna indietro.
+                  confirmDismiss: (_) => showDialog<bool>(
+                    context: context,
+                    builder: (dctx) => AlertDialog(
+                      title: const Text('Elimina turno'),
+                      content: Text('Eliminare il turno del ${formatDate(turno.data)}?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Annulla')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(dctx, true),
+                          child: const Text('Elimina', style: TextStyle(color: kPrimary)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  onDismissed: (_) async {
+                    await deleteTurno(turno.id);
+                    if (mounted) context.read<TurniProvider>().ricarica();
+                  },
+                  background: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    decoration: BoxDecoration(
+                      color: kPrimary.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  child: _TurnoCard(
+                    turno: turno,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turno.id)),
+                      );
+                      if (mounted) context.read<TurniProvider>().ricarica();
+                    },
+                    onLongPress: () => _elimina(turno),
+                  ),
+                );
+              },
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {

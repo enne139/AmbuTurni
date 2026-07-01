@@ -87,40 +87,72 @@ class _AssistezeListState extends State<AssistezeList> {
               itemCount: assistenze.length,
               itemBuilder: (ctx, i) {
                 final a = assistenze[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: InkWell(
-                    onTap: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => AssistenzaDetail(assistenzaId: a.id)));
-                      if (mounted) context.read<AssistezeProvider>().ricarica();
-                    },
-                    onLongPress: () => _elimina(a),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: kPrimary.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: kPrimary.withOpacity(0.4)),
+                return Dismissible(
+                  key: ValueKey(a.id),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (_) => showDialog<bool>(
+                    context: context,
+                    builder: (dctx) => AlertDialog(
+                      title: const Text('Elimina assistenza'),
+                      content: Text('Eliminare l\'assistenza del ${formatDate(a.data)}?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Annulla')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(dctx, true),
+                          child: const Text('Elimina', style: TextStyle(color: kPrimary)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  onDismissed: (_) async {
+                    await deleteAssistenza(a.id);
+                    if (mounted) context.read<AssistezeProvider>().ricarica();
+                  },
+                  background: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    decoration: BoxDecoration(
+                      color: kPrimary.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  child: Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: InkWell(
+                      onTap: () async {
+                        await Navigator.push(context, MaterialPageRoute(builder: (_) => AssistenzaDetail(assistenzaId: a.id)));
+                        if (mounted) context.read<AssistezeProvider>().ricarica();
+                      },
+                      onLongPress: () => _elimina(a),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: kPrimary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: kPrimary.withOpacity(0.4)),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('#${a.numeroProgressivo ?? '—'}',
+                                style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
                           ),
-                          alignment: Alignment.center,
-                          child: Text('#${a.numeroProgressivo ?? '—'}',
-                              style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(formatDate(a.data), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                            if (a.associazioneNome != null)
-                              Text(a.associazioneNome!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                          ]),
-                        ),
-                        Text(formatOre(a.ore), style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
-                      ]),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(formatDate(a.data), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                              if (a.associazioneNome != null)
+                                Text(a.associazioneNome!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                            ]),
+                          ),
+                          Text(formatOre(a.ore), style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
                     ),
                   ),
                 );
