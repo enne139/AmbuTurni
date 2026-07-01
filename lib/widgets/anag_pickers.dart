@@ -1,6 +1,6 @@
 // Picker con ricerca inline (combobox) per persone e ospedali.
-// Usa RawAutocomplete con controller esterno così il widget padre può aggiornare
-// la selezione (es. dopo la creazione inline) e il campo si aggiorna da solo.
+// Il pulsante + è nel campo stesso (suffixIcon) — sempre visibile, anche quando la lista
+// è vuota. Evita conflitti di gesture con l'overlay di RawAutocomplete.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../db/helpers.dart';
@@ -13,7 +13,8 @@ import '../utils/theme.dart';
 // ---------------------------------------------------------------------------
 
 /// Combobox con ricerca per selezionare una persona dall'anagrafica.
-/// Mostra "Aggiungi..." in fondo alla lista per creare una nuova persona al volo.
+/// Il suffixIcon alterna tra + (crea nuova voce) e × (deseleziona),
+/// così la creazione è sempre accessibile anche quando la lista è vuota.
 class PersonaPicker extends StatefulWidget {
   final List<Persona> persone;
   final String? selectedId;
@@ -41,8 +42,8 @@ class _PersonaPickerState extends State<PersonaPicker> {
     _focus = FocusNode();
   }
 
-  /// Quando il parent aggiorna selectedId (es. dopo la creazione di una nuova persona)
-  /// aggiorna il testo del campo nel prossimo frame per evitare modifiche durante build.
+  /// Aggiorna il testo quando il parent cambia selectedId (es. dopo creazione inline).
+  /// addPostFrameCallback evita modifiche al controller durante il build.
   @override
   void didUpdateWidget(PersonaPicker old) {
     super.didUpdateWidget(old);
@@ -68,13 +69,9 @@ class _PersonaPickerState extends State<PersonaPicker> {
     return widget.persone.where((p) => p.id == id).firstOrNull?.nomeCompleto ?? '';
   }
 
-  /// Apre il dialog di creazione persona, salva, ricarica il provider
-  /// e auto-seleziona la nuova voce nel campo.
+  /// Apre il dialog di creazione, salva con UUID pre-generato e auto-seleziona.
   Future<void> _creaPersona() async {
     _focus.unfocus();
-    // Reimposta subito il testo alla selezione corrente per non mostrare la voce "Aggiungi..."
-    _ctrl.text = _nomeOf(widget.selectedId);
-
     final cognCtrl = TextEditingController();
     final nomeCtrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -109,6 +106,7 @@ class _PersonaPickerState extends State<PersonaPicker> {
     await savePersona(cognome, nome, id: id);
     if (!mounted) return;
     await context.read<AnagraficheProvider>().carica();
+    if (!mounted) return;
     final p = context.read<AnagraficheProvider>().byIdPersona(id);
     if (p != null) {
       _ctrl.text = p.nomeCompleto;
@@ -124,7 +122,6 @@ class _PersonaPickerState extends State<PersonaPicker> {
       displayStringForOption: (p) => p.nomeCompleto,
       optionsBuilder: (tev) {
         final q = tev.text.toLowerCase();
-        // Lista completa se il campo è vuoto, altrimenti filtra per sottostringa.
         return q.isEmpty
             ? widget.persone
             : widget.persone.where((p) => p.nomeCompleto.toLowerCase().contains(q));
@@ -140,6 +137,7 @@ class _PersonaPickerState extends State<PersonaPicker> {
           hintStyle: const TextStyle(color: Colors.white38),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          // × deseleziona; + apre il dialog di creazione (sempre visibile, anche lista vuota)
           suffixIcon: widget.selectedId != null
               ? InkWell(
                   onTap: () {
@@ -149,7 +147,10 @@ class _PersonaPickerState extends State<PersonaPicker> {
                   },
                   child: const Icon(Icons.clear, size: 14, color: Colors.white38),
                 )
-              : null,
+              : InkWell(
+                  onTap: _creaPersona,
+                  child: const Icon(Icons.add, size: 14, color: kPrimary),
+                ),
         ),
       ),
       optionsViewBuilder: (ctx, onSelected, options) => Align(
@@ -163,29 +164,15 @@ class _PersonaPickerState extends State<PersonaPicker> {
             child: ListView(
               shrinkWrap: true,
               padding: const EdgeInsets.symmetric(vertical: 4),
-              children: [
-                ...options.map(
-                  (p) => InkWell(
-                    onTap: () => onSelected(p),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      child: Text(p.nomeCompleto, style: const TextStyle(fontSize: 13)),
-                    ),
+              children: options.map(
+                (p) => InkWell(
+                  onTap: () => onSelected(p),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Text(p.nomeCompleto, style: const TextStyle(fontSize: 13)),
                   ),
                 ),
-                // Voce fissa in fondo per creare una nuova persona senza uscire dal form.
-                InkWell(
-                  onTap: _creaPersona,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Row(children: [
-                      Icon(Icons.add, size: 14, color: kPrimary),
-                      SizedBox(width: 8),
-                      Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
-                    ]),
-                  ),
-                ),
-              ],
+              ).toList(),
             ),
           ),
         ),
@@ -199,7 +186,7 @@ class _PersonaPickerState extends State<PersonaPicker> {
 // ---------------------------------------------------------------------------
 
 /// Combobox con ricerca per selezionare un ospedale.
-/// Stesso pattern di PersonaPicker ma per gli ospedali.
+/// Stesso pattern di PersonaPicker: + nel suffixIcon per creare, × per deselezionare.
 class OspedalePicker extends StatefulWidget {
   final List<Ospedale> ospedali;
   final String? selectedId;
@@ -247,7 +234,7 @@ class _OspedalePickerState extends State<OspedalePicker> {
     super.dispose();
   }
 
-  /// La label dell'ospedale include la città tra parentesi se presente.
+  /// La label include la città tra parentesi per disambiguare ospedali con lo stesso nome.
   String _labelOf(String? id) {
     if (id == null) return '';
     return widget.ospedali.where((o) => o.id == id).firstOrNull?.label ?? '';
@@ -255,8 +242,6 @@ class _OspedalePickerState extends State<OspedalePicker> {
 
   Future<void> _creaOspedale() async {
     _focus.unfocus();
-    _ctrl.text = _labelOf(widget.selectedId);
-
     final nomeCtrl = TextEditingController();
     final cittaCtrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -291,6 +276,7 @@ class _OspedalePickerState extends State<OspedalePicker> {
     await saveOspedale(nome, citta, id: id);
     if (!mounted) return;
     await context.read<AnagraficheProvider>().carica();
+    if (!mounted) return;
     final o = context.read<AnagraficheProvider>().byIdOspedale(id);
     if (o != null) {
       _ctrl.text = o.label;
@@ -330,7 +316,10 @@ class _OspedalePickerState extends State<OspedalePicker> {
                   },
                   child: const Icon(Icons.clear, size: 16, color: Colors.white38),
                 )
-              : null,
+              : InkWell(
+                  onTap: _creaOspedale,
+                  child: const Icon(Icons.add, size: 16, color: kPrimary),
+                ),
         ),
       ),
       optionsViewBuilder: (ctx, onSelected, options) => Align(
@@ -344,35 +333,22 @@ class _OspedalePickerState extends State<OspedalePicker> {
             child: ListView(
               shrinkWrap: true,
               padding: const EdgeInsets.symmetric(vertical: 4),
-              children: [
-                ...options.map(
-                  (o) => InkWell(
-                    onTap: () => onSelected(o),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(o.nome, style: const TextStyle(fontSize: 14)),
-                          if (o.citta != null)
-                            Text(o.citta!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                        ],
-                      ),
+              children: options.map(
+                (o) => InkWell(
+                  onTap: () => onSelected(o),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(o.nome, style: const TextStyle(fontSize: 14)),
+                        if (o.citta != null)
+                          Text(o.citta!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      ],
                     ),
                   ),
                 ),
-                InkWell(
-                  onTap: _creaOspedale,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Row(children: [
-                      Icon(Icons.add, size: 14, color: kPrimary),
-                      SizedBox(width: 8),
-                      Text('Aggiungi...', style: TextStyle(color: kPrimary, fontSize: 13)),
-                    ]),
-                  ),
-                ),
-              ],
+              ).toList(),
             ),
           ),
         ),
