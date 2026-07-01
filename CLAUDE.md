@@ -27,7 +27,7 @@
 
 | Ruolo | Libreria |
 |---|---|
-| Framework | Flutter 3.22.3 (Dart 3.4.4) |
+| Framework | Flutter stable (>= 3.27 richiesto per CardThemeData/withValues) |
 | DB Android | `sqflite` (SQLite nativo) |
 | DB Desktop | `sqflite_common_ffi` (SQLite via FFI, usato su Windows/Linux/macOS) |
 | State management | `provider` (ChangeNotifier) |
