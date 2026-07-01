@@ -19,7 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: 'stable'
   JAVA_VERSION: '23'
 
 jobs:
@@ -55,7 +54,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
           cache: true
 
       - name: Installa dipendenze Dart
