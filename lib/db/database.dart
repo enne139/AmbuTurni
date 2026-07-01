@@ -136,6 +136,22 @@ CREATE TABLE IF NOT EXISTS deletions (
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
 
+/// Solo per i test: inietta un DB (tipicamente in-memory) nel singleton.
+/// Non usare in produzione — il singleton non viene resettato all'uscita del test.
+void setDbForTesting(Database db) => _db = db;
+
+/// Solo per i test: apre un DB in-memory con lo schema e le migrazioni complete.
+Future<Database> openTestDb() async {
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  return openDatabase(
+    inMemoryDatabasePath,
+    version: 1,
+    onCreate: _onCreate,
+    onOpen: _onOpen,
+  );
+}
+
 /// Restituisce l'istanza aperta del DB, inizializzandola se necessario.
 /// Su desktop (Windows/Linux/macOS) usa sqflite_common_ffi perché sqflite
 /// nativo non è disponibile fuori da Android/iOS.
