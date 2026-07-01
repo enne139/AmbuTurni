@@ -196,7 +196,7 @@ Future<List<Turno>> getTurni({String? associazioneId}) async {
     LEFT JOIN associazioni a ON a.id = t.associazione_id
     LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
     $where
-    ORDER BY t.data ASC, t.created_at ASC
+    ORDER BY t.data DESC, t.created_at DESC
   ''', args);
   return rows.map(Turno.fromMap).toList();
 }
@@ -365,7 +365,7 @@ Future<List<Assistenza>> getAssistenze({String? associazioneId}) async {
     FROM assistenze a
     LEFT JOIN associazioni ass ON ass.id = a.associazione_id
     $where
-    ORDER BY a.data ASC, a.created_at ASC
+    ORDER BY a.data DESC, a.created_at DESC
   ''', args);
   return rows.map(Assistenza.fromMap).toList();
 }
