@@ -5,9 +5,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Schema SQL locale — identico a quello del branch React Native (schema.ts).
 const _schema = '''
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS associazioni (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL UNIQUE,
@@ -199,8 +196,13 @@ Future<void> _onCreate(Database db, int version) async {
   }
 }
 
-/// Apre il DB esistente: abilita FK e applica le migrazioni idempotenti.
+/// Apre il DB esistente: abilita FK/WAL e applica le migrazioni idempotenti.
+/// Il PRAGMA journal_mode va eseguito qui (fuori dalla transazione di
+/// _onCreate, dove SQLite rifiuta il passaggio a WAL) e con rawQuery invece
+/// di execute: su Android nativo restituisce una riga col nuovo modo, ed
+/// execute/execSQL rifiuta le query che restituiscono risultati.
 Future<void> _onOpen(Database db) async {
+  await db.rawQuery('PRAGMA journal_mode = WAL');
   await db.execute('PRAGMA foreign_keys = ON');
   await _runMigrations(db);
 }

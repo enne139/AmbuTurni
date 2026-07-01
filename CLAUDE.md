@@ -116,8 +116,11 @@ flutter build apk        # APK debug/release
 
 ## Gradle / Java
 
-La build Android richiede **Gradle 8.10.2** (`gradle-wrapper.properties`) per la
-compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter build apk`.
+La build Android richiede **Gradle 8.14.3** (`gradle-wrapper.properties`), **AGP 8.11.1**
+e **Kotlin 1.9.0 → 2.2.20** (`android/settings.gradle`): versioni minime imposte da
+Flutter stable per Java 23 (Gradle ≥ 8.14, AGP ≥ 8.11.1, KGP ≥ 2.2.20 — sotto soglia
+la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
+(`build-android.yml`) usa `flutter build apk`.
 
 ## Decisioni tecniche rilevanti
 
@@ -156,6 +159,14 @@ compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter
   (turni con più servizi) né overhead nelle query normali della lista turni. Il filtro
   associazione e la ricerca si combinano in AND. Debounce di 300ms in `turni_list.dart`
   per non lanciare una query a ogni tasto premuto.
+- **PRAGMA journal_mode = WAL spostato in `_onOpen` (con `rawQuery`, non `execute`)**:
+  in `_schema` causava schermata nera su Android reale all'apertura del DB. Motivo
+  doppio: (1) sqflite esegue `_onCreate`/`_onUpgrade` sempre dentro una transazione
+  implicita e SQLite rifiuta il passaggio a WAL da dentro una transazione; (2) il
+  driver nativo Android mappa `execute()` su `execSQL()`, che rifiuta le query con
+  risultati — e `PRAGMA journal_mode = WAL` restituisce una riga col nuovo modo,
+  quindi va lanciato con `rawQuery()`. Su sqflite_common_ffi (desktop) il problema
+  non si presentava, per questo era passato inosservato in test/uso su Windows.
 
 ---
 
