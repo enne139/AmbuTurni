@@ -11,6 +11,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS associazioni (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL UNIQUE,
+  colore TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tipologie_turno (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL UNIQUE,
   ordine INTEGER DEFAULT 0,
+  colore TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
@@ -164,7 +166,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 2,
+    version: 3,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -172,13 +174,17 @@ Future<Database> getDb() async {
   return _db!;
 }
 
-/// Upgrade del DB: aggiunge le colonne introdotte dalla versione 2.
+/// Upgrade del DB: aggiunge le colonne per ogni nuova versione.
 /// ALTER TABLE fallisce silenziosamente se la colonna esiste già (catch intenzionale).
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
     try { await db.execute('ALTER TABLE tipologie_turno ADD COLUMN ordine INTEGER DEFAULT 0'); } catch (_) {}
     try { await db.execute('ALTER TABLE turni ADD COLUMN cambio_meta INTEGER DEFAULT 0'); } catch (_) {}
     try { await db.execute('ALTER TABLE tipologie_assistenza ADD COLUMN ordine INTEGER DEFAULT 0'); } catch (_) {}
+  }
+  if (oldVersion < 3) {
+    try { await db.execute('ALTER TABLE associazioni ADD COLUMN colore TEXT'); } catch (_) {}
+    try { await db.execute('ALTER TABLE tipologie_turno ADD COLUMN colore TEXT'); } catch (_) {}
   }
 }
 

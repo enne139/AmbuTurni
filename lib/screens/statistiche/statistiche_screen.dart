@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../db/helpers.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
-import '../../utils/theme.dart';
+import '../../utils/theme.dart' show kPrimary, colorFromHex;
 
 /// Schermata statistiche con filtro per associazione (chip).
 class StatisticheScreen extends StatefulWidget {
@@ -51,6 +51,7 @@ class _StatisticheScreenState extends State<StatisticheScreen> {
                             label: a.nome,
                             sel: _filtroAssocId == a.id,
                             onTap: () => _carica(assocId: a.id),
+                            colore: colorFromHex(a.colore),
                           )),
                     ]),
                   ),
@@ -84,20 +85,24 @@ class _FiltroChip extends StatelessWidget {
   final String label;
   final bool sel;
   final VoidCallback onTap;
-  const _FiltroChip({required this.label, required this.sel, required this.onTap});
+  final Color? colore;
+  const _FiltroChip({required this.label, required this.sel, required this.onTap, this.colore});
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: FilterChip(
-          label: Text(label),
-          selected: sel,
-          onSelected: (_) => onTap(),
-          selectedColor: kPrimary.withOpacity(0.25),
-          checkmarkColor: kPrimary,
-          labelStyle: TextStyle(color: sel ? kPrimary : Colors.white70),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final accent = colore ?? kPrimary;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: sel,
+        onSelected: (_) => onTap(),
+        selectedColor: accent.withValues(alpha: 0.25),
+        checkmarkColor: accent,
+        labelStyle: TextStyle(color: sel ? accent : Colors.white70),
+      ),
+    );
+  }
 }
 
 class _StatCard extends StatelessWidget {

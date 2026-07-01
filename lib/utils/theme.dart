@@ -2,6 +2,24 @@ import 'package:flutter/material.dart';
 
 // Colori principali dell'app — stessa palette del branch React Native.
 const Color kBackground = Color(0xFF1a1a2e);
+
+// Palette predefinita per colorare associazioni e tipologie.
+const List<String> kColorPalette = [
+  '#E53935', '#FB8C00', '#FDD835', '#43A047',
+  '#00897B', '#1E88E5', '#3949AB', '#8E24AA',
+  '#D81B60', '#6D4C41', '#757575',
+];
+
+/// Converte un colore esadecimale ("#RRGGBB") in Color. Restituisce null se hex è null o malformato.
+Color? colorFromHex(String? hex) {
+  if (hex == null || hex.isEmpty) return null;
+  try {
+    return Color(int.parse(hex.replaceAll('#', '0xFF')));
+  } catch (_) {
+    return null;
+  }
+}
+
 const Color kSurface = Color(0xFF16213e);
 const Color kPrimary = Color(0xFFe94560);
 const Color kOnBackground = Colors.white;

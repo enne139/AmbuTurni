@@ -50,14 +50,15 @@ class _SezioneAssociazioni extends StatelessWidget {
       items: anag.associazioni,
       labelOf: (a) => a.nome,
       sublabelOf: (_) => null,
-      onAdd: () => _dialogNome(context, 'Nuova associazione', 'Nome', (nome) async {
-        await saveAssociazione(nome);
+      colorOf: (a) => colorFromHex(a.colore),
+      onAdd: () => _dialogNomeEColore(context, 'Nuova associazione', (nome, colore) async {
+        await saveAssociazione(nome, colore: colore);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       }),
-      onEdit: (a) => _dialogNome(context, 'Modifica associazione', 'Nome', (nome) async {
-        await saveAssociazione(nome, id: a.id);
+      onEdit: (a) => _dialogNomeEColore(context, 'Modifica associazione', (nome, colore) async {
+        await saveAssociazione(nome, id: a.id, colore: colore);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }, iniziale: a.nome),
+      }, iniziale: a.nome, coloreIniziale: a.colore),
       onDelete: (a) async {
         await deleteAssociazione(a.id);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
@@ -189,14 +190,15 @@ class _SezioneTipologie extends StatelessWidget {
       items: anag.tipologieTurno,
       labelOf: (t) => t.nome,
       sublabelOf: (_) => null,
-      onAdd: () => _dialogNome(context, 'Nuova tipologia', 'Nome', (nome) async {
-        await saveTipologiaTurno(nome);
+      colorOf: (t) => colorFromHex(t.colore),
+      onAdd: () => _dialogNomeEColore(context, 'Nuova tipologia', (nome, colore) async {
+        await saveTipologiaTurno(nome, colore: colore);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       }),
-      onEdit: (t) => _dialogNome(context, 'Modifica tipologia', 'Nome', (nome) async {
-        await saveTipologiaTurno(nome, id: t.id);
+      onEdit: (t) => _dialogNomeEColore(context, 'Modifica tipologia', (nome, colore) async {
+        await saveTipologiaTurno(nome, id: t.id, colore: colore);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }, iniziale: t.nome),
+      }, iniziale: t.nome, coloreIniziale: t.colore),
       onDelete: null, // Le tipologie non si eliminano (come da spec originale)
       onMoveUp: (t) async {
         final idx = anag.tipologieTurno.indexWhere((x) => x.id == t.id);
@@ -227,6 +229,7 @@ class _SezioneAnag<T> extends StatefulWidget {
   final List<T> items;
   final String Function(T) labelOf;
   final String? Function(T) sublabelOf;
+  final Color? Function(T)? colorOf;
   final VoidCallback onAdd;
   final Future<void> Function(T) onEdit;
   final Future<void> Function(T)? onDelete;
@@ -240,6 +243,7 @@ class _SezioneAnag<T> extends StatefulWidget {
     required this.items,
     required this.labelOf,
     required this.sublabelOf,
+    this.colorOf,
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
@@ -370,8 +374,16 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
               final item = entry.value;
               final canUp = widget.onMoveUp != null && _query.isEmpty && i > 0;
               final canDown = widget.onMoveDown != null && _query.isEmpty && i < filtered.length - 1;
+              final dot = widget.colorOf != null ? widget.colorOf!(item) : null;
               return ListTile(
                 dense: true,
+                leading: dot != null
+                    ? Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                      )
+                    : (widget.colorOf != null ? const SizedBox(width: 14, height: 14) : null),
                 title: Text(widget.labelOf(item)),
                 subtitle: widget.sublabelOf(item) != null
                     ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
@@ -525,32 +537,66 @@ class _SezioneBackupState extends State<_SezioneBackup> {
   }
 }
 
-// Helper per dialog con un solo campo di testo (associazione, tipologia…).
-Future<void> _dialogNome(
+/// Dialog con campo nome e palette colori per associazioni e tipologie.
+Future<void> _dialogNomeEColore(
   BuildContext context,
   String titolo,
-  String campo,
-  Future<void> Function(String) onSalva, {
+  Future<void> Function(String nome, String? colore) onSalva, {
   String iniziale = '',
+  String? coloreIniziale,
 }) async {
   final ctrl = TextEditingController(text: iniziale);
+  String? coloreSelezionato = coloreIniziale;
   final ok = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(titolo),
-      content: TextField(
-        controller: ctrl,
-        decoration: InputDecoration(labelText: campo),
-        textCapitalization: TextCapitalization.words,
-        autofocus: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocalState) => AlertDialog(
+        title: Text(titolo),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(labelText: 'Nome'),
+              textCapitalization: TextCapitalization.words,
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            const Text('Colore', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: kColorPalette.map((hex) {
+                final c = colorFromHex(hex)!;
+                final sel = coloreSelezionato == hex;
+                return GestureDetector(
+                  onTap: () => setLocalState(() => coloreSelezionato = sel ? null : hex),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: sel ? Border.all(color: Colors.white, width: 3) : null,
+                    ),
+                    child: sel ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
+        ],
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
-      ],
     ),
   );
   if (ok == true && ctrl.text.trim().isNotEmpty) {
-    await onSalva(ctrl.text.trim());
+    await onSalva(ctrl.text.trim(), coloreSelezionato);
   }
 }
+

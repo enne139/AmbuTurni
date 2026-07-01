@@ -4,7 +4,7 @@ import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
-import '../../utils/theme.dart';
+import '../../utils/theme.dart' show kPrimary, kSurface, kCardBorder, colorFromHex;
 import '../../widgets/anag_pickers.dart';
 
 /// Form per creare o modificare un turno.
@@ -208,19 +208,24 @@ class _TurnoFormState extends State<TurnoForm> {
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
-                children: anag.tipologieTurno
-                    .map((t) => FilterChip(
-                          label: Text(t.nome),
-                          selected: _tipologieSel.contains(t.id),
-                          onSelected: (sel) => setState(() {
-                            if (sel) {
-                              _tipologieSel.add(t.id);
-                            } else {
-                              _tipologieSel.remove(t.id);
-                            }
-                          }),
-                        ))
-                    .toList(),
+                children: anag.tipologieTurno.map((t) {
+                  final accent = colorFromHex(t.colore) ?? kPrimary;
+                  final sel = _tipologieSel.contains(t.id);
+                  return FilterChip(
+                    label: Text(t.nome),
+                    selected: sel,
+                    selectedColor: accent.withValues(alpha: 0.25),
+                    checkmarkColor: accent,
+                    labelStyle: TextStyle(color: sel ? accent : Colors.white70),
+                    onSelected: (v) => setState(() {
+                      if (v) {
+                        _tipologieSel.add(t.id);
+                      } else {
+                        _tipologieSel.remove(t.id);
+                      }
+                    }),
+                  );
+                }).toList(),
               )
             else
               const Text('Nessuna tipologia configurata',

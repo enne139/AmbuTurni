@@ -177,21 +177,24 @@ class _TurnoCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              // Numero progressivo
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: kPrimary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: kPrimary.withOpacity(0.4)),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '#${turno.numeroProgressivo ?? '—'}',
-                  style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
+              // Numero progressivo — colorato con il colore dell'associazione se impostato.
+              Builder(builder: (ctx) {
+                final accent = colorFromHex(turno.associazioneColore) ?? kPrimary;
+                return Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: accent.withValues(alpha: 0.4)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '#${turno.numeroProgressivo ?? '—'}',
+                    style: TextStyle(color: accent, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                );
+              }),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

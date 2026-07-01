@@ -4,6 +4,7 @@
 class Associazione {
   final String id;
   final String nome;
+  final String? colore;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -11,6 +12,7 @@ class Associazione {
   const Associazione({
     required this.id,
     required this.nome,
+    this.colore,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -19,6 +21,7 @@ class Associazione {
   factory Associazione.fromMap(Map<String, dynamic> m) => Associazione(
         id: m['id'] as String,
         nome: m['nome'] as String,
+        colore: m['colore'] as String?,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -27,6 +30,7 @@ class Associazione {
   Map<String, dynamic> toMap() => {
         'id': id,
         'nome': nome,
+        'colore': colore,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
@@ -115,6 +119,7 @@ class TipologiaTurno {
   final String id;
   final String nome;
   final int ordine;
+  final String? colore;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -123,6 +128,7 @@ class TipologiaTurno {
     required this.id,
     required this.nome,
     this.ordine = 0,
+    this.colore,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -132,6 +138,7 @@ class TipologiaTurno {
         id: m['id'] as String,
         nome: m['nome'] as String,
         ordine: (m['ordine'] as int?) ?? 0,
+        colore: m['colore'] as String?,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -141,6 +148,7 @@ class TipologiaTurno {
         'id': id,
         'nome': nome,
         'ordine': ordine,
+        'colore': colore,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
@@ -212,7 +220,9 @@ class Turno {
 
   // Campi denormalizzati (JOIN) — popolati dalla query lista.
   final String? associazioneNome;
+  final String? associazioneColore;
   final String? tipologiaNome;
+  final String? tipologiaColore;
 
   const Turno({
     required this.id,
@@ -240,7 +250,9 @@ class Turno {
     this.updatedAt,
     this.isSynced = 0,
     this.associazioneNome,
+    this.associazioneColore,
     this.tipologiaNome,
+    this.tipologiaColore,
   });
 
   factory Turno.fromMap(Map<String, dynamic> m) {
@@ -281,7 +293,9 @@ class Turno {
       updatedAt: m['updated_at'] as String?,
       isSynced: (m['is_synced'] as int?) ?? 0,
       associazioneNome: m['associazione_nome'] as String?,
+      associazioneColore: m['associazione_colore'] as String?,
       tipologiaNome: m['tipologia_nome'] as String?,
+      tipologiaColore: m['tipologia_colore'] as String?,
     );
   }
 
