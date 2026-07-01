@@ -151,6 +151,11 @@ compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter
 - **Turni per ospedale via INNER JOIN + DISTINCT**: `getTurniPerOspedale` fa JOIN su
   `servizi` filtrando per `ospedale_id`; il DISTINCT sull'intera riga evita duplicati
   quando un turno ha più servizi collegati allo stesso ospedale.
+- **Ricerca testuale in `getTurni(ricerca: ...)`**: il JOIN su `servizi` e il `DISTINCT`
+  si attivano solo quando `ricerca` è valorizzata, per non introdurre righe duplicate
+  (turni con più servizi) né overhead nelle query normali della lista turni. Il filtro
+  associazione e la ricerca si combinano in AND. Debounce di 300ms in `turni_list.dart`
+  per non lanciare una query a ogni tasto premuto.
 
 ---
 
@@ -192,6 +197,10 @@ compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter
   `TurniOspedaleScreen` con l'elenco filtrato (per persona: turni + assistenze in cui
   compare in uno dei 10 ruoli equipaggio; per ospedale: turni con un servizio in
   quell'ospedale). Tap su una card apre il dettaglio del turno/assistenza.
+- ✅ Ricerca testuale nella lista turni: icona lente nell'AppBar di `TurniList` apre un
+  campo di ricerca che filtra su descrizione/note del turno e descrizione dei servizi
+  collegati (combinabile col filtro associazione). `getTurni(ricerca: ...)` in
+  `helpers.dart`.
 
 ## TODO
 

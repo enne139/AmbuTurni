@@ -182,12 +182,32 @@ Future<void> spostaTipologia(int fromIndex, int toIndex) async {
 /// Restituisce i turni ordinati per data decrescente.
 /// LEFT JOIN su associazioni e tipologie_turno per denormalizzare i nomi
 /// ed evitare N+1 query nelle liste (un'unica query basta per tutto).
-Future<List<Turno>> getTurni({String? associazioneId}) async {
+///
+/// Se [ricerca] è valorizzato, filtra sui turni la cui descrizione/note oppure
+/// la descrizione di un servizio collegato contengono il testo (case-insensitive
+/// per via del collate NOCASE di default di SQLite su colonne TEXT).
+/// Il JOIN su servizi e il DISTINCT si attivano solo in questo caso: nelle query
+/// senza ricerca (il caso comune) si evita di introdurre righe duplicate per i
+/// turni con più servizi.
+Future<List<Turno>> getTurni({String? associazioneId, String? ricerca}) async {
   final db = await getDb();
-  final where = associazioneId != null ? 'WHERE t.associazione_id = ?' : '';
-  final args = associazioneId != null ? [associazioneId] : [];
+  final conditions = <String>[];
+  final args = <dynamic>[];
+  if (associazioneId != null) {
+    conditions.add('t.associazione_id = ?');
+    args.add(associazioneId);
+  }
+  final q = ricerca?.trim();
+  final cercaTesto = q != null && q.isNotEmpty;
+  if (cercaTesto) {
+    conditions.add('(t.descrizione LIKE ? OR t.note LIKE ? OR s.descrizione LIKE ?)');
+    args.addAll(['%$q%', '%$q%', '%$q%']);
+  }
+  final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
+  final joinServizi = cercaTesto ? 'LEFT JOIN servizi s ON s.turno_id = t.id' : '';
+  final distinct = cercaTesto ? 'DISTINCT ' : '';
   final rows = await db.rawQuery('''
-    SELECT t.*,
+    SELECT $distinct t.*,
            a.nome AS associazione_nome,
            a.colore AS associazione_colore,
            tp.nome AS tipologia_nome,
@@ -195,6 +215,7 @@ Future<List<Turno>> getTurni({String? associazioneId}) async {
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
     LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
+    $joinServizi
     $where
     ORDER BY t.data DESC, t.created_at DESC
   ''', args);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../db/helpers.dart';
@@ -20,6 +21,9 @@ class TurniList extends StatefulWidget {
 
 class _TurniListState extends State<TurniList> {
   String? _filtroAssocId;
+  bool _searching = false;
+  final _searchCtrl = TextEditingController();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -28,6 +32,30 @@ class _TurniListState extends State<TurniList> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TurniProvider>().carica();
     });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // Debounce per non lanciare una query a ogni singolo tasto premuto.
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      context.read<TurniProvider>().carica(associazioneId: _filtroAssocId, ricerca: v);
+    });
+  }
+
+  void _chiudiRicerca() {
+    _debounce?.cancel();
+    setState(() {
+      _searching = false;
+      _searchCtrl.clear();
+    });
+    context.read<TurniProvider>().carica(associazioneId: _filtroAssocId);
   }
 
   Future<void> _elimina(Turno turno) async {
@@ -59,39 +87,68 @@ class _TurniListState extends State<TurniList> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Turni'),
-        actions: [
-          // Filtro per associazione
-          if (anag.associazioni.isNotEmpty)
-            PopupMenuButton<String?>(
-              icon: Icon(
-                Icons.filter_list,
-                color: _filtroAssocId != null ? kPrimary : Colors.white70,
-              ),
-              tooltip: 'Filtra per associazione',
-              onSelected: (val) {
-                setState(() => _filtroAssocId = val);
-                context.read<TurniProvider>().carica(associazioneId: val);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: null, child: Text('Tutti')),
-                ...anag.associazioni.map(
-                  (a) => PopupMenuItem(value: a.id, child: Text(a.nome)),
+        title: _searching
+            ? TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Cerca in descrizione, note, servizi...',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  border: InputBorder.none,
                 ),
-              ],
+                onChanged: _onSearchChanged,
+              )
+            : const Text('Turni'),
+        actions: [
+          if (_searching)
+            IconButton(icon: const Icon(Icons.close), tooltip: 'Chiudi ricerca', onPressed: _chiudiRicerca)
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.search),
+              tooltip: 'Cerca',
+              onPressed: () => setState(() => _searching = true),
             ),
+            // Filtro per associazione
+            if (anag.associazioni.isNotEmpty)
+              PopupMenuButton<String?>(
+                icon: Icon(
+                  Icons.filter_list,
+                  color: _filtroAssocId != null ? kPrimary : Colors.white70,
+                ),
+                tooltip: 'Filtra per associazione',
+                onSelected: (val) {
+                  setState(() => _filtroAssocId = val);
+                  context.read<TurniProvider>().carica(associazioneId: val);
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: null, child: Text('Tutti')),
+                  ...anag.associazioni.map(
+                    (a) => PopupMenuItem(value: a.id, child: Text(a.nome)),
+                  ),
+                ],
+              ),
+          ],
         ],
       ),
       body: turni.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.calendar_today_outlined, size: 64, color: Colors.white24),
-                  SizedBox(height: 16),
-                  Text('Nessun turno', style: TextStyle(color: Colors.white54)),
-                  SizedBox(height: 8),
-                  Text('Tocca + per aggiungerne uno', style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  const Icon(Icons.calendar_today_outlined, size: 64, color: Colors.white24),
+                  const SizedBox(height: 16),
+                  Text(
+                    (turniProvider.ricerca?.isNotEmpty ?? false) ? 'Nessun risultato' : 'Nessun turno',
+                    style: const TextStyle(color: Colors.white54),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    (turniProvider.ricerca?.isNotEmpty ?? false)
+                        ? 'Prova con un altro termine di ricerca'
+                        : 'Tocca + per aggiungerne uno',
+                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                  ),
                 ],
               ),
             )

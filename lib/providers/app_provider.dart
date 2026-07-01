@@ -65,23 +65,27 @@ class AnagraficheProvider extends ChangeNotifier {
   }
 }
 
-/// Provider per la lista turni. Mantiene il filtro associazione attivo
-/// tra una navigazione e l'altra (ricarica() lo riusa senza doverlo ripassare).
+/// Provider per la lista turni. Mantiene il filtro associazione e la ricerca
+/// testuale attivi tra una navigazione e l'altra (ricarica() li riusa senza
+/// doverli ripassare).
 class TurniProvider extends ChangeNotifier {
   List<Turno> turni = [];
   String? _filtroAssociazioneId;
+  String? _ricerca;
 
   String? get filtroAssociazioneId => _filtroAssociazioneId;
+  String? get ricerca => _ricerca;
 
-  Future<void> carica({String? associazioneId}) async {
+  Future<void> carica({String? associazioneId, String? ricerca}) async {
     _filtroAssociazioneId = associazioneId;
-    turni = await getTurni(associazioneId: associazioneId);
+    _ricerca = ricerca;
+    turni = await getTurni(associazioneId: associazioneId, ricerca: ricerca);
     notifyListeners();
   }
 
-  /// Ricarica con lo stesso filtro già impostato (usato dopo create/edit/delete).
+  /// Ricarica con lo stesso filtro/ricerca già impostati (usato dopo create/edit/delete).
   Future<void> ricarica() async {
-    turni = await getTurni(associazioneId: _filtroAssociazioneId);
+    turni = await getTurni(associazioneId: _filtroAssociazioneId, ricerca: _ricerca);
     notifyListeners();
   }
 }

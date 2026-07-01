@@ -201,6 +201,24 @@ void main() {
       expect(nums.contains(1), isTrue);
       expect(nums.contains(2), isTrue);
     });
+
+    test('getTurni con ricerca trova per descrizione, note o descrizione servizio', () async {
+      final tDescr = newId();
+      final tNota = newId();
+      final tServizio = newId();
+      final tAltro = newId();
+      await saveTurno(Turno(id: tDescr, data: '2024-08-01', associazioneId: assocId, descrizione: 'Trasporto urgente Milano'));
+      await saveTurno(Turno(id: tNota, data: '2024-08-02', associazioneId: assocId, note: 'Chiamare prima Milano'));
+      await saveTurno(Turno(id: tServizio, data: '2024-08-03', associazioneId: assocId));
+      await saveServizio(Servizio(id: newId(), turnoId: tServizio, descrizione: 'Consegna referti Milano'));
+      await saveTurno(Turno(id: tAltro, data: '2024-08-04', associazioneId: assocId, descrizione: 'Nessuna corrispondenza'));
+
+      final risultati = await getTurni(associazioneId: assocId, ricerca: 'Milano');
+      final idsTrovati = risultati.map((t) => t.id).toSet();
+
+      expect(idsTrovati, {tDescr, tNota, tServizio});
+      expect(idsTrovati.contains(tAltro), isFalse);
+    });
   });
 
   group('CRUD tipologie turno', () {
