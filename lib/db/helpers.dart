@@ -27,14 +27,15 @@ Future<List<Associazione>> getAssociazioni() async {
 
 /// Inserisce o aggiorna un'associazione.
 /// Se [id] è null viene creata una nuova riga con un UUID fresco;
-/// altrimenti viene aggiornata la riga esistente (rename).
-Future<void> saveAssociazione(String nome, {String? id}) async {
+/// altrimenti viene aggiornata la riga esistente (rename/recolor).
+Future<void> saveAssociazione(String nome, {String? id, String? colore}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
     await db.insert('associazioni', {
       'id': newId(),
       'nome': nome,
+      'colore': colore,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
@@ -42,7 +43,7 @@ Future<void> saveAssociazione(String nome, {String? id}) async {
   } else {
     await db.update(
       'associazioni',
-      {'nome': nome, 'updated_at': now, 'is_synced': 0},
+      {'nome': nome, 'colore': colore, 'updated_at': now, 'is_synced': 0},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -132,7 +133,7 @@ Future<List<TipologiaTurno>> getTipologieTurno() async {
 /// Inserisce o rinomina una tipologia turno.
 /// Le tipologie non si eliminano (spec originale): potrebbero essere
 /// associate a turni esistenti e romperebbe la foreign key.
-Future<void> saveTipologiaTurno(String nome, {String? id}) async {
+Future<void> saveTipologiaTurno(String nome, {String? id, String? colore}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
@@ -144,6 +145,7 @@ Future<void> saveTipologiaTurno(String nome, {String? id}) async {
       'id': newId(),
       'nome': nome,
       'ordine': count,
+      'colore': colore,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
@@ -151,7 +153,7 @@ Future<void> saveTipologiaTurno(String nome, {String? id}) async {
   } else {
     await db.update(
       'tipologie_turno',
-      {'nome': nome, 'updated_at': now, 'is_synced': 0},
+      {'nome': nome, 'colore': colore, 'updated_at': now, 'is_synced': 0},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -187,7 +189,9 @@ Future<List<Turno>> getTurni({String? associazioneId}) async {
   final rows = await db.rawQuery('''
     SELECT t.*,
            a.nome AS associazione_nome,
-           tp.nome AS tipologia_nome
+           a.colore AS associazione_colore,
+           tp.nome AS tipologia_nome,
+           tp.colore AS tipologia_colore
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
     LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
@@ -203,7 +207,9 @@ Future<Turno?> getTurnoById(String id) async {
   final rows = await db.rawQuery('''
     SELECT t.*,
            a.nome AS associazione_nome,
-           tp.nome AS tipologia_nome
+           a.colore AS associazione_colore,
+           tp.nome AS tipologia_nome,
+           tp.colore AS tipologia_colore
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
     LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
@@ -419,6 +425,19 @@ Future<void> _ricalcolaNumerazioneAssistenze(
   for (int i = 0; i < rows.length; i++) {
     await db.update('assistenze', {'numero_progressivo': i + 1},
         where: 'id = ?', whereArgs: [rows[i]['id']]);
+  }
+}
+
+/// Ricalcola la numerazione progressiva di turni e assistenze per tutte le
+/// associazioni. Chiamato dopo l'import del backup, dove i dati vengono
+/// inseriti con raw INSERT senza passare per saveTurno/saveAssistenza.
+Future<void> ricalcolaTutteLeNumerazioni() async {
+  final db = await getDb();
+  final assoc = await db.query('associazioni', columns: ['id']);
+  for (final row in assoc) {
+    final id = row['id'] as String;
+    await _ricalcolaNumerazioneTurni(db, id);
+    await _ricalcolaNumerazioneAssistenze(db, id);
   }
 }
 

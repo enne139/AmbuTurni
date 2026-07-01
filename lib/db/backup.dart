@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'database.dart';
+import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
 
 const int _backupVersion = 1;
 
@@ -128,6 +129,11 @@ Future<String> importBackup() async {
     }
     await txn.execute('PRAGMA foreign_keys = ON');
   });
+
+  // Ricalcola la numerazione progressiva per ogni associazione: i raw INSERT
+  // del backup non passano per saveTurno, quindi i numeri potrebbero essere
+  // sbagliati o assenti se il backup non li aveva aggiornati.
+  await ricalcolaTutteLeNumerazioni();
 
   final ts = payload['exportedAt'] as String? ?? '?';
   return 'Import completato. Dati del $ts ripristinati.';
