@@ -2,7 +2,7 @@
 #
 # Trigger: manuale (workflow_dispatch) o push di tag vX.Y.Z.
 #
-# Requisiti runner: label `android`, Linux x86_64, curl/unzip/wget,
+# Requisiti runner: label `android`, Linux x86_64, wget/unzip/curl,
 # JDK 23 preinstallato o scaricabile, accesso a Internet, >= 8 GB RAM.
 #
 # Output: APK caricato come artifact della run.
@@ -21,8 +21,6 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.22.3'
   JAVA_VERSION: '23'
-  # Android SDK 34 — target di Flutter 3.22.x
-  ANDROID_SDK_ROOT: /opt/android-sdk
 
 jobs:
   build:
@@ -38,20 +36,21 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Installa Android SDK command-line tools
+      - name: Installa Android SDK
         run: |
-          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
-          unzip -q /tmp/cmdtools.zip -d $ANDROID_SDK_ROOT/cmdline-tools
-          mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools"           >> $GITHUB_PATH
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT"             >> $GITHUB_ENV
-
-      - name: Accetta licenze e installa pacchetti SDK
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          SDK=$HOME/android-sdk
+          TOOLS=$SDK/cmdline-tools/latest/bin
+          mkdir -p $SDK/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+               -O /tmp/cmdtools.zip
+          unzip -q /tmp/cmdtools.zip -d $SDK/cmdline-tools
+          mv $SDK/cmdline-tools/cmdline-tools $SDK/cmdline-tools/latest
+          yes | $TOOLS/sdkmanager --licenses > /dev/null 2>&1 || true
+          $TOOLS/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_HOME=$SDK"     >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK" >> $GITHUB_ENV
+          echo "$TOOLS"                >> $GITHUB_PATH
+          echo "$SDK/platform-tools"   >> $GITHUB_PATH
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
