@@ -1,205 +1,177 @@
-# CLAUDE.md — Guida per le chiamate IA
+# CLAUDE.md — Guida per le chiamate IA (branch flutter-rewrite)
 
-> App **React Native + Expo (SDK 52)** per la gestione di **turni** e **assistenze** in
-> ambulanza. Offline‑first (SQLite locale), Android + Web, tema scuro.
-> Questo file viene caricato automaticamente a ogni sessione: **leggilo e tienilo aggiornato.**
-
----
-
-## ⚠️ REGOLE OPERATIVE (sempre, non negoziabili)
-
-1. **Branch:** fai SEMPRE i commit sul branch **`sviluppo`**. Non committare mai direttamente
-   su `main`. Se `sviluppo` non esiste, crealo da `main` (`git checkout -b sviluppo`).
-   `main` resta stabile; si aggiorna solo con merge da `sviluppo`.
-2. **Tieni aggiornato questo file:** ogni volta che cambi struttura, aggiungi/modifichi una
-   funzionalità o prendi una decisione tecnica, aggiorna `CLAUDE.md` nello stesso commit.
-3. **Commenta sempre il codice:** ogni funzione, componente, hook e query non banale deve avere
-   un commento in **italiano** che spiega *cosa* fa e *perché* (non il come ovvio). Mantieni lo
-   stile dei commenti già presenti.
-4. **Verifica prima di chiudere:** `npx tsc --noEmit` deve passare senza errori. Quando possibile
-   verifica anche che il bundle web compili e che l'app si carichi.
-5. **Convenzione commit (Conventional Commits):** `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`.
-   Messaggi in italiano, chiari, una riga di sintesi + eventuale corpo.
-6. **Vincoli di stack:** NON usare WatermelonDB/Realm/ORM, NON usare Expo Router. Solo le
-   librerie già presenti (vedi sotto). TypeScript strict, tipi espliciti, niente `any` evitabili.
+> **Branch sperimentale**: questo branch (`flutter-rewrite`) è un **rewrite completo in Flutter**
+> dell'app originale React Native / Expo. L'app originale è sul branch `main`/`sviluppo`.
+> Il backend Node+Express in `backend/` è condiviso e non cambia.
 
 ---
 
-## Stack
+## ⚠️ REGOLE OPERATIVE
+
+1. **Branch:** i commit di questo rewrite vanno su **`flutter-rewrite`**. L'app originale RN
+   è su `main`/`sviluppo` e non va toccata da qui.
+2. **Aggiorna sempre questo file:** ogni volta che cambi struttura, aggiungi una funzionalità
+   o prendi una decisione tecnica, aggiorna `CLAUDE.md` nello **stesso commit**.
+3. **Commenta il codice in italiano:** ogni funzione/widget non banale deve avere un commento
+   che spiega *perché* (non il *come*: quello è già leggibile dal codice).
+   I commenti vanno aggiunti **nella stessa sessione** in cui scrivi il codice.
+4. **Fai il commit dopo ogni modifica:** ogni feature, fix o refactor va salvato in un commit
+   subito, con messaggio in stile Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`)
+   e testo in italiano. Non accumulare più modifiche in un unico commit generico.
+5. **Verifica prima di chiudere:** `flutter analyze` deve uscire senza errori (`error`).
+   Gli `info` warning minori sono accettabili.
+
+---
+
+## Stack Flutter
 
 | Ruolo | Libreria |
 |---|---|
-| Framework | React Native 0.76 + Expo SDK 52 |
-| DB native | `expo-sqlite` (API async) |
-| DB web | `sql.js` (SQLite in WebAssembly) — vedi sotto |
-| Navigazione | `@react-navigation` native / bottom-tabs / native-stack |
-| UI | `react-native-paper` (MD3 dark) |
-| Icone | `@expo/vector-icons` (MaterialCommunityIcons) |
-| Date | `@react-native-community/datetimepicker` (native) / `<input type=date>` (web) |
-| ID | `uuid` + `react-native-get-random-values` |
-| File backup | `expo-file-system` + `expo-sharing` + `expo-document-picker` (native) / DOM (web) |
-| Linguaggio | TypeScript strict |
-| Build | EAS (`preview` → APK, `production` → app-bundle) **oppure** APK sul runner Gitea (`.gitea/workflows/build-android.yml`) |
+| Framework | Flutter 3.22.3 (Dart 3.4.4) |
+| DB Android | `sqflite` (SQLite nativo) |
+| DB Desktop | `sqflite_common_ffi` (SQLite via FFI, usato su Windows/Linux/macOS) |
+| State management | `provider` (ChangeNotifier) |
+| Date | `intl` (DateFormat) |
+| ID | `uuid` v4 |
+| File backup | `share_plus` (export) + `file_picker` (import) |
+| HTTP (sync) | `http` |
+| Preferenze | `shared_preferences` |
+| Build | `flutter build apk` oppure workflow Gitea |
 
 ---
 
 ## Struttura cartelle
 
 ```
-App.tsx                 entry: init DB + PaperProvider + NavigationContainer
-index.ts                registerRootComponent (+ polyfill get-random-values via App.tsx)
-src/
-├── components/
-│   ├── DateField.tsx            selettore data cross-platform (picker native / input web)
-│   ├── EquipaggioBlock.tsx      doppio equipaggio (1ª/2ª parte) con switch "cambio a metà"
-│   ├── SelectableField.tsx      campo "####": modal ricerca + "Aggiungi: [testo]"
-│   ├── MultiSelectableField.tsx versione multi-valore con chip
-│   ├── ServizioForm.tsx         form add/edit di un singolo servizio (codici/ospedale/descr.)
-│   └── ServiziManager.tsx       lista servizi nel DETTAGLIO turno: add/edit/delete/riordino
+lib/
+├── main.dart                      entry: init DB + MultiProvider + MaterialApp
+├── utils/
+│   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
+│   └── format.dart                formatDate/Ore/parseOre/todayIso
 ├── db/
-│   ├── schema.ts               SCHEMA SQL condiviso (native + web)
-│   ├── index.ts                backend NATIVE (expo-sqlite) + getDb/initDatabase
-│   ├── index.web.ts            backend WEB (sql.js) con persistenza su localStorage
-│   ├── migrations.ts           migrazioni idempotenti + ricalcolo numerazione
-│   ├── helpers.ts              TUTTE le funzioni CRUD + tipi TypeScript
-│   └── backup.ts               export/import JSON di tutte le tabelle
-├── navigation/AppNavigator.tsx tab (Turni/Assistenze/Statistiche/Impostazioni) + stack
-├── screens/
-│   ├── turni/                  TurniList / TurnoDetail / TurnoForm
-│   ├── assistenze/             AssistezeList + AssistenzaScreens (Form + Detail)
-│   ├── statistiche/            StatisticheScreen
-│   └── impostazioni/           ImpostazioniScreen (anagrafiche + backup)
-├── sync/syncManager.ts         client di sincronizzazione (login JWT, push/pull, apply)
-├── types/sql.js.d.ts           dichiarazione tipi per sql.js
-└── utils/
-    ├── theme.ts                colori, tema Paper, getCodiceColor (case-insensitive)
-    ├── format.ts               formatDate / formatOre / parseOre
-    ├── backupIO.ts             salva/scegli file backup — NATIVE
-    └── backupIO.web.ts         salva/scegli file backup — WEB (DOM)
+│   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
+│   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
+│   ├── helpers.dart               TUTTE le funzioni CRUD + StatisticheData
+│   └── backup.dart                exportBackup() + importBackup() via share_plus/file_picker
+├── providers/
+│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider
+├── navigation/
+│   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack)
+├── widgets/
+│   └── codice_chip.dart           chip colorato per codici chiamata/uscita
+└── screens/
+    ├── turni/
+    │   ├── turni_list.dart         lista + FAB + long-press elimina + filtro assoc.
+    │   ├── turno_form.dart         form crea/modifica turno (assoc., data, ore, tipol., eq.)
+    │   ├── turno_detail.dart       dettaglio + lista servizi con riordino frecce
+    │   └── servizio_form.dart      form crea/modifica servizio (codici, ospedale, desc.)
+    ├── assistenze/
+    │   ├── assistenze_list.dart
+    │   ├── assistenza_form.dart
+    │   └── assistenza_detail.dart
+    ├── statistiche/
+    │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
+    └── impostazioni/
+        └── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
 
-backend/                        API di sincronizzazione (Node + Express + PostgreSQL)
-├── src/{index,db,auth,sync}.js server, schema PG, login JWT, push/pull
-├── Dockerfile, .dockerignore
-├── docker-compose.yml          postgres + api
-└── .env.example, README.md
-.gitea/workflows/build-backend.yml  action (Docker) build+push immagine
-.gitea/workflows/build-android.yml   action: compila l'APK Android sul runner (prebuild+Gradle)
+backend/                            API sync Node+Express+PostgreSQL (invariata)
+.gitea/workflows/build-backend.yml  CI Docker per il backend (invariata)
+windows/                            progetto CMake generato da flutter create --platforms windows
 ```
 
 ---
 
-## Funzionalità (richieste e implementate)
+## Schema DB
 
-- **Turni**: associazione (obbligatoria), data, ore, tipo turno (multi), descrizione, note,
-  doppio equipaggio, lista servizi. Lista ordinata per **data decrescente**.
-- **Assistenze**: come i turni ma senza servizi né tipologia.
-- **Servizi** (gestiti nella **schermata di dettaglio del turno**, non nel form):
-  - aggiungi / modifica / elimina / **riordina** (frecce su‑giù)
-  - **numero progressivo per turno** (1..N, risequenziato senza buchi)
-  - **codice chiamata**: `VERDE`, `GIALLO`, `ROSSO`, `DIMISSIONE`
-  - **codice uscita**: `VERDE`, `GIALLO`, `ROSSO`, `NERO`, `VUOTO`, `RIFIUTO`
-  - **ospedale** (nome + **città**) — opzionale, **descrizione** del servizio
-- **Numerazione progressiva** di turni/assistenze = **rango per data** nell'associazione
-  (il più vecchio = #1), **ricalcolata automaticamente** a ogni save/delete.
-- **Statistiche**: turni totali, servizi totali, ore turni, assistenze totali, ore assistenze,
-  ore totali — con **filtro per associazione** (chip).
-- **Backup**: esporta/importa **JSON** di tutti i dati (Impostazioni → Backup/Dati).
-  L'import **sostituisce** completamente i dati.
-- **Impostazioni**: CRUD di associazioni, persone (cognome+nome), ospedali (nome+città),
-  tipologie turno (rinominabili, non eliminabili). Modifica via dialog.
-- **Eliminazione** turni/assistenze: pulsante nel dettaglio + long‑press sulla card in lista.
+Identico all'app React Native (stesse tabelle, stessi CHECK, stessi indici) — così un
+import/export JSON è compatibile tra le due versioni dell'app.
+
+Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
+`tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
+
+Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
+Le migrazioni sono idempotenti: `CREATE TABLE IF NOT EXISTS` a ogni apertura.
+
+### Desktop (Windows/Linux/macOS)
+
+`getDb()` rileva la piattaforma e chiama `sqfliteFfiInit()` + imposta
+`databaseFactory = databaseFactoryFfi` prima di aprire il DB. Su Android usa il
+driver nativo; nessuna distinzione nel resto del codice.
 
 ---
-
-## Architettura / note tecniche (leggere prima di toccare il DB)
-
-- **Doppio backend DB**: `expo-sqlite` non ha implementazione **web** in SDK 52 (lancia
-  `Cannot find native module 'ExpoSQLite'`). Per il web usiamo **sql.js** in `index.web.ts`,
-  che espone la **stessa API async** (`execAsync/getAllAsync/getFirstAsync/runAsync`). Metro
-  risolve automaticamente `index.web.ts` sul web e `index.ts` su native. Stesso schema in
-  `schema.ts`. **Non importare expo-sqlite direttamente fuori da `index.ts`.**
-- **Persistenza web**: sql.js è in‑memory; lo stato viene serializzato in `localStorage`
-  (base64) a ogni mutazione. Il `.wasm` è caricato da CDN jsdelivr (serve rete al 1° avvio web).
-- **Migrazioni** (`migrations.ts`): idempotenti, girano su entrambi i backend dopo lo SCHEMA.
-  Ricostruiscono `servizi` quando serve (nuove colonne/CHECK), inizializzano `ordine`, e
-  **ricalcolano la numerazione** di turni/assistenze/servizi sui dati esistenti.
-- **Codici colore**: `getCodiceColor` in `theme.ts` è **case-insensitive**.
-- **Pattern UI**: i form usano `ScrollView`; le liste/dettagli ricaricano con `useFocusEffect`.
-  I campi multiline hanno `numberOfLines` + `minHeight` per stabilità su web.
-- **File IO backup**: `backupIO.ts` (native: FileSystem+Sharing+DocumentPicker) e
-  `backupIO.web.ts` (browser: Blob download + input file). Metro sceglie la variante giusta.
-
----
-
-## Backend / Sincronizzazione (cartella `backend/`)
-
-- **Stack**: Node.js + Express + PostgreSQL. Auth con **JWT** (login utente/password,
-  hash bcrypt; admin iniziale da `ADMIN_USERNAME`/`ADMIN_PASSWORD`).
-- **Modello dati**: tabella generica `records (table_name, id, data JSONB, …)` — il server
-  non conosce lo schema dell'app, quindi non va toccato se cambia. Conflitti **last-write-wins**.
-- **Endpoint**: `/health`, `POST /auth/login`, `POST /auth/users` (protetto),
-  `POST /sync/push`, `GET /sync/pull?since=ISO` (protetti da Bearer token).
-- **Client** (`src/sync/syncManager.ts`): `login()`, `syncNow()` (push righe con
-  `is_synced=0` → poi le marca; pull dopo `last_sync_at` → applica con FK off).
-  Config in tabella `sync_meta`. UI in **Impostazioni → Sincronizzazione**.
-- **Deploy**: `backend/docker-compose.yml` (postgres + api, ok con `podman-compose`).
-  L'immagine è costruita dalla action `.gitea/workflows/build-backend.yml` (**Docker**),
-  pubblicata sul registry della **stessa istanza Gitea**. L'host si ricava da
-  `GITHUB_SERVER_URL`; per l'auth serve **un solo secret** `REGISTRY_TOKEN` (PAT con
-  scope `write:package`) — il token integrato non basta. Serve un runner con Docker.
 
 ## Avvio & verifica
 
 ```bash
-npm install
-npx expo start --web        # se errori di rete CLI: EXPO_OFFLINE=1 npx expo start --web
-npx tsc --noEmit            # type-check (deve passare)
+flutter pub get
+flutter analyze          # deve passare senza errori (exit 0)
+flutter run              # su device Android connesso o emulatore
+flutter run -d windows   # per test rapido su Windows (richiede Visual Studio)
+flutter build apk        # APK debug/release
 ```
 
-Dopo modifiche allo **schema o alle migrazioni**, sul web serve un **hard refresh**
-(Ctrl+Shift+R) perché il DB è già inizializzato in `localStorage` (cache `dbPromise`).
+## Gradle / Java
+
+La build Android richiede **Gradle 8.10.2** (`gradle-wrapper.properties`) per la
+compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) andrà aggiornato
+per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
+
+## Decisioni tecniche rilevanti
+
+- **sqflite_common_ffi**: aggiunto per Windows; su Android è un no-op ma mantiene
+  un codice identico su tutte le piattaforme.
+- **ConflictAlgorithm.replace** negli insert: upsert idiomatico di sqflite; equivale a
+  `INSERT OR REPLACE INTO` e funziona sia per create che per update.
+- **tipologie_extra**: `List<String>` in Dart, serializzata come `TEXT` JSON nel DB
+  (`jsonEncode`/`jsonDecode` in `models.dart`). Stessa scelta dell'app RN originale.
+- **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
+  usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
+- **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
+  ospedale si usa `RawAutocomplete<T>` con controller+focus esterni; filtra la lista
+  in tempo reale e include una voce fissa "Aggiungi..." in fondo che apre un dialog di
+  creazione inline. L'aggiornamento del campo dopo la creazione avviene in `didUpdateWidget`
+  via `addPostFrameCallback` per evitare modifiche al controller durante il build.
+- **PRAGMA foreign_keys = OFF** durante l'import backup: permette di svuotare tutte
+  le tabelle nell'ordine corretto senza violare i vincoli FK durante il delete.
 
 ---
 
-## Cose da migliorare / lezioni apprese (AGGIORNARE nel tempo)
+## Funzionalità implementate
 
-- L'aggiunta *rapida* di un ospedale dal `SelectableField` salva solo il **nome**; la città si
-  inserisce/corregge da Impostazioni → Ospedali.
-- Bug "campi multiline su web" segnalato ma non riprodotto del tutto: tenere d'occhio.
-- Web + sql.js dipende dal CDN per il `.wasm`: valutare di bundlare il wasm per offline reale.
-- **Sync**: implementata (backend + client), incluse le **eliminazioni** tramite tombstone
-  (tabella locale `deletions`): le delete locali registrano un tombstone, il push lo invia con
-  `deleted=true`, gli altri dispositivi lo applicano col pull. Cancellando un turno si crea il
-  tombstone anche per i suoi servizi (rimossi in cascata). **Restore + sync**: `importData()`
-  azzera i `deletions` locali e marca i dati importati `is_synced=0` con `updated_at=adesso`,
-  così al primo push vincono il last-write-wins e sovrascrivono eventuali tombstone già sul
-  server (altrimenti li ri-eliminerebbero al pull). Il restore diventa quindi "autorevole" e
-  ri-propaga i dati; resta best-effort con forte sfasamento di orologi tra dispositivi.
-- L'immagine del backend è pubblicata sul **registry dello stesso Gitea** dall'action
-  (`.gitea/workflows/build-backend.yml`, **Docker**). Host del registry ricavato da
-  `GITHUB_SERVER_URL`; login con `${{ github.actor }}` + il PAT nel secret
-  **`REGISTRY_TOKEN`** (scope `write:package`). Il token integrato `GITHUB_TOKEN` dà
-  `unauthorized` sul push (non ha i permessi package), quindi il PAT è obbligatorio.
-  Serve un runner con accesso al daemon Docker (socket `/var/run/docker.sock` montato
-  oppure Docker-in-Docker). Imposta poi `SYNC_IMAGE` nel `.env` del compose con
-  `<host-gitea>/<owner>/ambulanza-sync`.
-  Nota build: si costruisce con `docker buildx build --builder default --load` (immagine
-  nello store locale del daemon) e si fa il `docker push` in uno step separato. Il builder
-  `docker-container` non va bene qui: non carica l'immagine in locale (push → `image not
-  known`) e gira in un container con rete isolata che non raggiunge il registry (push →
-  `connection refused`), mentre il `docker login`/`push` dal job container funzionano.
-- **Build APK sul runner** (`.gitea/workflows/build-android.yml`, alternativa a EAS cloud):
-  progetto Expo managed → il workflow fa `npm ci` + `expo prebuild --platform android` +
-  `gradlew assembleRelease`. Toolchain installata via action: JDK 17, Android SDK 35,
-  build-tools 35, **NDK 27.1.12297006 + CMake 3.22.1** (necessari per `newArchEnabled`).
-  L'APK è firmato col keystore di **debug** (come il profilo EAS "preview"): installabile in
-  sideload, NON adatto al Play Store senza un keystore reale (istruzioni in coda al workflow).
-  Trigger: manuale o tag `v*`. **Runner**: `runs-on: android` → gira sul runner self-hosted
-  registrato con label `android` (es. act_runner in Docker sul PC). Immagine consigliata
-  `catthehacker/ubuntu:act-latest` (Node + apt/curl/unzip), x86_64, ≥ 8 GB RAM e ~20 GB
-  liberi (1ª build scarica l'NDK, ~1 GB). **Output**: l'APK è caricato come **artifact**
-  `ambulanza-turni-apk` con `actions/upload-artifact@v3` (su Gitea va la **v3**: il backend
-  artifacts non supporta il protocollo della v4). Nessun secret necessario.
-- Possibili migliorie UX: import "merge" (oltre a "replace"), riordino drag&drop dei servizi.
-- Sicurezza backend: in produzione mettere l'API dietro HTTPS (reverse proxy).
-```
+- ✅ Turni: lista ordinata per data desc, filtro associazione, create/edit/delete, form
+  completo (assoc. obbligatoria, data, ore, tipologia + extra chip, equipaggio 1ª/2ª parte).
+- ✅ Equipaggio: UI a colonna singola con label del ruolo sempre visibile a sinistra
+  (redesign rispetto alla griglia 2-colonne originale in cui le label sparivano dopo selezione).
+- ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
+- ✅ Assistenze: identico ai turni ma senza tipologia né servizi.
+- ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
+  con filtro per associazione (chip).
+- ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
+  tipologie turno (rinominabili, riordinabili ↑↓, non eliminabili).
+  Ogni sezione è collassata di default, con badge contatore sempre visibile,
+  pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
+  Le tipologie assistenza non sono esposte in UI (tabella DB mantenuta per compatibilità backup).
+- ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
+  Desktop (Windows/Linux/macOS): usa `FilePicker.saveFile()` invece di share_plus.
+  Logica di salvataggio centralizzata in `_salvaFile()` in `backup.dart`.
+- ✅ Export JSON leggibile (solo turni): `exportSemplificato()` produce un JSON con nomi
+  al posto degli UUID (associazione, persone, ospedali, tipologie) e servizi annidati
+  dentro ogni turno. Pulsante dedicato nella sezione Backup di Impostazioni.
+- ✅ Combobox con ricerca per equipaggio e ospedale: `PersonaPicker` e `OspedalePicker`
+  in `widgets/anag_pickers.dart` permettono di filtrare la lista digitando e di creare
+  nuove voci al volo tramite "Aggiungi..." (auto-selezione dopo creazione inclusa).
+- ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
+- ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
+- ✅ Tipologie multi-select nel form turno: FilterChip, ordine personalizzabile.
+- ✅ `cambio_meta`: toggle SwitchListTile nel form, visibile nel dettaglio turno.
+- ✅ Dismissible swipe-to-delete: gesto sinistra con conferma su lista turni e assistenze.
+- ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
+- ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
+
+## TODO (differenze rispetto all'app originale)
+
+- [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+- ✅ Colori per associazioni e tipologie: palette 11 colori in Impostazioni, dot colorato in
+  lista, accento nei chip filtro statistiche e FilterChip form turno.
+- ✅ Numerazione progressiva corretta: ricalcolo automatico dopo importBackup() via
+  `ricalcolaTutteLeNumerazioni()`; normal save/delete già aggiornano in tempo reale.

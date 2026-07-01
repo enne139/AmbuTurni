@@ -1,27 +1,14 @@
-# Action Gitea: compila l'APK Android DIRETTAMENTE sul runner (niente EAS cloud).
+# Workflow Gitea: compila l'APK Android con Flutter.
 #
-# Progetto Expo "managed" (no cartella android/ versionata, vedi .gitignore): il
-# workflow rigenera il progetto nativo con `expo prebuild` e poi builda con Gradle.
-# Per via della New Architecture (newArchEnabled: true in app.json) serve anche
-# NDK + CMake oltre a JDK 17 e Android SDK 35.
+# Trigger: manuale (workflow_dispatch) o push di tag vX.Y.Z.
+# Non gira a ogni push perché il build Flutter richiede Flutter SDK + Gradle.
 #
-# Firma: il template Expo firma la build "release" col keystore di DEBUG, quindi
-# `assembleRelease` produce un APK installabile (sideload/interno, come il profilo
-# EAS "preview") SENZA secret. Per la distribuzione su Play Store serve invece un
-# keystore vero: vedi nota in fondo al file.
+# Requisiti runner: label `android`, immagine Linux x86_64 con curl/unzip,
+# JDK 23 preinstallato o scaricabile via setup-java, accesso a Internet.
+# Consigliati >= 8 GB RAM e ~15 GB liberi.
 #
-# Trigger: manuale (workflow_dispatch) o push di un tag vX.Y.Z. NON gira a ogni
-# push perché il build è pesante (la 1ª esecuzione scarica l'NDK, ~1 GB).
-#
-# Requisiti runner: gira sui runner con label `android` (vedi `runs-on`). Serve
-# un'immagine Linux x86_64 con Node (per le action JS), apt/curl/unzip e accesso a
-# Internet (scarica JDK/SDK/NDK), con RAM/disco adeguati (toolchain Android + bundling
-# JS + compilazione C++ del codegen). Consigliati >= 8 GB RAM e ~20 GB liberi; immagine
-# suggerita per il runner: catthehacker/ubuntu:act-latest.
-#
-# Output: l'APK è caricato come ARTIFACT della run (actions/upload-artifact, scaricabile
-# dalla pagina dell'esecuzione in Gitea). Nota: su Gitea va usata la v3 della action,
-# perché il backend artifacts non implementa il protocollo della v4.
+# Output: APK caricato come artifact della run (scaricabile dalla pagina in Gitea).
+# Su Gitea si usa upload-artifact@v3 perché la v4 usa un protocollo non supportato.
 
 name: build-android-apk
 
@@ -30,37 +17,21 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
-# Annulla una run precedente ancora in corso sullo stesso ref (i build sono lunghi).
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '20'
-  JAVA_VERSION: '17'
-  ANDROID_API: '35'          # Expo SDK 52 / RN 0.76 -> Android 15 (API 35)
-  BUILD_TOOLS: '35.0.0'
-  NDK_VERSION: '27.1.12297006'  # NDK richiesto da RN 0.76 (New Architecture)
-  CMAKE_VERSION: '3.22.1'
+  FLUTTER_VERSION: '3.22.3'
+  JAVA_VERSION: '23'
 
 jobs:
   build:
-    # Gira sul runner self-hosted registrato con la label `android`.
     runs-on: android
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Installa dipendenze
-        # ci = installazione riproducibile da package-lock.json.
-        run: npm ci
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -68,53 +39,21 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Setup Android SDK
-        # Installa cmdline-tools e imposta ANDROID_HOME/ANDROID_SDK_ROOT.
-        uses: android-actions/setup-android@v3
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Installa componenti SDK (platform, build-tools, NDK, CMake)
-        # Licenze accettate in modo non interattivo. NDK+CMake servono per la New Arch.
-        # ( yes || true ): quando sdkmanager chiude lo stdin, `yes` muore di SIGPIPE
-        # (exit 141) e con `pipefail` farebbe fallire lo step pur avendo accettato le
-        # licenze; il `|| true` assorbe SOLO quel caso, mentre l'exit di sdkmanager
-        # (lato destro della pipe) resta significativo se fallisce davvero.
-        run: |
-          ( yes 2>/dev/null || true ) | sdkmanager --licenses >/dev/null
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-${ANDROID_API}" \
-            "build-tools;${BUILD_TOOLS}" \
-            "ndk;${NDK_VERSION}" \
-            "cmake;${CMAKE_VERSION}"
+      - name: Installa dipendenze Dart
+        run: flutter pub get
 
-      - name: Genera il progetto nativo (expo prebuild)
-        # --no-install: le dipendenze sono già installate con `npm ci`.
-        run: npx expo prebuild --platform android --no-install
-
-      - name: Build APK release
-        # Nessuna limitazione: tutte le ABI di default e memoria Gradle di default.
-        # --no-daemon: il daemon Gradle è inutile su CI (un solo build per run).
-        run: |
-          chmod +x ./android/gradlew
-          cd android
-          ./gradlew assembleRelease --no-daemon
+      - name: Build APK
+        run: flutter build apk --release
 
       - name: Pubblica l'APK come artifact
-        # Action ufficiale. Su Gitea si usa la v3: il backend artifacts non supporta il
-        # protocollo della v4. L'APK è scaricabile dalla pagina della run.
         uses: actions/upload-artifact@v3
         with:
           name: ambulanza-turni-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
-
-# --- Distribuzione su Play Store (firma con keystore reale) -------------------
-# L'APK qui prodotto è firmato col keystore di DEBUG. Per una build firmata "di
-# release":
-#   1) Genera un keystore:  keytool -genkeypair -v -keystore release.jks \
-#        -alias <alias> -keyalg RSA -keysize 2048 -validity 10000
-#   2) Salva in secret (Settings -> Actions -> Secrets): ANDROID_KEYSTORE_BASE64
-#      (base64 del .jks), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
-#   3) Dopo `expo prebuild`, decodifica il keystore in android/app/ e configura il
-#      signingConfig "release" in android/app/build.gradle (o via gradle.properties),
-#      poi usa `./gradlew assembleRelease` (APK) o `bundleRelease` (AAB per lo store).

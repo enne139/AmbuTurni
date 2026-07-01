@@ -1,33 +1,29 @@
-# Dependencies
-node_modules/
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.g.dart
+pubspec.lock
 
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
+# Android (generato da flutter build — non versionato)
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/google-services.json
 
-# Native
-android/
+# iOS (non usato, piattaforma non abilitata)
 ios/
-
-# Metro
-.metro-health-check*
-.expo-start.log
-
-# Environment
-.env
-.env.local
 
 # Local databases
 *.db
 *.db-shm
 *.db-wal
 
-# Debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
+# Environment
+.env
+.env.local
 
 # macOS
 .DS_Store
@@ -43,3 +39,7 @@ yarn-error.*
 *.key
 *.mobileprovision
 *.orig.*
+
+# Backend Node.js
+backend/node_modules/
+backend/.env

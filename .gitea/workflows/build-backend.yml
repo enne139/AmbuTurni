@@ -13,7 +13,7 @@ name: build-backend-image
 
 on:
   push:
-    branches: [main, sviluppo]
+    branches: [main]
     paths:
       - 'backend/**'
       - '.gitea/workflows/build-backend.yml'
