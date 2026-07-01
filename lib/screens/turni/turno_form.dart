@@ -33,8 +33,6 @@ class _TurnoFormState extends State<TurnoForm> {
   bool _saving = false;
   String? _existingId;
 
-  bool _cambioMeta = false;
-
   // Equipaggio
   String? _eq1Autista, _eq1Cs, _eq1Terzo, _eq1Quarto, _eq1Central;
   String? _eq2Autista, _eq2Cs, _eq2Terzo, _eq2Quarto, _eq2Central;
@@ -66,7 +64,6 @@ class _TurnoFormState extends State<TurnoForm> {
           _data = DateTime.tryParse(t.data) ?? DateTime.now();
           _dataCtrl.text = t.data;
           _oreCtrl.text = t.ore != null ? formatOre(t.ore) : '';
-          _cambioMeta = t.cambioMeta;
           _descrizioneCtrl.text = t.descrizione ?? '';
           _noteCtrl.text = t.note ?? '';
           _eq1Autista = t.eq1AutostaId;
@@ -105,7 +102,6 @@ class _TurnoFormState extends State<TurnoForm> {
         ore: parseOre(_oreCtrl.text),
         tipologiaId: _tipologieSel.isNotEmpty ? _tipologieSel.first : null,
         tipologieExtra: _tipologieSel.length > 1 ? _tipologieSel.sublist(1) : [],
-        cambioMeta: _cambioMeta,
         descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         eq1AutostaId: _eq1Autista,
@@ -249,20 +245,34 @@ class _TurnoFormState extends State<TurnoForm> {
             ),
             const SizedBox(height: 20),
 
-            // --- Cambio a metà turno ---
-            SwitchListTile(
-              title: const Text('Cambio a metà turno'),
-              subtitle: const Text('Equipaggi diversi nella 1ª e 2ª parte',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
-              value: _cambioMeta,
-              onChanged: (v) => setState(() => _cambioMeta = v),
-              activeColor: kPrimary,
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 8),
-
             // --- Equipaggio 2ª parte ---
-            _Sezione(titolo: 'Equipaggio — 2ª parte'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Equipaggio — 2ª parte',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+                  TextButton.icon(
+                    icon: const Icon(Icons.content_copy, size: 14),
+                    label: const Text('Copia 1ª parte', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: kPrimary,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => setState(() {
+                      _eq2Autista = _eq1Autista;
+                      _eq2Cs = _eq1Cs;
+                      _eq2Terzo = _eq1Terzo;
+                      _eq2Quarto = _eq1Quarto;
+                      _eq2Central = _eq1Central;
+                    }),
+                  ),
+                ],
+              ),
+            ),
             _EquipaggioGrid(
               persone: anag.persone,
               autista: _eq2Autista,

@@ -176,7 +176,6 @@ class _InfoCard extends StatelessWidget {
               _Row('Tipologie extra', t.tipologieExtra
                   .map((id) => anag.byIdTipologia(id)?.nome ?? id)
                   .join(', ')),
-            if (t.cambioMeta) _Row('Cambio metà', 'Sì'),
             if (t.descrizione != null) _Row('Descrizione', t.descrizione!),
             if (t.note != null) _Row('Note', t.note!),
           ],
