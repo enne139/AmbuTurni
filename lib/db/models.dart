@@ -240,6 +240,8 @@ class Turno {
   final String? eq2TerzoId;
   final String? eq2QuartoId;
   final String? eq2CentralinistaId;
+  // true se l'equipaggio è cambiato a metà turno (1ª e 2ª parte diverse).
+  final bool cambioMeta;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -269,6 +271,7 @@ class Turno {
     this.eq2TerzoId,
     this.eq2QuartoId,
     this.eq2CentralinistaId,
+    this.cambioMeta = false,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -309,6 +312,7 @@ class Turno {
       eq2TerzoId: m['eq2_terzo_id'] as String?,
       eq2QuartoId: m['eq2_quarto_id'] as String?,
       eq2CentralinistaId: m['eq2_centralinista_id'] as String?,
+      cambioMeta: ((m['cambio_meta'] as int?) ?? 0) == 1,
       createdAt: m['created_at'] as String?,
       updatedAt: m['updated_at'] as String?,
       isSynced: (m['is_synced'] as int?) ?? 0,
@@ -338,6 +342,7 @@ class Turno {
         'eq2_terzo_id': eq2TerzoId,
         'eq2_quarto_id': eq2QuartoId,
         'eq2_centralinista_id': eq2CentralinistaId,
+        'cambio_meta': cambioMeta ? 1 : 0,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
@@ -364,6 +369,7 @@ class Turno {
     String? eq2TerzoId,
     String? eq2QuartoId,
     String? eq2CentralinistaId,
+    bool? cambioMeta,
     String? createdAt,
     String? updatedAt,
     int? isSynced,
@@ -388,6 +394,7 @@ class Turno {
         eq2TerzoId: eq2TerzoId ?? this.eq2TerzoId,
         eq2QuartoId: eq2QuartoId ?? this.eq2QuartoId,
         eq2CentralinistaId: eq2CentralinistaId ?? this.eq2CentralinistaId,
+        cambioMeta: cambioMeta ?? this.cambioMeta,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         isSynced: isSynced ?? this.isSynced,

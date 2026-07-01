@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS turni (
   eq2_terzo_id TEXT REFERENCES persone(id),
   eq2_quarto_id TEXT REFERENCES persone(id),
   eq2_centralinista_id TEXT REFERENCES persone(id),
+  cambio_meta INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
@@ -199,6 +200,12 @@ Future<void> _runMigrations(Database db) async {
           where: 'id = ?', whereArgs: [rows[i]['id']]);
     }
     await batch.commit(noResult: true);
+  } catch (_) {}
+
+  // Migrazione: aggiunge cambio_meta ai turni.
+  try {
+    await db
+        .execute('ALTER TABLE turni ADD COLUMN cambio_meta INTEGER DEFAULT 0');
   } catch (_) {}
 
   // Migrazione: aggiunge la colonna ordine a tipologie_assistenza.
