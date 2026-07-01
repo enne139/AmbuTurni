@@ -1,14 +1,11 @@
 # Workflow Gitea: compila l'APK Android con Flutter.
 #
 # Trigger: manuale (workflow_dispatch) o push di tag vX.Y.Z.
-# Non gira a ogni push perché il build Flutter richiede Flutter SDK + Gradle.
 #
-# Requisiti runner: label `android`, immagine Linux x86_64 con curl/unzip,
-# JDK 23 preinstallato o scaricabile via setup-java, accesso a Internet.
-# Consigliati >= 8 GB RAM e ~15 GB liberi.
+# Requisiti runner: label `android`, Linux x86_64, curl/unzip/wget,
+# JDK 23 preinstallato o scaricabile, accesso a Internet, >= 8 GB RAM.
 #
-# Output: APK caricato come artifact della run (scaricabile dalla pagina in Gitea).
-# Su Gitea si usa upload-artifact@v3 perché la v4 usa un protocollo non supportato.
+# Output: APK caricato come artifact della run.
 
 name: build-android-apk
 
@@ -24,6 +21,8 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.22.3'
   JAVA_VERSION: '23'
+  # Android SDK 34 — target di Flutter 3.22.x
+  ANDROID_SDK_ROOT: /opt/android-sdk
 
 jobs:
   build:
@@ -39,6 +38,21 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      - name: Installa Android SDK command-line tools
+        run: |
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
+          unzip -q /tmp/cmdtools.zip -d $ANDROID_SDK_ROOT/cmdline-tools
+          mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/platform-tools"           >> $GITHUB_PATH
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT"             >> $GITHUB_ENV
+
+      - name: Accetta licenze e installa pacchetti SDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -48,10 +62,10 @@ jobs:
       - name: Installa dipendenze Dart
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build APK release
         run: flutter build apk --release
 
-      - name: Pubblica l'APK come artifact
+      - name: Pubblica APK come artifact
         uses: actions/upload-artifact@v3
         with:
           name: ambulanza-turni-apk
