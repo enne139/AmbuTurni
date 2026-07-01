@@ -198,6 +198,18 @@ class _SezioneTipologie extends StatelessWidget {
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       }, iniziale: t.nome),
       onDelete: null, // Le tipologie non si eliminano (come da spec originale)
+      onMoveUp: (t) async {
+        final idx = anag.tipologieTurno.indexWhere((x) => x.id == t.id);
+        if (idx <= 0) return;
+        await spostaTipologia(idx, idx - 1);
+        if (context.mounted) await context.read<AnagraficheProvider>().carica();
+      },
+      onMoveDown: (t) async {
+        final idx = anag.tipologieTurno.indexWhere((x) => x.id == t.id);
+        if (idx < 0 || idx >= anag.tipologieTurno.length - 1) return;
+        await spostaTipologia(idx, idx + 1);
+        if (context.mounted) await context.read<AnagraficheProvider>().carica();
+      },
     );
   }
 }
@@ -218,6 +230,9 @@ class _SezioneAnag<T> extends StatefulWidget {
   final VoidCallback onAdd;
   final Future<void> Function(T) onEdit;
   final Future<void> Function(T)? onDelete;
+  // Frecce di riordino: se non null, compaiono ↑↓ per ogni voce (disabilitate con filtro attivo).
+  final Future<void> Function(T)? onMoveUp;
+  final Future<void> Function(T)? onMoveDown;
 
   const _SezioneAnag({
     required this.titolo,
@@ -228,6 +243,8 @@ class _SezioneAnag<T> extends StatefulWidget {
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
+    this.onMoveUp,
+    this.onMoveDown,
   });
 
   @override
@@ -348,26 +365,44 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
               ),
             )
           else
-            ...filtered.map((item) => ListTile(
-                  dense: true,
-                  title: Text(widget.labelOf(item)),
-                  subtitle: widget.sublabelOf(item) != null
-                      ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
-                      : null,
-                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            ...filtered.asMap().entries.map((entry) {
+              final i = entry.key;
+              final item = entry.value;
+              final canUp = widget.onMoveUp != null && _query.isEmpty && i > 0;
+              final canDown = widget.onMoveDown != null && _query.isEmpty && i < filtered.length - 1;
+              return ListTile(
+                dense: true,
+                title: Text(widget.labelOf(item)),
+                subtitle: widget.sublabelOf(item) != null
+                    ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
+                    : null,
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (widget.onMoveUp != null && _query.isEmpty) ...[
                     IconButton(
-                      icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
-                      onPressed: () => widget.onEdit(item),
+                      icon: Icon(Icons.arrow_upward, size: 16, color: canUp ? Colors.white54 : Colors.white12),
+                      onPressed: canUp ? () => widget.onMoveUp!(item) : null,
                       visualDensity: VisualDensity.compact,
                     ),
-                    if (widget.onDelete != null)
-                      IconButton(
-                        icon: const Icon(Icons.delete, size: 18, color: kPrimary),
-                        onPressed: () => widget.onDelete!(item),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ]),
-                )),
+                    IconButton(
+                      icon: Icon(Icons.arrow_downward, size: 16, color: canDown ? Colors.white54 : Colors.white12),
+                      onPressed: canDown ? () => widget.onMoveDown!(item) : null,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
+                    onPressed: () => widget.onEdit(item),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (widget.onDelete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 18, color: kPrimary),
+                      onPressed: () => widget.onDelete!(item),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ]),
+              );
+            }),
           const SizedBox(height: 4),
         ],
       ],

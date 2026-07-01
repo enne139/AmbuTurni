@@ -123,7 +123,9 @@ Future<void> deleteOspedale(String id) async {
 
 Future<List<TipologiaTurno>> getTipologieTurno() async {
   final db = await getDb();
-  final rows = await db.query('tipologie_turno', orderBy: 'nome ASC');
+  // Ordine esplicito per permettere all'utente di personalizzare la sequenza.
+  final rows =
+      await db.query('tipologie_turno', orderBy: 'ordine ASC, nome ASC');
   return rows.map(TipologiaTurno.fromMap).toList();
 }
 
@@ -134,9 +136,14 @@ Future<void> saveTipologiaTurno(String nome, {String? id}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
+    // Mette la nuova tipologia in fondo all'ordine corrente.
+    final count = (await db
+            .rawQuery('SELECT COUNT(*) AS n FROM tipologie_turno'))[0]['n']
+        as int;
     await db.insert('tipologie_turno', {
       'id': newId(),
       'nome': nome,
+      'ordine': count,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
@@ -149,6 +156,21 @@ Future<void> saveTipologiaTurno(String nome, {String? id}) async {
       whereArgs: [id],
     );
   }
+}
+
+/// Scambia l'ordine di due tipologie adiacenti tramite batch atomico,
+/// stesso pattern di spostaServizio.
+Future<void> spostaTipologia(int fromIndex, int toIndex) async {
+  final db = await getDb();
+  final list = await getTipologieTurno();
+  if (fromIndex < 0 || fromIndex >= list.length) return;
+  if (toIndex < 0 || toIndex >= list.length) return;
+  final batch = db.batch();
+  batch.update('tipologie_turno', {'ordine': toIndex},
+      where: 'id = ?', whereArgs: [list[fromIndex].id]);
+  batch.update('tipologie_turno', {'ordine': fromIndex},
+      where: 'id = ?', whereArgs: [list[toIndex].id]);
+  await batch.commit(noResult: true);
 }
 
 // ---------------------------------------------------------------------------

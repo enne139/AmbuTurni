@@ -114,6 +114,7 @@ class Ospedale {
 class TipologiaTurno {
   final String id;
   final String nome;
+  final int ordine;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -121,6 +122,7 @@ class TipologiaTurno {
   const TipologiaTurno({
     required this.id,
     required this.nome,
+    this.ordine = 0,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -129,6 +131,7 @@ class TipologiaTurno {
   factory TipologiaTurno.fromMap(Map<String, dynamic> m) => TipologiaTurno(
         id: m['id'] as String,
         nome: m['nome'] as String,
+        ordine: (m['ordine'] as int?) ?? 0,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -137,6 +140,7 @@ class TipologiaTurno {
   Map<String, dynamic> toMap() => {
         'id': id,
         'nome': nome,
+        'ordine': ordine,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
@@ -242,7 +246,7 @@ class Turno {
     if (rawExtra != null && rawExtra is String && rawExtra.isNotEmpty) {
       try {
         // Il campo è salvato come JSON array di stringhe.
-        final decoded = (rawExtra as String).replaceAll('[', '').replaceAll(']', '');
+        final decoded = rawExtra.replaceAll('[', '').replaceAll(']', '');
         if (decoded.isNotEmpty) {
           extra = decoded.split(',').map((e) => e.trim().replaceAll('"', '')).where((e) => e.isNotEmpty).toList();
         }

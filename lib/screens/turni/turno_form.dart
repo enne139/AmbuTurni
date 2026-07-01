@@ -25,8 +25,9 @@ class _TurnoFormState extends State<TurnoForm> {
   late TextEditingController _dataCtrl;
 
   String? _associazioneId;
-  String? _tipologiaId;
-  List<String> _tipologieExtra = [];
+  // Lista ordinata delle tipologie selezionate; multi-select con FilterChip.
+  // Il primo elemento viene salvato come tipologia_id, il resto come tipologie_extra.
+  List<String> _tipologieSel = [];
   DateTime _data = DateTime.now();
   bool _loading = true;
   bool _saving = false;
@@ -56,8 +57,10 @@ class _TurnoFormState extends State<TurnoForm> {
         setState(() {
           _existingId = t.id;
           _associazioneId = t.associazioneId;
-          _tipologiaId = t.tipologiaId;
-          _tipologieExtra = List.from(t.tipologieExtra);
+          _tipologieSel = [
+            if (t.tipologiaId != null) t.tipologiaId!,
+            ...t.tipologieExtra,
+          ];
           _data = DateTime.tryParse(t.data) ?? DateTime.now();
           _dataCtrl.text = t.data;
           _oreCtrl.text = t.ore != null ? formatOre(t.ore) : '';
@@ -96,8 +99,8 @@ class _TurnoFormState extends State<TurnoForm> {
       associazioneId: _associazioneId,
       data: _dataCtrl.text,
       ore: parseOre(_oreCtrl.text),
-      tipologiaId: _tipologiaId,
-      tipologieExtra: _tipologieExtra,
+      tipologiaId: _tipologieSel.isNotEmpty ? _tipologieSel.first : null,
+      tipologieExtra: _tipologieSel.length > 1 ? _tipologieSel.sublist(1) : [],
       descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       eq1AutostaId: _eq1Autista,
@@ -185,9 +188,8 @@ class _TurnoFormState extends State<TurnoForm> {
             const SizedBox(height: 20),
 
             // --- Tipologia ---
-            // Chip con selezione singola (radio): tocca per selezionare,
-            // tocca di nuovo per deselezionare. Nessun dropdown: più immediato
-            // con poche tipologie come in questo caso d'uso.
+            // Chip multi-select: tocca per selezionare/deselezionare.
+            // Il primo selezionato diventa tipologia_id, gli altri tipologie_extra.
             _Sezione(titolo: 'Tipologia'),
             if (anag.tipologieTurno.isNotEmpty)
               Wrap(
@@ -196,11 +198,13 @@ class _TurnoFormState extends State<TurnoForm> {
                 children: anag.tipologieTurno
                     .map((t) => FilterChip(
                           label: Text(t.nome),
-                          selected: _tipologiaId == t.id,
+                          selected: _tipologieSel.contains(t.id),
                           onSelected: (sel) => setState(() {
-                            _tipologiaId = sel ? t.id : null;
-                            // Rimuovi dalle extra se era lì
-                            _tipologieExtra.remove(t.id);
+                            if (sel) {
+                              _tipologieSel.add(t.id);
+                            } else {
+                              _tipologieSel.remove(t.id);
+                            }
                           }),
                         ))
                     .toList(),
