@@ -438,7 +438,11 @@ class _SezioneBackupState extends State<_SezioneBackup> {
   Future<void> _export() async {
     setState(() => _busy = true);
     try {
-      await exportBackup();
+      final path = await exportBackup();
+      if (mounted) {
+        final msg = path != null ? 'Backup salvato.' : 'Export annullato.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -35,8 +35,10 @@ const _backupTables = [
   'assistenze',
 ];
 
-/// Esporta tutti i dati in un file JSON e lo condivide tramite share_plus.
-/// Restituisce il percorso del file creato, oppure null in caso di errore.
+/// Esporta tutti i dati in un file JSON.
+/// Su desktop (Windows/Linux/macOS) mostra un dialog "Salva come" nativo;
+/// su Android/iOS apre la share sheet (consente di salvare su Drive, Files, ecc.).
+/// Restituisce il percorso salvato, oppure null se l'utente annulla.
 Future<String?> exportBackup() async {
   final db = await getDb();
 
@@ -44,19 +46,31 @@ Future<String?> exportBackup() async {
     'version': _backupVersion,
     'exportedAt': DateTime.now().toUtc().toIso8601String(),
   };
-
   for (final table in _backupTables) {
     payload[table] = await db.query(table);
   }
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
-  final dir = await getApplicationDocumentsDirectory();
   final ts = DateTime.now().millisecondsSinceEpoch;
-  final file = File('${dir.path}/ambulanza_backup_$ts.json');
-  await file.writeAsString(json, encoding: utf8);
+  final fileName = 'ambulanza_backup_$ts.json';
 
-  await Share.shareXFiles([XFile(file.path)], text: 'Backup Ambulanza Turni');
-  return file.path;
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    final outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Salva backup',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (outputPath == null) return null;
+    await File(outputPath).writeAsString(json, encoding: utf8);
+    return outputPath;
+  } else {
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(json, encoding: utf8);
+    await Share.shareXFiles([XFile(file.path)], text: 'Backup Ambulanza Turni');
+    return file.path;
+  }
 }
 
 /// Importa un backup JSON scelto dall'utente.
