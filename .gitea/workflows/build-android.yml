@@ -5,7 +5,13 @@
 # Requisiti runner: label `android`, Linux x86_64, wget/unzip/curl,
 # JDK 23 preinstallato o scaricabile, accesso a Internet, >= 8 GB RAM.
 #
-# Output: APK caricato come artifact della run.
+# Output: APK caricato come artifact della run. Sui push di tag, l'APK viene
+# ANCHE pubblicato come Release su Gitea (allegato al tag), tramite chiamate
+# dirette alla REST API di Gitea con curl — stesso pattern/secret già usato in
+# build-backend.yml (niente action di terze parti: la loro compatibilità con
+# questa istanza Gitea non è garantita, vedi storico del progetto).
+# Serve il secret REGISTRY_TOKEN (PAT con scope write:repository, oltre a
+# write:package già richiesto per il backend).
 
 name: build-android-apk
 
@@ -69,3 +75,33 @@ jobs:
           name: ambulanza-turni-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Pubblica la Release su Gitea (solo su push di tag)
+        # Rimuove una eventuale release omonima da run precedenti sullo stesso tag
+        # (idempotente: il 404 se non esiste viene ignorato), poi ne crea una nuova
+        # e allega l'APK come asset. L'id della release è estratto senza jq (non
+        # garantito sul runner) con grep -oP, coerente con lo stile bash già usato
+        # nel resto dei workflow di questo progetto.
+        if: github.ref_type == 'tag'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          API="${GITHUB_SERVER_URL}/api/v1/repos/${{ github.repository }}/releases"
+          TAG="${{ github.ref_name }}"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          FILENAME="ambulanza-turni-${TAG}.apk"
+
+          curl -fsS -X DELETE --user "${{ github.actor }}:${REGISTRY_TOKEN}" \
+            "$API/tags/$TAG" || true
+
+          RELEASE_JSON=$(curl -fsS -X POST --user "${{ github.actor }}:${REGISTRY_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"body\":\"Build automatica da $GITHUB_SHA.\",\"draft\":false,\"prerelease\":false}" \
+            "$API")
+          RELEASE_ID=$(echo "$RELEASE_JSON" | grep -oP '"id":\K[0-9]+' | head -n1)
+
+          curl -fsS -X POST --user "${{ github.actor }}:${REGISTRY_TOKEN}" \
+            -F "attachment=@${APK};filename=${FILENAME}" \
+            "$API/$RELEASE_ID/assets?name=${FILENAME}"
+          echo "Release $TAG pubblicata con asset $FILENAME"
