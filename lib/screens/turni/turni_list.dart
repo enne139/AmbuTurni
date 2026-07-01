@@ -133,6 +133,7 @@ class _TurniListState extends State<TurniList> {
                   ),
                   child: _TurnoCard(
                     turno: turno,
+                    anag: anag,
                     onTap: () async {
                       await Navigator.push(
                         context,
@@ -160,10 +161,11 @@ class _TurniListState extends State<TurniList> {
 /// tipologia, ore e contatore servizi. Long-press per eliminare.
 class _TurnoCard extends StatelessWidget {
   final Turno turno;
+  final AnagraficheProvider anag;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const _TurnoCard({required this.turno, required this.onTap, required this.onLongPress});
+  const _TurnoCard({required this.turno, required this.anag, required this.onTap, required this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -205,16 +207,23 @@ class _TurnoCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                     ),
                     const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        if (turno.associazioneNome != null)
-                          Text(turno.associazioneNome!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                        if (turno.associazioneNome != null && turno.tipologiaNome != null)
-                          const Text(' · ', style: TextStyle(color: Colors.white38)),
-                        if (turno.tipologiaNome != null)
-                          Text(turno.tipologiaNome!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                      ],
-                    ),
+                    Builder(builder: (_) {
+                      final tipNomi = [
+                        if (turno.tipologiaNome != null) turno.tipologiaNome!,
+                        ...turno.tipologieExtra.map(
+                          (id) => anag.byIdTipologia(id)?.nome ?? id,
+                        ),
+                      ];
+                      final tipStr = tipNomi.join(' · ');
+                      return Text(
+                        [
+                          if (turno.associazioneNome != null) turno.associazioneNome!,
+                          if (tipStr.isNotEmpty) tipStr,
+                        ].join(' · '),
+                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    }),
                   ],
                 ),
               ),
