@@ -10,15 +10,15 @@ class AnagraficheProvider extends ChangeNotifier {
   List<Persona> persone = [];
   List<Ospedale> ospedali = [];
   List<TipologiaTurno> tipologieTurno = [];
-  List<TipologiaAssistenza> tipologieAssistenza = [];
   bool _caricato = false;
 
+  // Ogni load è indipendente: se una query fallisce (es. migrazione DB non ancora
+  // applicata) le altre continuano e notifyListeners() viene chiamato comunque.
   Future<void> carica() async {
-    associazioni = await getAssociazioni();
-    persone = await getPersone();
-    ospedali = await getOspedali();
-    tipologieTurno = await getTipologieTurno();
-    tipologieAssistenza = await getTipologieAssistenza();
+    try { associazioni = await getAssociazioni(); } catch (_) {}
+    try { persone = await getPersone(); } catch (_) {}
+    try { ospedali = await getOspedali(); } catch (_) {}
+    try { tipologieTurno = await getTipologieTurno(); } catch (_) {}
     _caricato = true;
     notifyListeners();
   }

@@ -27,8 +27,6 @@ class ImpostazioniScreen extends StatelessWidget {
           _SezioneOspedali(),
           Divider(height: 1),
           _SezioneTipologie(),
-          Divider(height: 1),
-          _SezioneTipologieAssistenza(),
           SizedBox(height: 24),
         ],
       ),
@@ -210,47 +208,6 @@ class _SezioneTipologie extends StatelessWidget {
         final idx = anag.tipologieTurno.indexWhere((x) => x.id == t.id);
         if (idx < 0 || idx >= anag.tipologieTurno.length - 1) return;
         await spostaTipologia(idx, idx + 1);
-        if (context.mounted) await context.read<AnagraficheProvider>().carica();
-      },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tipologie assistenza
-// ---------------------------------------------------------------------------
-
-class _SezioneTipologieAssistenza extends StatelessWidget {
-  const _SezioneTipologieAssistenza();
-
-  @override
-  Widget build(BuildContext context) {
-    final anag = context.watch<AnagraficheProvider>();
-    return _SezioneAnag<TipologiaAssistenza>(
-      titolo: 'Tipologie assistenza',
-      icon: Icons.label_important,
-      items: anag.tipologieAssistenza,
-      labelOf: (t) => t.nome,
-      sublabelOf: (_) => null,
-      onAdd: () => _dialogNome(context, 'Nuova tipologia assistenza', 'Nome', (nome) async {
-        await saveTipologiaAssistenza(nome);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }),
-      onEdit: (t) => _dialogNome(context, 'Modifica tipologia assistenza', 'Nome', (nome) async {
-        await saveTipologiaAssistenza(nome, id: t.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }, iniziale: t.nome),
-      onDelete: null,
-      onMoveUp: (t) async {
-        final idx = anag.tipologieAssistenza.indexWhere((x) => x.id == t.id);
-        if (idx <= 0) return;
-        await spostaTipologiaAssistenza(idx, idx - 1);
-        if (context.mounted) await context.read<AnagraficheProvider>().carica();
-      },
-      onMoveDown: (t) async {
-        final idx = anag.tipologieAssistenza.indexWhere((x) => x.id == t.id);
-        if (idx < 0 || idx >= anag.tipologieAssistenza.length - 1) return;
-        await spostaTipologiaAssistenza(idx, idx + 1);
         if (context.mounted) await context.read<AnagraficheProvider>().carica();
       },
     );

@@ -147,9 +147,10 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
 - ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
   con filtro per associazione (chip).
 - ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
-  tipologie turno + tipologie assistenza (rinominabili, riordinabili ↑↓, non eliminabili).
+  tipologie turno (rinominabili, riordinabili ↑↓, non eliminabili).
   Ogni sezione è collassata di default, con badge contatore sempre visibile,
   pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
+  Le tipologie assistenza non sono esposte in UI (tabella DB mantenuta per compatibilità backup).
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
 - ✅ Combobox con ricerca per equipaggio e ospedale: `PersonaPicker` e `OspedalePicker`
   in `widgets/anag_pickers.dart` permettono di filtrare la lista digitando e di creare
@@ -165,3 +166,5 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
 ## TODO (differenze rispetto all'app originale)
 
 - [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+- [ ] voglio poter scegliere un colore per vedere facimente l'associazione, stessa cosa per la tipologia
+- [ ] come mai i turni non hanno la il numero progressivo cerretto

@@ -97,29 +97,38 @@ class _TurnoFormState extends State<TurnoForm> {
       return;
     }
     setState(() => _saving = true);
-    final turno = Turno(
-      id: _existingId ?? newId(),
-      associazioneId: _associazioneId,
-      data: _dataCtrl.text,
-      ore: parseOre(_oreCtrl.text),
-      tipologiaId: _tipologieSel.isNotEmpty ? _tipologieSel.first : null,
-      tipologieExtra: _tipologieSel.length > 1 ? _tipologieSel.sublist(1) : [],
-      cambioMeta: _cambioMeta,
-      descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
-      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-      eq1AutostaId: _eq1Autista,
-      eq1CsId: _eq1Cs,
-      eq1TerzoId: _eq1Terzo,
-      eq1QuartoId: _eq1Quarto,
-      eq1CentralinistaId: _eq1Central,
-      eq2AutostaId: _eq2Autista,
-      eq2CsId: _eq2Cs,
-      eq2TerzoId: _eq2Terzo,
-      eq2QuartoId: _eq2Quarto,
-      eq2CentralinistaId: _eq2Central,
-    );
-    await saveTurno(turno);
-    if (mounted) Navigator.pop(context, true);
+    try {
+      final turno = Turno(
+        id: _existingId ?? newId(),
+        associazioneId: _associazioneId,
+        data: _dataCtrl.text,
+        ore: parseOre(_oreCtrl.text),
+        tipologiaId: _tipologieSel.isNotEmpty ? _tipologieSel.first : null,
+        tipologieExtra: _tipologieSel.length > 1 ? _tipologieSel.sublist(1) : [],
+        cambioMeta: _cambioMeta,
+        descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
+        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+        eq1AutostaId: _eq1Autista,
+        eq1CsId: _eq1Cs,
+        eq1TerzoId: _eq1Terzo,
+        eq1QuartoId: _eq1Quarto,
+        eq1CentralinistaId: _eq1Central,
+        eq2AutostaId: _eq2Autista,
+        eq2CsId: _eq2Cs,
+        eq2TerzoId: _eq2Terzo,
+        eq2QuartoId: _eq2Quarto,
+        eq2CentralinistaId: _eq2Central,
+      );
+      await saveTurno(turno);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante il salvataggio: $e')),
+        );
+      }
+    }
   }
 
   @override

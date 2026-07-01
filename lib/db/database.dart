@@ -164,11 +164,22 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 1,
+    version: 2,
     onCreate: _onCreate,
+    onUpgrade: _onUpgrade,
     onOpen: _onOpen,
   );
   return _db!;
+}
+
+/// Upgrade del DB: aggiunge le colonne introdotte dalla versione 2.
+/// ALTER TABLE fallisce silenziosamente se la colonna esiste già (catch intenzionale).
+Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  if (oldVersion < 2) {
+    try { await db.execute('ALTER TABLE tipologie_turno ADD COLUMN ordine INTEGER DEFAULT 0'); } catch (_) {}
+    try { await db.execute('ALTER TABLE turni ADD COLUMN cambio_meta INTEGER DEFAULT 0'); } catch (_) {}
+    try { await db.execute('ALTER TABLE tipologie_assistenza ADD COLUMN ordine INTEGER DEFAULT 0'); } catch (_) {}
+  }
 }
 
 /// Creazione iniziale: esegue lo schema completo.

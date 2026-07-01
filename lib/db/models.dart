@@ -147,42 +147,6 @@ class TipologiaTurno {
       };
 }
 
-class TipologiaAssistenza {
-  final String id;
-  final String nome;
-  final int ordine;
-  final String? createdAt;
-  final String? updatedAt;
-  final int isSynced;
-
-  const TipologiaAssistenza({
-    required this.id,
-    required this.nome,
-    this.ordine = 0,
-    this.createdAt,
-    this.updatedAt,
-    this.isSynced = 0,
-  });
-
-  factory TipologiaAssistenza.fromMap(Map<String, dynamic> m) => TipologiaAssistenza(
-        id: m['id'] as String,
-        nome: m['nome'] as String,
-        ordine: (m['ordine'] as int?) ?? 0,
-        createdAt: m['created_at'] as String?,
-        updatedAt: m['updated_at'] as String?,
-        isSynced: (m['is_synced'] as int?) ?? 0,
-      );
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'nome': nome,
-        'ordine': ordine,
-        'created_at': createdAt,
-        'updated_at': updatedAt,
-        'is_synced': isSynced,
-      };
-}
-
 // Equipaggio: 5 ruoli per parte (autista, CS, terzo, quarto, centralinista).
 // I campi sono nullable — solo i presenti vengono salvati.
 class Equipaggio {
