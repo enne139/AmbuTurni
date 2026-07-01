@@ -1,15 +1,15 @@
-# CLAUDE.md — Guida per le chiamate IA (branch flutter-rewrite)
+# CLAUDE.md — Guida per le chiamate IA
 
-> **Branch sperimentale**: questo branch (`flutter-rewrite`) è un **rewrite completo in Flutter**
-> dell'app originale React Native / Expo. L'app originale è sul branch `main`/`sviluppo`.
-> Il backend Node+Express in `backend/` è condiviso e non cambia.
+> Questo è il rewrite completo in Flutter dell'app originale React Native / Expo.
+> Il rewrite è stato integrato su `main` (2026-07-01). Il backend Node+Express
+> in `backend/` è condiviso e non cambia.
 
 ---
 
 ## ⚠️ REGOLE OPERATIVE
 
-1. **Branch:** i commit di questo rewrite vanno su **`flutter-rewrite`**. L'app originale RN
-   è su `main`/`sviluppo` e non va toccata da qui.
+1. **Branch:** i commit vanno su `main`. Il branch `flutter-rewrite` è conservato
+   per riferimento storico ma non è più il branch attivo.
 2. **Aggiorna sempre questo file:** ogni volta che cambi struttura, aggiungi una funzionalità
    o prendi una decisione tecnica, aggiorna `CLAUDE.md` nello **stesso commit**.
 3. **Commenta il codice in italiano:** ogni funzione/widget non banale deve avere un commento
@@ -58,7 +58,8 @@ lib/
 ├── navigation/
 │   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack)
 ├── widgets/
-│   └── codice_chip.dart           chip colorato per codici chiamata/uscita
+│   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
+│   └── anag_pickers.dart          PersonaPicker e OspedalePicker (RawAutocomplete + Aggiungi...)
 └── screens/
     ├── turni/
     │   ├── turni_list.dart         lista + FAB + long-press elimina + filtro assoc.
@@ -113,8 +114,7 @@ flutter build apk        # APK debug/release
 ## Gradle / Java
 
 La build Android richiede **Gradle 8.10.2** (`gradle-wrapper.properties`) per la
-compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) andrà aggiornato
-per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
+compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter build apk`.
 
 ## Decisioni tecniche rilevanti
 
@@ -133,6 +133,11 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
   via `addPostFrameCallback` per evitare modifiche al controller durante il build.
 - **PRAGMA foreign_keys = OFF** durante l'import backup: permette di svuotare tutte
   le tabelle nell'ordine corretto senza violare i vincoli FK durante il delete.
+- **num_servizi escluso dall'UPDATE in saveTurno**: il campo è gestito esclusivamente
+  da `_aggiornaNumServizi()` (chiamato da `saveServizio`/`deleteServizio`); includerlo
+  nel UPDATE azzererebbe il contatore ogni volta che si modifica un turno.
+- **tipologieExtra nella card lista**: risolte in nomi tramite `AnagraficheProvider`
+  passato come parametro a `_TurnoCard`; mostrate concatenate con il separatore `·`.
 
 ---
 
@@ -163,15 +168,13 @@ per usare `flutter build apk` invece di expo/Gradle diretto — TODO.
 - ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
 - ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
 - ✅ Tipologie multi-select nel form turno: FilterChip, ordine personalizzabile.
-- ✅ `cambio_meta`: toggle SwitchListTile nel form, visibile nel dettaglio turno.
+  La card della lista mostra tutte le tipologie (primaria + extra) separate da `·`.
+- ✅ Equipaggio: pulsante "Copia 1ª parte" nel titolo della sezione 2ª parte
+  copia tutti e 5 i ruoli da eq1 a eq2 con un tap.
 - ✅ Dismissible swipe-to-delete: gesto sinistra con conferma su lista turni e assistenze.
 - ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
 - ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
 
-## TODO (differenze rispetto all'app originale)
+## TODO
 
 - [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
-- ✅ Colori per associazioni e tipologie: palette 11 colori in Impostazioni, dot colorato in
-  lista, accento nei chip filtro statistiche e FilterChip form turno.
-- ✅ Numerazione progressiva corretta: ricalcolo automatico dopo importBackup() via
-  `ricalcolaTutteLeNumerazioni()`; normal save/delete già aggiornano in tempo reale.
