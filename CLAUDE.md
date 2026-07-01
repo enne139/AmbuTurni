@@ -59,7 +59,8 @@ lib/
 │   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack)
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
-│   └── anag_pickers.dart          PersonaPicker e OspedalePicker (RawAutocomplete + Aggiungi...)
+│   ├── anag_pickers.dart          PersonaPicker e OspedalePicker (RawAutocomplete + Aggiungi...)
+│   └── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
 └── screens/
     ├── turni/
     │   ├── turni_list.dart         lista + FAB + long-press elimina + filtro assoc.
@@ -73,7 +74,9 @@ lib/
     ├── statistiche/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     └── impostazioni/
-        └── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
+        ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
+        └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
+                                        assistenze) in cui compare una persona/ospedale
 
 backend/                            API sync Node+Express+PostgreSQL (invariata)
 .gitea/workflows/build-backend.yml  CI Docker per il backend (invariata)
@@ -137,7 +140,17 @@ compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter
   da `_aggiornaNumServizi()` (chiamato da `saveServizio`/`deleteServizio`); includerlo
   nel UPDATE azzererebbe il contatore ogni volta che si modifica un turno.
 - **tipologieExtra nella card lista**: risolte in nomi tramite `AnagraficheProvider`
-  passato come parametro a `_TurnoCard`; mostrate concatenate con il separatore `·`.
+  passato come parametro a `TurnoCard`; mostrate concatenate con il separatore `·`.
+- **`TurnoCard` estratta in `widgets/turno_card.dart`**: prima era una classe privata
+  di `turni_list.dart`; resa pubblica per essere condivisa anche da `turni_filtrati_screen.dart`
+  (viste "turni di una persona/ospedale") senza duplicare il layout.
+- **Turni/assistenze per persona via OR sui 10 campi equipaggio**: `getTurniPerPersona` e
+  `getAssistenzePerPersona` cercano l'id in tutti e 10 i ruoli (eq1/eq2 x 5 ruoli) con
+  una WHERE a OR, perché lo schema usa colonne dedicate per ruolo invece di una tabella
+  ponte persona↔turno (schema condiviso con l'app RN, non modificabile senza migrazione).
+- **Turni per ospedale via INNER JOIN + DISTINCT**: `getTurniPerOspedale` fa JOIN su
+  `servizi` filtrando per `ospedale_id`; il DISTINCT sull'intera riga evita duplicati
+  quando un turno ha più servizi collegati allo stesso ospedale.
 
 ---
 
@@ -174,6 +187,11 @@ compatibilità con Java 23. Il workflow Gitea (`build-android.yml`) usa `flutter
 - ✅ Dismissible swipe-to-delete: gesto sinistra con conferma su lista turni e assistenze.
 - ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
 - ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
+- ✅ Turni/assistenze per persona o ospedale: da Impostazioni, il pulsante "Vedi turni"
+  (icona calendario) su una persona o un ospedale apre `TurniPersonaScreen` /
+  `TurniOspedaleScreen` con l'elenco filtrato (per persona: turni + assistenze in cui
+  compare in uno dei 10 ruoli equipaggio; per ospedale: turni con un servizio in
+  quell'ospedale). Tap su una card apre il dettaglio del turno/assistenza.
 
 ## TODO
 

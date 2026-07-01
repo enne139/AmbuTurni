@@ -201,6 +201,46 @@ Future<List<Turno>> getTurni({String? associazioneId}) async {
   return rows.map(Turno.fromMap).toList();
 }
 
+/// Restituisce i turni (ordinati per data decrescente) in cui [personaId]
+/// compare in uno qualsiasi dei 10 ruoli di equipaggio (eq1/eq2 x 5 ruoli).
+Future<List<Turno>> getTurniPerPersona(String personaId) async {
+  final db = await getDb();
+  final rows = await db.rawQuery('''
+    SELECT t.*,
+           a.nome AS associazione_nome,
+           a.colore AS associazione_colore,
+           tp.nome AS tipologia_nome,
+           tp.colore AS tipologia_colore
+    FROM turni t
+    LEFT JOIN associazioni a ON a.id = t.associazione_id
+    LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
+    WHERE t.eq1_autista_id = ? OR t.eq1_cs_id = ? OR t.eq1_terzo_id = ? OR t.eq1_quarto_id = ? OR t.eq1_centralinista_id = ?
+       OR t.eq2_autista_id = ? OR t.eq2_cs_id = ? OR t.eq2_terzo_id = ? OR t.eq2_quarto_id = ? OR t.eq2_centralinista_id = ?
+    ORDER BY t.data DESC, t.created_at DESC
+  ''', List.filled(10, personaId));
+  return rows.map(Turno.fromMap).toList();
+}
+
+/// Restituisce i turni in cui [ospedaleId] compare in almeno un servizio.
+/// DISTINCT necessario perché un turno può avere più servizi con lo stesso ospedale.
+Future<List<Turno>> getTurniPerOspedale(String ospedaleId) async {
+  final db = await getDb();
+  final rows = await db.rawQuery('''
+    SELECT DISTINCT t.*,
+           a.nome AS associazione_nome,
+           a.colore AS associazione_colore,
+           tp.nome AS tipologia_nome,
+           tp.colore AS tipologia_colore
+    FROM turni t
+    LEFT JOIN associazioni a ON a.id = t.associazione_id
+    LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
+    INNER JOIN servizi s ON s.turno_id = t.id
+    WHERE s.ospedale_id = ?
+    ORDER BY t.data DESC, t.created_at DESC
+  ''', [ospedaleId]);
+  return rows.map(Turno.fromMap).toList();
+}
+
 /// Restituisce un singolo turno con i campi denormalizzati, o null se non esiste.
 Future<Turno?> getTurnoById(String id) async {
   final db = await getDb();
@@ -370,6 +410,21 @@ Future<List<Assistenza>> getAssistenze({String? associazioneId}) async {
     $where
     ORDER BY a.data DESC, a.created_at DESC
   ''', args);
+  return rows.map(Assistenza.fromMap).toList();
+}
+
+/// Come getTurniPerPersona ma per le assistenze (stessi 10 ruoli equipaggio).
+Future<List<Assistenza>> getAssistenzePerPersona(String personaId) async {
+  final db = await getDb();
+  final rows = await db.rawQuery('''
+    SELECT a.*,
+           ass.nome AS associazione_nome
+    FROM assistenze a
+    LEFT JOIN associazioni ass ON ass.id = a.associazione_id
+    WHERE a.eq1_autista_id = ? OR a.eq1_cs_id = ? OR a.eq1_terzo_id = ? OR a.eq1_quarto_id = ? OR a.eq1_centralinista_id = ?
+       OR a.eq2_autista_id = ? OR a.eq2_cs_id = ? OR a.eq2_terzo_id = ? OR a.eq2_quarto_id = ? OR a.eq2_centralinista_id = ?
+    ORDER BY a.data DESC, a.created_at DESC
+  ''', List.filled(10, personaId));
   return rows.map(Assistenza.fromMap).toList();
 }
 

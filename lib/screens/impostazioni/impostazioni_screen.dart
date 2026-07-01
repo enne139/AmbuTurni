@@ -5,6 +5,7 @@ import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
+import 'turni_filtrati_screen.dart';
 
 /// Schermata Impostazioni: CRUD di associazioni, persone, ospedali, tipologie.
 /// Ogni sezione è collassata di default e ha una barra di ricerca interna.
@@ -85,6 +86,9 @@ class _SezionePersone extends StatelessWidget {
       sublabelOf: (_) => null,
       onAdd: () => _dialogPersona(context, null),
       onEdit: (p) => _dialogPersona(context, p),
+      onView: (p) async {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => TurniPersonaScreen(persona: p)));
+      },
       onDelete: (p) async {
         await deletePersona(p.id);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
@@ -139,6 +143,9 @@ class _SezioneOspedali extends StatelessWidget {
       sublabelOf: (o) => o.citta,
       onAdd: () => _dialogOspedale(context, null),
       onEdit: (o) => _dialogOspedale(context, o),
+      onView: (o) async {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => TurniOspedaleScreen(ospedale: o)));
+      },
       onDelete: (o) async {
         await deleteOspedale(o.id);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
@@ -236,6 +243,9 @@ class _SezioneAnag<T> extends StatefulWidget {
   // Frecce di riordino: se non null, compaiono ↑↓ per ogni voce (disabilitate con filtro attivo).
   final Future<void> Function(T)? onMoveUp;
   final Future<void> Function(T)? onMoveDown;
+  // Se non null, mostra un pulsante per vedere i turni/assistenze in cui compare la voce
+  // (usato da Persone e Ospedali per navigare all'elenco filtrato).
+  final Future<void> Function(T)? onView;
 
   const _SezioneAnag({
     required this.titolo,
@@ -249,6 +259,7 @@ class _SezioneAnag<T> extends StatefulWidget {
     required this.onDelete,
     this.onMoveUp,
     this.onMoveDown,
+    this.onView,
   });
 
   @override
@@ -401,6 +412,13 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                       visualDensity: VisualDensity.compact,
                     ),
                   ],
+                  if (widget.onView != null)
+                    IconButton(
+                      icon: const Icon(Icons.event_note, size: 18, color: Colors.white54),
+                      onPressed: () => widget.onView!(item),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Vedi turni',
+                    ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
                     onPressed: () => widget.onEdit(item),
