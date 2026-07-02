@@ -183,6 +183,28 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   PNG renderizzati da SVG con `sharp` (Node, via npx in una cartella temporanea) a
   1024×1024: gli strumenti nativi tipici (ImageMagick, Inkscape, cairosvg) non erano
   disponibili/installabili senza frizioni su questa macchina.
+- **Rinominata l'app in "AmbuTurni"** (branch `feature/app-icon`, insieme all'icona):
+  nome visibile (`android:label`, `MaterialApp.title`, titolo finestra/metadata
+  Windows) **e** identificatori interni, su richiesta esplicita di rinominare
+  "tutto". Package Dart `ambulanza_turni` -> `ambu_turni` (vincolo Dart: solo
+  minuscolo/snake_case, "AmbuTurni" non è un nome di package valido) — tocca
+  `pubspec.yaml` e i 3 import in `test/db/helpers_test.dart`, nessun altro file usa
+  `package:ambu_turni/...` (il resto del codice usa import relativi). Android
+  `namespace`/`applicationId` `com.maratuck.ambulanza_turni` -> `com.maratuck.ambu_turni`
+  (**cambia l'identità dell'app per Android**: non è un aggiornamento in-place,
+  l'app già installata con l'ID vecchio resta un'app separata/orfana — accettato
+  esplicitamente). `MainActivity.kt` spostato nella cartella di package corrispondente
+  (`android/app/src/main/kotlin/com/maratuck/ambu_turni/`). Windows: `BINARY_NAME`/
+  `project()` in `CMakeLists.txt`, titolo finestra in `main.cpp`, metadata
+  (FileDescription/InternalName/ProductName/OriginalFilename) in `Runner.rc`.
+  **Eccezione deliberata**: il nome del file SQLite (`ambulanza_turni.db` in
+  `database.dart`) NON è stato rinominato — a differenza degli altri identificatori
+  è un dettaglio interno mai visto dall'utente, e rinominarlo avrebbe fatto sì che
+  l'app (su un device/desktop dove è già in uso) non trovasse più il DB esistente
+  e ne creasse uno nuovo vuoto, perdendo l'accesso ai dati locali già inseriti.
+  Rinominati anche, per coerenza: prefissi dei file di backup/export in
+  `backup.dart` (solo i futuri file esportati, non tocca backup già salvati),
+  nome artifact nel workflow Gitea, `README.md`, il file IntelliJ `.iml`.
 
 ---
 

@@ -9,12 +9,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Inizializza il database locale (SQLite) prima di avviare l'app.
   await getDb();
-  runApp(const AmbulanzaTurniApp());
+  runApp(const AmbuTurniApp());
 }
 
 /// Widget radice dell'app.
-class AmbulanzaTurniApp extends StatelessWidget {
-  const AmbulanzaTurniApp({super.key});
+class AmbuTurniApp extends StatelessWidget {
+  const AmbuTurniApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +27,7 @@ class AmbulanzaTurniApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AssistezeProvider()),
       ],
       child: MaterialApp(
-        title: 'Ambulanza Turni',
+        title: 'AmbuTurni',
         debugShowCheckedModeBanner: false,
         theme: buildDarkTheme(),
         home: const AppNavigator(),

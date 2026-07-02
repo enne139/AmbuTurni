@@ -1,4 +1,4 @@
-package com.maratuck.ambulanza_turni
+package com.maratuck.ambu_turni
 
 import io.flutter.embedding.android.FlutterActivity
 

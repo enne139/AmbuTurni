@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.maratuck" "\0"
-            VALUE "FileDescription", "ambulanza_turni" "\0"
+            VALUE "FileDescription", "AmbuTurni" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "ambulanza_turni" "\0"
+            VALUE "InternalName", "AmbuTurni" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.maratuck. All rights reserved." "\0"
-            VALUE "OriginalFilename", "ambulanza_turni.exe" "\0"
-            VALUE "ProductName", "ambulanza_turni" "\0"
+            VALUE "OriginalFilename", "AmbuTurni.exe" "\0"
+            VALUE "ProductName", "AmbuTurni" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

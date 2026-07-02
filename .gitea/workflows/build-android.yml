@@ -70,7 +70,7 @@ jobs:
       - name: Pubblica APK come artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ambulanza-turni-apk
+          name: ambuturni-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 

@@ -52,7 +52,7 @@ Future<String?> exportBackup() async {
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
   final ts = DateTime.now().millisecondsSinceEpoch;
-  return _salvaFile(json, 'ambulanza_backup_$ts.json', 'Backup Ambulanza Turni');
+  return _salvaFile(json, 'ambuturni_backup_$ts.json', 'Backup AmbuTurni');
 }
 
 /// Esporta i turni in formato leggibile: ID sostituiti con nomi, servizi
@@ -131,7 +131,7 @@ Future<String?> exportSemplificato() async {
 
   final json = const JsonEncoder.withIndent('  ').convert({'turni': risultato});
   final ts = DateTime.now().millisecondsSinceEpoch;
-  return _salvaFile(json, 'ambulanza_turni_$ts.json', 'Export Turni Ambulanza');
+  return _salvaFile(json, 'ambuturni_export_turni_$ts.json', 'Export Turni AmbuTurni');
 }
 
 /// Helper condiviso: salva il testo [contenuto] su filesystem.

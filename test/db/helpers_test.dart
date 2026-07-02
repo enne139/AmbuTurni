@@ -2,9 +2,9 @@
 // Usano sqflite_common_ffi con DB in-memory così non toccano il filesystem.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:ambulanza_turni/db/database.dart';
-import 'package:ambulanza_turni/db/helpers.dart';
-import 'package:ambulanza_turni/db/models.dart';
+import 'package:ambu_turni/db/database.dart';
+import 'package:ambu_turni/db/helpers.dart';
+import 'package:ambu_turni/db/models.dart';
 
 void main() {
   setUpAll(() async {
