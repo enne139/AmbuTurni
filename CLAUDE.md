@@ -129,7 +129,9 @@ vecchio backup RN importato qui le lascia assenti — l'aggiunta non rompe la
 compatibilità in nessuna delle due direzioni.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
-Le migrazioni sono idempotenti: `CREATE TABLE IF NOT EXISTS` a ogni apertura.
+Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
+(versione corrente: 7); `_onOpen` esegue soltanto i PRAGMA di connessione
+(WAL + foreign_keys).
 
 ### Desktop (Windows/Linux/macOS)
 
@@ -295,6 +297,18 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   migrazione v6 ricostruisce `materiali_usati` (necessario per cambiare anche la
   foreign key, vedi punto sotto) scartando le righe già `ripristinato = 1`: lo
   storico pregresso viene proprio eliminato, non solo nascosto in UI.
+- **Migrazioni consolidate sul solo sistema versionato (v7)**: rimosso il vecchio
+  `_runMigrations` idempotente che rieseguiva l'intero schema + tre ALTER a ogni
+  apertura. Due sistemi di migrazione paralleli rendevano ambiguo dove aggiungere
+  un cambiamento — l'origine della lezione v4→v5. Il backfill di `ordine` per le
+  tipologie è stato portato dentro `_onUpgrade < 2` (`_backfillOrdine`); ogni DB
+  già esistente ha comunque tutte le tabelle perché il vecchio codice le creava a
+  ogni apertura.
+- **`CHECK (quantita >= 1)` su `materiali_usati` (v7)**: prima il vincolo viveva
+  solo nei clamp della UI; ora una scrittura difettosa non può salvare quantità
+  zero o negative. SQLite non supporta ALTER per aggiungere un CHECK: la
+  migrazione v7 ricostruisce la tabella clampando a 1 gli eventuali valori già
+  fuori range.
 - **`materiale_id` con `ON DELETE CASCADE` (v6)**: prima cancellare un materiale dal
   catalogo falliva con un errore di foreign key se aveva ancora utilizzi collegati
   (comportamento non voluto: bloccava una cancellazione legittima). Ora l'eliminazione

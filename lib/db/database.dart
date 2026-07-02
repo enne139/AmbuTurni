@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS materiali (
 CREATE TABLE IF NOT EXISTS materiali_usati (
   id TEXT PRIMARY KEY,
   materiale_id TEXT NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
-  quantita INTEGER NOT NULL DEFAULT 1,
+  quantita INTEGER NOT NULL DEFAULT 1 CHECK (quantita >= 1),
   unita TEXT,
   posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
   note TEXT,
@@ -183,7 +183,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 6,
+    version: 7,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -195,9 +195,18 @@ Future<Database> getDb() async {
 /// ALTER TABLE fallisce silenziosamente se la colonna esiste già (catch intenzionale).
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
-    try { await db.execute('ALTER TABLE tipologie_turno ADD COLUMN ordine INTEGER DEFAULT 0'); } catch (_) {}
+    // Il backfill di `ordine` (indice alfabetico) gira solo se l'ALTER riesce:
+    // se la colonna esiste già la migrazione era stata applicata (in passato
+    // anche dal vecchio _runMigrations a ogni apertura) e non va rifatta.
+    try {
+      await db.execute('ALTER TABLE tipologie_turno ADD COLUMN ordine INTEGER DEFAULT 0');
+      await _backfillOrdine(db, 'tipologie_turno');
+    } catch (_) {}
     try { await db.execute('ALTER TABLE turni ADD COLUMN cambio_meta INTEGER DEFAULT 0'); } catch (_) {}
-    try { await db.execute('ALTER TABLE tipologie_assistenza ADD COLUMN ordine INTEGER DEFAULT 0'); } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE tipologie_assistenza ADD COLUMN ordine INTEGER DEFAULT 0');
+      await _backfillOrdine(db, 'tipologie_assistenza');
+    } catch (_) {}
   }
   if (oldVersion < 3) {
     try { await db.execute('ALTER TABLE associazioni ADD COLUMN colore TEXT'); } catch (_) {}
@@ -322,6 +331,45 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
       }
     }
   }
+  if (oldVersion < 7) {
+    // Aggiunge CHECK (quantita >= 1): prima il vincolo viveva solo nella UI
+    // (pulsanti +/- clampati) e una scrittura difettosa poteva salvare 0 o
+    // negativi. SQLite non supporta ALTER per aggiungere un CHECK: la tabella
+    // va ricostruita, clampando a 1 gli eventuali valori già fuori range.
+    final righe = await db.query('materiali_usati');
+    await db.execute('DROP TABLE materiali_usati');
+    await db.execute('''
+      CREATE TABLE materiali_usati (
+        id TEXT PRIMARY KEY,
+        materiale_id TEXT NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
+        quantita INTEGER NOT NULL DEFAULT 1 CHECK (quantita >= 1),
+        unita TEXT,
+        posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+        note TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        is_synced INTEGER DEFAULT 0
+      )
+    ''');
+    for (final riga in righe) {
+      final nuovaRiga = Map<String, dynamic>.from(riga);
+      final quantita = (nuovaRiga['quantita'] as num?)?.toInt() ?? 1;
+      nuovaRiga['quantita'] = quantita < 1 ? 1 : quantita;
+      await db.insert('materiali_usati', nuovaRiga);
+    }
+  }
+}
+
+/// Assegna a `ordine` l'indice alfabetico corrente (migrazione v1 -> v2:
+/// preserva l'ordinamento per nome che l'utente vedeva prima della colonna).
+Future<void> _backfillOrdine(Database db, String tabella) async {
+  final rows = await db.query(tabella, orderBy: 'nome ASC');
+  final batch = db.batch();
+  for (int i = 0; i < rows.length; i++) {
+    batch.update(tabella, {'ordine': i},
+        where: 'id = ?', whereArgs: [rows[i]['id']]);
+  }
+  await batch.commit(noResult: true);
 }
 
 /// Creazione iniziale: esegue lo schema completo.
@@ -335,7 +383,11 @@ Future<void> _onCreate(Database db, int version) async {
   }
 }
 
-/// Apre il DB esistente: abilita FK/WAL e applica le migrazioni idempotenti.
+/// Apre il DB: solo i PRAGMA di connessione. Le modifiche allo schema vivono
+/// ESCLUSIVAMENTE nel sistema versionato _onCreate/_onUpgrade — il vecchio
+/// _runMigrations idempotente (schema completo + ALTER a ogni apertura) è
+/// stato rimosso: due sistemi di migrazione paralleli rendevano ambiguo dove
+/// aggiungere un cambiamento, l'origine della lezione v4→v5.
 /// Il PRAGMA journal_mode va eseguito qui (fuori dalla transazione di
 /// _onCreate, dove SQLite rifiuta il passaggio a WAL) e con rawQuery invece
 /// di execute: su Android nativo restituisce una riga col nuovo modo, ed
@@ -343,55 +395,4 @@ Future<void> _onCreate(Database db, int version) async {
 Future<void> _onOpen(Database db) async {
   await db.rawQuery('PRAGMA journal_mode = WAL');
   await db.execute('PRAGMA foreign_keys = ON');
-  await _runMigrations(db);
-}
-
-/// Migrazioni idempotenti: aggiungono colonne/tabelle mancanti su un DB
-/// esistente senza distruggere i dati (stessa logica di migrations.ts).
-Future<void> _runMigrations(Database db) async {
-  // Assicura che le tabelle esistano (per DB creati prima di questa versione).
-  for (final stmt in _schema.split(';')) {
-    final s = stmt.trim();
-    if (s.isNotEmpty) {
-      try {
-        await db.execute(s);
-      } catch (_) {
-        // Ignora errori "already exists" — le CREATE IF NOT EXISTS sono sicure.
-      }
-    }
-  }
-
-  // Migrazione: aggiunge la colonna ordine a tipologie_turno.
-  // ALTER TABLE fallisce se la colonna esiste già — è il segnale che la migrazione
-  // è già stata applicata, quindi il catch è intenzionale.
-  try {
-    await db.execute(
-        'ALTER TABLE tipologie_turno ADD COLUMN ordine INTEGER DEFAULT 0');
-    final rows = await db.query('tipologie_turno', orderBy: 'nome ASC');
-    final batch = db.batch();
-    for (int i = 0; i < rows.length; i++) {
-      batch.update('tipologie_turno', {'ordine': i},
-          where: 'id = ?', whereArgs: [rows[i]['id']]);
-    }
-    await batch.commit(noResult: true);
-  } catch (_) {}
-
-  // Migrazione: aggiunge cambio_meta ai turni.
-  try {
-    await db
-        .execute('ALTER TABLE turni ADD COLUMN cambio_meta INTEGER DEFAULT 0');
-  } catch (_) {}
-
-  // Migrazione: aggiunge la colonna ordine a tipologie_assistenza.
-  try {
-    await db.execute(
-        'ALTER TABLE tipologie_assistenza ADD COLUMN ordine INTEGER DEFAULT 0');
-    final rows = await db.query('tipologie_assistenza', orderBy: 'nome ASC');
-    final batch = db.batch();
-    for (int i = 0; i < rows.length; i++) {
-      batch.update('tipologie_assistenza', {'ordine': i},
-          where: 'id = ?', whereArgs: [rows[i]['id']]);
-    }
-    await batch.commit(noResult: true);
-  } catch (_) {}
 }
