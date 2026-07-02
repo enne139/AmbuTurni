@@ -18,6 +18,9 @@
 4. **Fai il commit dopo ogni modifica:** ogni feature, fix o refactor va salvato in un commit
    subito, con messaggio in stile Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`)
    e testo in italiano. Non accumulare più modifiche in un unico commit generico.
+   **Prima di committare codice, chiedi all'utente di verificare che l'app funzioni**
+   (test manuale su device/desktop) e aspetta la sua conferma. Eccezione: modifiche
+   solo a documentazione/CI, che non richiedono test manuale.
 5. **Verifica prima di chiudere:** `flutter analyze` deve uscire senza errori (`error`).
    Gli `info` warning minori sono accettabili.
 
