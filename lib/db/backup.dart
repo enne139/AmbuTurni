@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,9 +10,9 @@ import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
 const int _backupVersion = 1;
 
 // Ordine di eliminazione rispettoso dei vincoli FK: prima le righe figlie,
-// poi le righe padre. (In pratica l'ordine non è vincolante durante l'import:
-// la transazione gira con PRAGMA foreign_keys = OFF dall'inizio alla fine —
-// vedi importBackup — ma lo teniamo comunque corretto per chiarezza/difesa.)
+// poi le righe padre. Con le FK disattivate durante l'import (vedi
+// importBackup) non sarebbe strettamente necessario, ma resta corretto come
+// difesa nel caso il PRAGMA non venisse applicato.
 const _deleteOrder = [
   'deletions',
   'sync_meta',
@@ -216,26 +217,39 @@ Future<String> importBackup() async {
 
   final db = await getDb();
 
-  // Elimina tutti i dati nell'ordine corretto (FK-safe).
-  await db.transaction((txn) async {
-    await txn.execute('PRAGMA foreign_keys = OFF');
-    for (final table in _deleteOrder) {
-      await txn.delete(table);
-    }
-    // Reinserisce ogni tabella presente nel backup.
-    for (final table in _backupTables) {
-      final rows = tables[table];
-      if (rows == null) continue;
-      for (final row in (rows as List)) {
-        try {
-          await txn.insert(table, Map<String, dynamic>.from(row as Map));
-        } catch (_) {
-          // Ignora righe che violano vincoli (es. duplicati) — continua.
+  // PRAGMA foreign_keys va cambiato FUORI dalla transazione: per specifica
+  // SQLite dentro una transazione è un no-op silenzioso (la prima versione di
+  // questo codice lo eseguiva dentro, e le FK restavano attive). Disattivarle
+  // rende l'import un vero restore: ogni riga del file viene reinserita
+  // com'era nel DB di origine, anche con riferimenti pendenti pregressi.
+  int scartate = 0;
+  await db.execute('PRAGMA foreign_keys = OFF');
+  try {
+    await db.transaction((txn) async {
+      for (final table in _deleteOrder) {
+        await txn.delete(table);
+      }
+      // Reinserisce ogni tabella presente nel backup.
+      for (final table in _backupTables) {
+        final rows = tables[table];
+        if (rows == null) continue;
+        for (final row in (rows as List)) {
+          try {
+            await txn.insert(table, Map<String, dynamic>.from(row as Map));
+          } catch (e) {
+            // Una riga malformata (es. colonna di un'altra versione dello
+            // schema, vincolo UNIQUE/CHECK violato) non deve bloccare il
+            // resto dell'import — ma nemmeno sparire in silenzio: viene
+            // contata e segnalata nel messaggio di esito.
+            scartate++;
+            debugPrint('[import] riga scartata da $table: $e');
+          }
         }
       }
-    }
-    await txn.execute('PRAGMA foreign_keys = ON');
-  });
+    });
+  } finally {
+    await db.execute('PRAGMA foreign_keys = ON');
+  }
 
   // Ricalcola la numerazione progressiva per ogni associazione: i raw INSERT
   // del backup non passano per saveTurno, quindi i numeri potrebbero essere
@@ -243,5 +257,8 @@ Future<String> importBackup() async {
   await ricalcolaTutteLeNumerazioni();
 
   final ts = payload['exportedAt'] as String? ?? '?';
-  return 'Import completato. Dati del $ts ripristinati.';
+  final avviso = scartate == 0
+      ? ''
+      : ' Attenzione: $scartate righe non valide scartate (dettagli nel log).';
+  return 'Import completato. Dati del $ts ripristinati.$avviso';
 }
