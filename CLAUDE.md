@@ -300,6 +300,14 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   (comportamento non voluto: bloccava una cancellazione legittima). Ora l'eliminazione
   di un materiale elimina a cascata anche i suoi utilizzi — coerente con "nessuno
   storico": la UI (`MaterialiScreen._elimina`) avvisa nel dialog di conferma.
+- **Delete anagrafiche con conferma + messaggio sul vincolo FK**: il cestino su
+  associazioni/persone/ospedali in Impostazioni chiede conferma prima di eliminare
+  (prima un tap accidentale cancellava subito) e gestisce l'eccezione FK: eliminare
+  una voce ancora referenziata (persona in un turno, ospedale con servizi, assoc.
+  con turni) è bloccato dalle foreign key del DB — comportamento voluto, a differenza
+  dei materiali (CASCADE) — ma prima falliva in silenzio. `_confermaEdElimina` in
+  `_SezioneAnag` fa il match su "FOREIGN KEY" nel testo dell'eccezione (identico su
+  sqflite nativo e FFI) e mostra il `messaggioVincolo` specifico della sezione.
 - **`MaterialeUsatoForm` crea/modifica, `createdAt` passato esplicitamente in modalità
   modifica**: `saveMaterialeUsato` fa un upsert generico via `toMap()` — se in
   modifica si costruisce un `MaterialeUsato` nuovo senza riportare `createdAt`

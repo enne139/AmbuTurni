@@ -64,6 +64,7 @@ class _SezioneAssociazioni extends StatelessWidget {
         await deleteAssociazione(a.id);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       },
+      messaggioVincolo: 'è usata da turni o assistenze esistenti.',
     );
   }
 }
@@ -93,6 +94,7 @@ class _SezionePersone extends StatelessWidget {
         await deletePersona(p.id);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       },
+      messaggioVincolo: 'fa parte dell\'equipaggio di turni o assistenze esistenti.',
     );
   }
 
@@ -150,6 +152,7 @@ class _SezioneOspedali extends StatelessWidget {
         await deleteOspedale(o.id);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       },
+      messaggioVincolo: 'è usato da servizi di turni esistenti.',
     );
   }
 
@@ -240,6 +243,9 @@ class _SezioneAnag<T> extends StatefulWidget {
   final VoidCallback onAdd;
   final Future<void> Function(T) onEdit;
   final Future<void> Function(T)? onDelete;
+  // Messaggio mostrato quando il DB blocca l'eliminazione per vincolo FK:
+  // spiega all'utente PERCHÉ la voce non si può eliminare (es. usata in turni).
+  final String? messaggioVincolo;
   // Frecce di riordino: se non null, compaiono ↑↓ per ogni voce (disabilitate con filtro attivo).
   final Future<void> Function(T)? onMoveUp;
   final Future<void> Function(T)? onMoveDown;
@@ -257,6 +263,7 @@ class _SezioneAnag<T> extends StatefulWidget {
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
+    this.messaggioVincolo,
     this.onMoveUp,
     this.onMoveDown,
     this.onView,
@@ -285,6 +292,43 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
       return widget.labelOf(item).toLowerCase().contains(q) ||
           (widget.sublabelOf(item)?.toLowerCase().contains(q) ?? false);
     }).toList();
+  }
+
+  /// Chiede conferma prima di eliminare (un tap accidentale non deve perdere
+  /// dati per sempre) e gestisce il rifiuto del DB per vincolo FK: senza il
+  /// catch, eliminare una voce ancora referenziata (es. persona in un turno)
+  /// fallirebbe senza alcun feedback per l'utente.
+  Future<void> _confermaEdElimina(T item) async {
+    final label = widget.labelOf(item);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elimina'),
+        content: Text('Eliminare "$label"? L\'operazione non è reversibile.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Elimina', style: TextStyle(color: kPrimary)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.onDelete!(item);
+    } catch (e) {
+      if (!mounted) return;
+      // Le eccezioni FK di sqflite (nativo e FFI) contengono sempre
+      // "FOREIGN KEY constraint failed": basta il match sulla stringa,
+      // senza importare i tipi di sqflite in una schermata UI.
+      final vincoloFk = e.toString().contains('FOREIGN KEY');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(vincoloFk
+            ? 'Impossibile eliminare "$label": ${widget.messaggioVincolo ?? 'è ancora usata da altri dati.'}'
+            : 'Errore durante l\'eliminazione: $e'),
+      ));
+    }
   }
 
   /// Resetta la ricerca quando si chiude la sezione così riaprendo è pulita.
@@ -427,7 +471,7 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                   if (widget.onDelete != null)
                     IconButton(
                       icon: const Icon(Icons.delete, size: 18, color: kPrimary),
-                      onPressed: () => widget.onDelete!(item),
+                      onPressed: () => _confermaEdElimina(item),
                       visualDensity: VisualDensity.compact,
                     ),
                 ]),
