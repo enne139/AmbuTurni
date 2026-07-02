@@ -205,11 +205,13 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
 - ✅ Release automatica su Gitea: sui push di tag `vX.Y.Z`, `build-android.yml`
   pubblica l'APK come artifact (invariato) e in più crea/aggiorna una Release Gitea
-  allegando l'APK come asset (`ambulanza-turni-<tag>.apk`), via chiamate dirette alla
-  REST API di Gitea con curl (stesso pattern del generic package nel workflow
-  backend) — niente action di terze parti per la creazione della release, la cui
-  compatibilità con questa istanza Gitea non è garantita. Richiede lo scope
-  `write:repository` sul secret `REGISTRY_TOKEN`, oltre a `write:package`.
+  allegando l'APK, con l'action `akkuman/gitea-release-action@v1` (dedicata a Gitea;
+  non esiste un'action ufficiale GitHub per questo scopo). Lo step ha
+  `continue-on-error: true` — un fallimento non rompe il job, l'APK/artifact sono
+  già pubblicati. Richiede lo scope `write:repository` sul secret `REGISTRY_TOKEN`,
+  oltre a `write:package`. Primo tentativo con chiamate curl dirette alla REST API
+  (stesso pattern del generic package nel workflow backend): funzionante ma più
+  codice da mantenere, sostituito dall'action dopo la prima run reale su v1.0.0.
 - ✅ Turni/assistenze per persona o ospedale: da Impostazioni, il pulsante "Vedi turni"
   (icona calendario) su una persona o un ospedale apre `TurniPersonaScreen` /
   `TurniOspedaleScreen` con l'elenco filtrato (per persona: turni + assistenze in cui

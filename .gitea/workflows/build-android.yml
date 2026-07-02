@@ -6,12 +6,10 @@
 # JDK 23 preinstallato o scaricabile, accesso a Internet, >= 8 GB RAM.
 #
 # Output: APK caricato come artifact della run. Sui push di tag, l'APK viene
-# ANCHE pubblicato come Release su Gitea (allegato al tag), tramite chiamate
-# dirette alla REST API di Gitea con curl — stesso pattern/secret già usato in
-# build-backend.yml (niente action di terze parti: la loro compatibilità con
-# questa istanza Gitea non è garantita, vedi storico del progetto).
-# Serve il secret REGISTRY_TOKEN (PAT con scope write:repository, oltre a
-# write:package già richiesto per il backend).
+# ANCHE pubblicato come Release su Gitea (allegato al tag), con l'action
+# akkuman/gitea-release-action (dedicata a Gitea, non l'action GitHub ufficiale
+# che non esiste per questo scopo). Serve il secret REGISTRY_TOKEN (PAT con
+# scope write:repository, oltre a write:package già richiesto per il backend).
 
 name: build-android-apk
 
@@ -77,50 +75,22 @@ jobs:
           if-no-files-found: error
 
       - name: Pubblica la Release su Gitea (solo su push di tag)
-        # Rimuove una eventuale release omonima da run precedenti sullo stesso tag
-        # (idempotente: il 404 se non esiste viene ignorato), poi ne crea una nuova
-        # e allega l'APK come asset. L'id della release è estratto senza jq (non
-        # garantito sul runner) con grep -oP, coerente con lo stile bash già usato
-        # nel resto dei workflow di questo progetto.
         # continue-on-error: un fallimento qui (es. token senza scope corretto) non
-        # deve far fallire il job: l'APK e l'artifact sono già stati pubblicati.
-        # niente `curl -f`: si legge sempre lo status HTTP e si stampa il body della
-        # risposta in caso di errore, per capire il motivo esatto dal log della run
-        # (un 403 generico non basta a distinguere token mancante da scope sbagliato).
+        # deve far fallire il job: l'APK e l'artifact sono già stati pubblicati allo
+        # step precedente. In caso di errore, il log stampato dall'action stessa
+        # riporta la risposta HTTP di Gitea (utile per distinguere token mancante
+        # da scope sbagliato: verifica write:repository su REGISTRY_TOKEN).
         if: github.ref_type == 'tag'
         continue-on-error: true
+        uses: akkuman/gitea-release-action@v1
         env:
-          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
-        run: |
-          set -uo pipefail
-          API="${GITHUB_SERVER_URL}/api/v1/repos/${{ github.repository }}/releases"
-          TAG="${{ github.ref_name }}"
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-          FILENAME="ambulanza-turni-${TAG}.apk"
-
-          curl -sS -X DELETE --user "${{ github.actor }}:${REGISTRY_TOKEN}" \
-            "$API/tags/$TAG" > /dev/null 2>&1 || true
-
-          HTTP_CODE=$(curl -sS -o /tmp/release_resp.json -w "%{http_code}" \
-            -X POST --user "${{ github.actor }}:${REGISTRY_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"body\":\"Build automatica da $GITHUB_SHA.\",\"draft\":false,\"prerelease\":false}" \
-            "$API")
-          if [ "$HTTP_CODE" -ge 300 ]; then
-            echo "Creazione release fallita (HTTP $HTTP_CODE). Risposta Gitea:"
-            cat /tmp/release_resp.json
-            echo "Verifica che REGISTRY_TOKEN abbia lo scope write:repository."
-            exit 1
-          fi
-          RELEASE_ID=$(grep -oP '"id":\K[0-9]+' /tmp/release_resp.json | head -n1)
-
-          HTTP_CODE=$(curl -sS -o /tmp/asset_resp.json -w "%{http_code}" \
-            -X POST --user "${{ github.actor }}:${REGISTRY_TOKEN}" \
-            -F "attachment=@${APK};filename=${FILENAME}" \
-            "$API/$RELEASE_ID/assets?name=${FILENAME}")
-          if [ "$HTTP_CODE" -ge 300 ]; then
-            echo "Upload dell'asset fallito (HTTP $HTTP_CODE). Risposta Gitea:"
-            cat /tmp/asset_resp.json
-            exit 1
-          fi
-          echo "Release $TAG pubblicata con asset $FILENAME"
+          NODE_OPTIONS: '--experimental-fetch'
+        with:
+          server_url: ${{ github.server_url }}
+          repository: ${{ github.repository }}
+          token: ${{ secrets.REGISTRY_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: "Build automatica da ${{ github.sha }}."
+          files: |-
+            build/app/outputs/flutter-apk/app-release.apk
