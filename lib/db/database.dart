@@ -186,7 +186,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 4,
+    version: 5,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -238,6 +238,56 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
       ''');
     } catch (_) {}
     try { await db.execute('CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato)'); } catch (_) {}
+  }
+  if (oldVersion < 5) {
+    // Chi ha già aperto l'app durante lo sviluppo del branch feature/tools ha
+    // una materiali_usati creata dalla v4 col vecchio schema (quantita TEXT
+    // libero + colonna data, poi sostituiti da quantita INTEGER/unita/posizione
+    // senza bump di versione): qui la tabella va ricostruita SOLO se è ancora
+    // nella forma vecchia (rilevata dalla presenza della colonna "data"),
+    // preservando i dati con un parsing best-effort invece di un DROP secco.
+    final cols = await db.rawQuery("PRAGMA table_info(materiali_usati)");
+    final haSchemaVecchio = cols.any((c) => c['name'] == 'data');
+    if (haSchemaVecchio) {
+      final righeVecchie = await db.query('materiali_usati');
+      await db.execute('DROP TABLE materiali_usati');
+      await db.execute('''
+        CREATE TABLE materiali_usati (
+          id TEXT PRIMARY KEY,
+          materiale_id TEXT NOT NULL REFERENCES materiali(id),
+          quantita INTEGER NOT NULL DEFAULT 1,
+          unita TEXT,
+          posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+          note TEXT,
+          ripristinato INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato)');
+      // "2 confezioni" -> quantita 2, unita "confezioni"; "500ml" -> 500, "ml";
+      // "3" -> 3, null; "scatola" (senza numero) -> 1, "scatola".
+      final numeroIniziale = RegExp(r'^(\d+)\s*(.*)$');
+      for (final riga in righeVecchie) {
+        final quantitaGrezza = (riga['quantita']?.toString() ?? '1').trim();
+        final match = numeroIniziale.firstMatch(quantitaGrezza);
+        final quantita = match != null ? int.parse(match.group(1)!) : 1;
+        final resto = match != null ? match.group(2)!.trim() : quantitaGrezza;
+        await db.insert('materiali_usati', {
+          'id': riga['id'],
+          'materiale_id': riga['materiale_id'],
+          'quantita': quantita,
+          'unita': resto.isEmpty ? null : resto,
+          'posizione': null,
+          'note': riga['note'],
+          'ripristinato': riga['ripristinato'] ?? 0,
+          'created_at': riga['created_at'],
+          'updated_at': riga['updated_at'],
+          'is_synced': 0,
+        });
+      }
+    }
   }
 }
 

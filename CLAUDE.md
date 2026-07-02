@@ -183,8 +183,21 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   variazione rapida. Ora `quantita` è un intero (>= 1, clampato in UI) e `unita` è
   testo libero opzionale mostrato accanto (`MaterialeUsato.quantitaLabel`); la
   colonna `data` è stata rimossa (non serve all'uso reale, si ordina per `created_at`).
-  Essendo la versione DB 4 non ancora rilasciata, lo schema è stato corretto in-place
-  invece di aggiungere una versione 5.
+- **Versione DB 4 -> 5 invece di correggere lo schema v4 in-place**: il primo giro
+  di questa modifica aveva "corretto" lo schema v4 senza cambiare il numero di
+  versione, assumendo che non fosse ancora in uso da nessuna parte — falso: bastava
+  aver aperto l'app una volta durante il testing del branch perché il device avesse
+  già una `materiali_usati` con lo schema vecchio (quantita TEXT, colonna data)
+  bloccata a versione 4, e `onUpgrade` non scatta mai se `oldVersion == newVersion`
+  → crash `type 'String' is not a subtype of type 'num?'` leggendo `quantita`.
+  Lezione: su un branch che si sta testando attivamente (anche solo in locale),
+  ogni modifica allo schema già rilasciato in una versione precedente richiede un
+  bump di versione con una vera migrazione in `_onUpgrade`, mai un edit in-place —
+  "non ancora rilasciato" vale solo per uno schema che nessun device ha mai aperto.
+  La migrazione v5 ricostruisce `materiali_usati` SOLO se rileva ancora la colonna
+  `data` (`PRAGMA table_info`), preservando i dati con un parsing best-effort del
+  vecchio `quantita` testuale (`^(\d+)\s*(.*)$`: numero iniziale -> `quantita`,
+  resto -> `unita`; nessun numero -> `quantita = 1`, tutto il testo in `unita`).
 - **`posizione` con CHECK ('AMBULANZA','BOMBOLINO','ZAINO')**: stesso pattern di
   `codiciChiamata`/`codiciUscita` in `models.dart` (`posizioniMateriale` + ChoiceChip
   in `materiale_usato_form.dart`) — valori fissi, non un catalogo editabile.
@@ -254,7 +267,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   campo di ricerca che filtra su descrizione/note del turno e descrizione dei servizi
   collegati (combinabile col filtro associazione). `getTurni(ricerca: ...)` in
   `helpers.dart`.
-- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 4): 5° tab
+- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 5): 5° tab
   "Tools" con l'elenco degli strumenti extra dell'app. "Materiali usati" permette
   di segnare un materiale (dal catalogo `materiali`, con creazione inline), la
   quantità (intera, con +/- sia nel form che direttamente in lista per il ritocco
