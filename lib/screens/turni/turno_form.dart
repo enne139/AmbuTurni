@@ -191,6 +191,15 @@ class _TurnoFormState extends State<TurnoForm> {
                     labelText: 'Ore (es. 8h 30m)',
                     prefixIcon: Icon(Icons.schedule, size: 18),
                   ),
+                  // Senza validator un testo non parsabile diventava
+                  // silenziosamente ore = null: il turno si salvava ma le
+                  // ore digitate sparivano senza alcun avviso.
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    return parseOre(v) == null
+                        ? 'Formato non valido (es. 8, 8,5 o 8h 30m)'
+                        : null;
+                  },
                 ),
               ),
             ]),
