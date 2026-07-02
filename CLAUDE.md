@@ -262,7 +262,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `flutter build apk --release --target-platform android-arm64` invece del fat
   APK multi-ABI di default: dimezza il tempo di compilazione nativa, tradeoff
   accettato esplicitamente (APK non installa su emulatori x86/device 32-bit,
-  irrilevante per l'uso reale via Obtainium su telefoni recenti).
+  irrilevante per l'uso reale via Obtainium su telefoni recenti). Supply chain:
+  il tarball di Node è verificato con lo SHA256 di `SHASUMS256.txt` (il job
+  fallisce se il download non corrisponde) e le action sono pinnate per commit
+  SHA con la versione nel commento — un tag può essere spostato su codice
+  diverso, lo SHA no; aggiornare SHA e commento insieme nei bump.
 - **`pubspec.lock` versionato**: raccomandazione Flutter per le applicazioni (a
   differenza delle librerie) — CI e altre macchine risolvono le stesse identiche
   versioni testate in locale, build riproducibili. La cache pub in
