@@ -1,8 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- allowBackup=false: senza, Android carica il DB SQLite (nomi di persone,
+         turni) nel backup automatico Google del device. I dati restano solo
+         sul telefono; per il trasferimento si usa l'export JSON dell'app. -->
     <application
         android:label="AmbuTurni"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
