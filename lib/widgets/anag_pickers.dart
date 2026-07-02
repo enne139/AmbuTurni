@@ -104,18 +104,14 @@ class _PersonaPickerState extends State<PersonaPicker> {
     if (cognome.isEmpty || nome.isEmpty) return;
     // Salva senza passare l'id: savePersona con id esegue un UPDATE (aggiorna una riga
     // esistente), ma qui la riga non esiste ancora → zero righe aggiornate, niente salvato.
-    await savePersona(cognome, nome);
+    // L'id restituito permette l'auto-selezione diretta: ritrovare la voce per
+    // nome nella lista ricaricata selezionerebbe quella sbagliata con gli omonimi.
+    final id = await savePersona(cognome, nome);
     if (!mounted) return;
     await context.read<AnagraficheProvider>().carica();
     if (!mounted) return;
-    // Trova la nuova persona per nome nella lista ricaricata.
-    final p = context.read<AnagraficheProvider>().persone
-        .where((p) => p.cognome == cognome && p.nome == nome)
-        .firstOrNull;
-    if (p != null) {
-      _ctrl.text = p.nomeCompleto;
-      widget.onChanged(p.id);
-    }
+    _ctrl.text = '$cognome $nome';
+    widget.onChanged(id);
   }
 
   @override
@@ -276,18 +272,15 @@ class _OspedalePickerState extends State<OspedalePicker> {
     final nome = nomeCtrl.text.trim();
     if (nome.isEmpty) return;
     final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
-    // Salva senza id per fare INSERT (stessa ragione di _creaPersona).
-    await saveOspedale(nome, citta);
+    // Salva senza id per fare INSERT (stessa ragione di _creaPersona);
+    // l'id restituito evita la ricerca per nome (ambigua con gli omonimi).
+    final id = await saveOspedale(nome, citta);
     if (!mounted) return;
     await context.read<AnagraficheProvider>().carica();
     if (!mounted) return;
-    final o = context.read<AnagraficheProvider>().ospedali
-        .where((o) => o.nome == nome && o.citta == citta)
-        .firstOrNull;
-    if (o != null) {
-      _ctrl.text = o.label;
-      widget.onChanged(o.id);
-    }
+    // Stessa logica di Ospedale.label: nome + città se presente.
+    _ctrl.text = citta != null ? '$nome - $citta' : nome;
+    widget.onChanged(id);
   }
 
   @override
@@ -443,15 +436,12 @@ class _MaterialePickerState extends State<MaterialePicker> {
     if (ok != true || !mounted) return;
     final nome = nomeCtrl.text.trim();
     if (nome.isEmpty) return;
-    await saveMateriale(nome);
+    // L'id restituito evita di ricaricare il catalogo solo per ritrovare
+    // la voce appena creata (il parent lo ricarica già in onChanged).
+    final id = await saveMateriale(nome);
     if (!mounted) return;
-    final materiali = await getMateriali();
-    if (!mounted) return;
-    final m = materiali.where((m) => m.nome == nome).firstOrNull;
-    if (m != null) {
-      _ctrl.text = m.nome;
-      widget.onChanged(m.id);
-    }
+    _ctrl.text = nome;
+    widget.onChanged(id);
   }
 
   @override

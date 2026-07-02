@@ -331,6 +331,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `anag_pickers.dart` segue lo stesso pattern di `OspedalePicker` (RawAutocomplete +
   "Aggiungi..." nel suffixIcon) invece di testo libero, per evitare doppioni
   incoerenti (es. "Garze" vs "garze") nel catalogo materiali.
+- **`savePersona`/`saveOspedale`/`saveMateriale` restituiscono l'id della riga**:
+  i picker con creazione inline usano l'id restituito per l'auto-selezione della
+  voce appena creata. Prima la ritrovavano cercando per nome nella lista
+  ricaricata: con due omonimi veniva selezionata la prima trovata, potenzialmente
+  quella sbagliata.
 - **Tools come 5° tab invece che sotto Impostazioni**: pensato per ospitare più
   strumenti in futuro (per ora solo Materiali usati); un tab dedicato scala meglio
   di una sezione dentro Impostazioni, che è già collassabile e affollata di CRUD.

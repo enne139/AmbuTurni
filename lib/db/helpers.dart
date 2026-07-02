@@ -62,18 +62,23 @@ Future<List<Persona>> getPersone() async {
   return rows.map(Persona.fromMap).toList();
 }
 
-Future<void> savePersona(String cognome, String nome, {String? id}) async {
+/// Restituisce l'id della riga creata/aggiornata: i picker con creazione
+/// inline lo usano per l'auto-selezione — ritrovare la voce per nome dopo il
+/// salvataggio selezionerebbe quella sbagliata in caso di omonimi.
+Future<String> savePersona(String cognome, String nome, {String? id}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
+    final nuovoId = newId();
     await db.insert('persone', {
-      'id': newId(),
+      'id': nuovoId,
       'cognome': cognome,
       'nome': nome,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
     });
+    return nuovoId;
   } else {
     await db.update(
       'persone',
@@ -81,6 +86,7 @@ Future<void> savePersona(String cognome, String nome, {String? id}) async {
       where: 'id = ?',
       whereArgs: [id],
     );
+    return id;
   }
 }
 
@@ -95,18 +101,21 @@ Future<List<Ospedale>> getOspedali() async {
   return rows.map(Ospedale.fromMap).toList();
 }
 
-Future<void> saveOspedale(String nome, String? citta, {String? id}) async {
+/// Restituisce l'id della riga creata/aggiornata (vedi savePersona).
+Future<String> saveOspedale(String nome, String? citta, {String? id}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
+    final nuovoId = newId();
     await db.insert('ospedali', {
-      'id': newId(),
+      'id': nuovoId,
       'nome': nome,
       'citta': citta,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
     });
+    return nuovoId;
   } else {
     await db.update(
       'ospedali',
@@ -114,6 +123,7 @@ Future<void> saveOspedale(String nome, String? citta, {String? id}) async {
       where: 'id = ?',
       whereArgs: [id],
     );
+    return id;
   }
 }
 
@@ -559,17 +569,20 @@ Future<List<Materiale>> getMateriali() async {
   return rows.map(Materiale.fromMap).toList();
 }
 
-Future<void> saveMateriale(String nome, {String? id}) async {
+/// Restituisce l'id della riga creata/aggiornata (vedi savePersona).
+Future<String> saveMateriale(String nome, {String? id}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
+    final nuovoId = newId();
     await db.insert('materiali', {
-      'id': newId(),
+      'id': nuovoId,
       'nome': nome,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
     });
+    return nuovoId;
   } else {
     await db.update(
       'materiali',
@@ -577,6 +590,7 @@ Future<void> saveMateriale(String nome, {String? id}) async {
       where: 'id = ?',
       whereArgs: [id],
     );
+    return id;
   }
 }
 
