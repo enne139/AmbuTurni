@@ -216,20 +216,26 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   PNG renderizzati da SVG con `sharp` (Node, via npx in una cartella temporanea) a
   1024×1024: gli strumenti nativi tipici (ImageMagick, Inkscape, cairosvg) non erano
   disponibili/installabili senza frizioni su questa macchina.
-- **Cache Android SDK + Gradle e build arm64-only in `build-android.yml`**: il
+- **Job CI dentro `ghcr.io/cirruslabs/flutter` in `build-android.yml`**: il
   runner (`android`) è un pod ARC effimero — disco pulito a ogni job, quindi
-  ogni run riscaricava da zero ~150MB di cmdline-tools e ripopolava le cache
-  Gradle. Aggiunte due `actions/cache@v4` (una su `~/android-sdk` chiave fissa
-  sulle versioni platform/build-tools, una su `~/.gradle/caches` +
-  `~/.gradle/wrapper` chiave sull'hash di `gradle-wrapper.properties`) prima
-  dei rispettivi step, con lo step di installazione SDK reso idempotente
-  (`if [ ! -d "$TOOLS" ]`) per non reinstallare quando la cache è già calda.
-  In più `flutter build apk --release --target-platform android-arm64` invece
-  del fat APK multi-ABI di default: dimezza il tempo di compilazione nativa,
-  tradeoff accettato esplicitamente (APK non installa su emulatori x86/device
-  32-bit, irrilevante per l'uso reale via Obtainium su telefoni recenti). Se
-  l'istanza Gitea non ha un cache backend configurato, `actions/cache` fa
-  cache-miss silenzioso senza rompere la build.
+  "Setup Flutter" riscaricava ed estraeva l'SDK (~10 minuti) a ogni run, e lo
+  stesso valeva per JDK e Android SDK. Il job ora gira con
+  `container: ghcr.io/cirruslabs/flutter:3.44.0` (Flutter + JDK + Android SDK
+  preinstallati): spariscono i tre step di setup e il toolchain non dipende dal
+  cache backend di Gitea, perché l'immagine resta nella cache immagini del nodo
+  k8s che sopravvive ai pod. La versione è pinnata per build riproducibili e va
+  aggiornata a mano insieme a Flutter locale; le patch release non sempre hanno
+  un tag immagine (3.44.4 locale -> 3.44.0 in CI, differenza accettabile). Se il
+  runner ignorasse `container:` (label in modalità host) la build fallisce con
+  "flutter: command not found": in quel caso l'immagine va messa come default
+  del runner. Restano due `actions/cache@v4` (Gradle su hash di
+  `gradle-wrapper.properties`, `~/.pub-cache` su hash di `pubspec.yaml` perché
+  `pubspec.lock` non è versionato) — utili solo se l'istanza Gitea ha un cache
+  backend, altrimenti cache-miss silenzioso senza rompere la build. In più
+  `flutter build apk --release --target-platform android-arm64` invece del fat
+  APK multi-ABI di default: dimezza il tempo di compilazione nativa, tradeoff
+  accettato esplicitamente (APK non installa su emulatori x86/device 32-bit,
+  irrilevante per l'uso reale via Obtainium su telefoni recenti).
 - **Rinominata l'app in "AmbuTurni"** (branch `feature/app-icon`, insieme all'icona):
   nome visibile (`android:label`, `MaterialApp.title`, titolo finestra/metadata
   Windows) **e** identificatori interni, su richiesta esplicita di rinominare
