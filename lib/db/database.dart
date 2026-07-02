@@ -118,6 +118,26 @@ CREATE INDEX IF NOT EXISTS idx_servizi_turno ON servizi(turno_id);
 CREATE INDEX IF NOT EXISTS idx_turni_assoc ON turni(associazione_id);
 CREATE INDEX IF NOT EXISTS idx_assistenze_assoc ON assistenze(associazione_id);
 
+CREATE TABLE IF NOT EXISTS materiali (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  is_synced INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS materiali_usati (
+  id TEXT PRIMARY KEY,
+  materiale_id TEXT NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
+  quantita INTEGER NOT NULL DEFAULT 1,
+  unita TEXT,
+  posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  is_synced INTEGER DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS sync_meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -163,7 +183,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 3,
+    version: 6,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -171,7 +191,7 @@ Future<Database> getDb() async {
   return _db!;
 }
 
-/// Upgrade del DB: aggiunge le colonne per ogni nuova versione.
+/// Upgrade del DB: aggiunge le colonne/tabelle per ogni nuova versione.
 /// ALTER TABLE fallisce silenziosamente se la colonna esiste già (catch intenzionale).
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
@@ -182,6 +202,125 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 3) {
     try { await db.execute('ALTER TABLE associazioni ADD COLUMN colore TEXT'); } catch (_) {}
     try { await db.execute('ALTER TABLE tipologie_turno ADD COLUMN colore TEXT'); } catch (_) {}
+  }
+  if (oldVersion < 4) {
+    // Tabelle nuove (Tools -> Materiali usati): CREATE TABLE IF NOT EXISTS è
+    // già idempotente di suo, il try/catch è solo per uniformità con le altre
+    // entry di questo metodo.
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS materiali (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL UNIQUE,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    } catch (_) {}
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS materiali_usati (
+          id TEXT PRIMARY KEY,
+          materiale_id TEXT NOT NULL REFERENCES materiali(id),
+          quantita INTEGER NOT NULL DEFAULT 1,
+          unita TEXT,
+          posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+          note TEXT,
+          ripristinato INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    } catch (_) {}
+    try { await db.execute('CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato)'); } catch (_) {}
+  }
+  if (oldVersion < 5) {
+    // Chi ha già aperto l'app durante lo sviluppo del branch feature/tools ha
+    // una materiali_usati creata dalla v4 col vecchio schema (quantita TEXT
+    // libero + colonna data, poi sostituiti da quantita INTEGER/unita/posizione
+    // senza bump di versione): qui la tabella va ricostruita SOLO se è ancora
+    // nella forma vecchia (rilevata dalla presenza della colonna "data"),
+    // preservando i dati con un parsing best-effort invece di un DROP secco.
+    final cols = await db.rawQuery("PRAGMA table_info(materiali_usati)");
+    final haSchemaVecchio = cols.any((c) => c['name'] == 'data');
+    if (haSchemaVecchio) {
+      final righeVecchie = await db.query('materiali_usati');
+      await db.execute('DROP TABLE materiali_usati');
+      await db.execute('''
+        CREATE TABLE materiali_usati (
+          id TEXT PRIMARY KEY,
+          materiale_id TEXT NOT NULL REFERENCES materiali(id),
+          quantita INTEGER NOT NULL DEFAULT 1,
+          unita TEXT,
+          posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+          note TEXT,
+          ripristinato INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato)');
+      // "2 confezioni" -> quantita 2, unita "confezioni"; "500ml" -> 500, "ml";
+      // "3" -> 3, null; "scatola" (senza numero) -> 1, "scatola".
+      final numeroIniziale = RegExp(r'^(\d+)\s*(.*)$');
+      for (final riga in righeVecchie) {
+        final quantitaGrezza = (riga['quantita']?.toString() ?? '1').trim();
+        final match = numeroIniziale.firstMatch(quantitaGrezza);
+        final quantita = match != null ? int.parse(match.group(1)!) : 1;
+        final resto = match != null ? match.group(2)!.trim() : quantitaGrezza;
+        await db.insert('materiali_usati', {
+          'id': riga['id'],
+          'materiale_id': riga['materiale_id'],
+          'quantita': quantita,
+          'unita': resto.isEmpty ? null : resto,
+          'posizione': null,
+          'note': riga['note'],
+          'ripristinato': riga['ripristinato'] ?? 0,
+          'created_at': riga['created_at'],
+          'updated_at': riga['updated_at'],
+          'is_synced': 0,
+        });
+      }
+    }
+  }
+  if (oldVersion < 6) {
+    // Su richiesta esplicita: niente più storico dei materiali ripristinati
+    // (prima restavano in tabella con ripristinato = 1) e la foreign key su
+    // materiali_usati diventa ON DELETE CASCADE, per poter eliminare un
+    // materiale dal catalogo anche se ha ancora utilizzi collegati (prima
+    // SQLite lo impediva). Entrambe richiedono di ricreare la tabella: SQLite
+    // non supporta ALTER per rimuovere una colonna vincolata da un CHECK
+    // impliclito né per cambiare i vincoli di una foreign key esistente.
+    // Le righe già ripristinate (ripristinato = 1) vengono scartate qui,
+    // proprio per non portarsi dietro lo storico che non si vuole più tenere;
+    // solo quelle ancora attive vengono preservate nella tabella ricostruita.
+    final cols = await db.rawQuery("PRAGMA table_info(materiali_usati)");
+    final haColonnaRipristinato = cols.any((c) => c['name'] == 'ripristinato');
+    if (haColonnaRipristinato) {
+      final righeAttive =
+          await db.query('materiali_usati', where: 'ripristinato = 0');
+      await db.execute('DROP TABLE materiali_usati');
+      await db.execute('''
+        CREATE TABLE materiali_usati (
+          id TEXT PRIMARY KEY,
+          materiale_id TEXT NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
+          quantita INTEGER NOT NULL DEFAULT 1,
+          unita TEXT,
+          posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+          note TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+      for (final riga in righeAttive) {
+        final nuovaRiga = Map<String, dynamic>.from(riga)..remove('ripristinato');
+        await db.insert('materiali_usati', nuovaRiga);
+      }
+    }
   }
 }
 

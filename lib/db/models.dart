@@ -443,6 +443,119 @@ class Servizio {
       };
 }
 
+// ---------------------------------------------------------------------------
+// TOOLS -> MATERIALI USATI
+// ---------------------------------------------------------------------------
+
+class Materiale {
+  final String id;
+  final String nome;
+  final String? createdAt;
+  final String? updatedAt;
+  final int isSynced;
+
+  const Materiale({
+    required this.id,
+    required this.nome,
+    this.createdAt,
+    this.updatedAt,
+    this.isSynced = 0,
+  });
+
+  factory Materiale.fromMap(Map<String, dynamic> m) => Materiale(
+        id: m['id'] as String,
+        nome: m['nome'] as String,
+        createdAt: m['created_at'] as String?,
+        updatedAt: m['updated_at'] as String?,
+        isSynced: (m['is_synced'] as int?) ?? 0,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'nome': nome,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+        'is_synced': isSynced,
+      };
+}
+
+// Posizioni valide per un utilizzo di materiale (dove si trovava/va ripristinato).
+const List<String> posizioniMateriale = ['AMBULANZA', 'BOMBOLINO', 'ZAINO'];
+
+/// Un utilizzo di materiale da ripristinare. `quantita` è numerica (incrementabile
+/// con i pulsanti +/- in lista) mentre `unita` è testo libero separato, perché in
+/// ambulanza le unità di misura sono eterogenee (es. "flaconi", "ml", "confezioni")
+/// e un unico campo numerico non le rappresenterebbe. Nessuno storico: una riga
+/// esiste solo finché non viene ripristinata o eliminata (vedi helpers.dart).
+class MaterialeUsato {
+  final String id;
+  final String materialeId;
+  final int quantita;
+  final String? unita;
+  final String? posizione;
+  final String? note;
+  final String? createdAt;
+  final String? updatedAt;
+  final int isSynced;
+
+  // Denormalizzato dal JOIN con materiali.
+  final String? materialeNome;
+
+  const MaterialeUsato({
+    required this.id,
+    required this.materialeId,
+    this.quantita = 1,
+    this.unita,
+    this.posizione,
+    this.note,
+    this.createdAt,
+    this.updatedAt,
+    this.isSynced = 0,
+    this.materialeNome,
+  });
+
+  /// Etichetta quantità + unità per la visualizzazione (es. "3 flaconi", "500 ml", "2").
+  String get quantitaLabel => unita != null && unita!.isNotEmpty ? '$quantita $unita' : '$quantita';
+
+  factory MaterialeUsato.fromMap(Map<String, dynamic> m) => MaterialeUsato(
+        id: m['id'] as String,
+        materialeId: m['materiale_id'] as String,
+        quantita: (m['quantita'] as num?)?.toInt() ?? 1,
+        unita: m['unita'] as String?,
+        posizione: m['posizione'] as String?,
+        note: m['note'] as String?,
+        createdAt: m['created_at'] as String?,
+        updatedAt: m['updated_at'] as String?,
+        isSynced: (m['is_synced'] as int?) ?? 0,
+        materialeNome: m['materiale_nome'] as String?,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'materiale_id': materialeId,
+        'quantita': quantita,
+        'unita': unita,
+        'posizione': posizione,
+        'note': note,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+        'is_synced': isSynced,
+      };
+
+  MaterialeUsato copyWith({int? quantita}) => MaterialeUsato(
+        id: id,
+        materialeId: materialeId,
+        quantita: quantita ?? this.quantita,
+        unita: unita,
+        posizione: posizione,
+        note: note,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        isSynced: isSynced,
+        materialeNome: materialeNome,
+      );
+}
+
 class Assistenza {
   final String id;
   final String? associazioneId;

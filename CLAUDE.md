@@ -57,10 +57,10 @@ lib/
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider
 ├── navigation/
-│   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack)
+│   └── app_navigator.dart         Scaffold con NavigationBar a 5 tab (IndexedStack)
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
-│   ├── anag_pickers.dart          PersonaPicker e OspedalePicker (RawAutocomplete + Aggiungi...)
+│   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
 │   └── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
 └── screens/
     ├── turni/
@@ -74,6 +74,12 @@ lib/
     │   └── assistenza_detail.dart
     ├── statistiche/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
+    ├── tools/
+    │   ├── tools_screen.dart          elenco strumenti extra (per ora solo Materiali usati)
+    │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
+    │   │                               swipe elimina, ripristina (singolo/tutto)
+    │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
+    │   └── materiali_screen.dart      gestione catalogo materiali: rinomina/elimina
     └── impostazioni/
         ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
         └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
@@ -94,6 +100,13 @@ import/export JSON è compatibile tra le due versioni dell'app.
 
 Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
 `tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
+
+`materiali` e `materiali_usati` (introdotte in versione DB 4, branch `feature/tools`)
+sono nuove e NON esistono nell'app React Native. Sono comunque incluse nel backup
+JSON (`_backupTables` in `backup.dart`) insieme alle tabelle condivise: un backup
+Flutter importato nell'app RN ignorerebbe semplicemente quelle due chiavi, e un
+vecchio backup RN importato qui le lascia assenti — l'aggiunta non rompe la
+compatibilità in nessuna delle due direzioni.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni sono idempotenti: `CREATE TABLE IF NOT EXISTS` a ogni apertura.
@@ -205,6 +218,57 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   Rinominati anche, per coerenza: prefissi dei file di backup/export in
   `backup.dart` (solo i futuri file esportati, non tocca backup già salvati),
   nome artifact nel workflow Gitea, `README.md`, il file IntelliJ `.iml`.
+- **`quantita` INTEGER + `unita` TEXT separati in `materiali_usati`** (rivisto dopo il
+  primo giro d'uso): inizialmente `quantita` era testo libero unico per gestire unità
+  di misura eterogenee ("2 flaconi", "500ml"), ma non permetteva pulsanti +/- per la
+  variazione rapida. Ora `quantita` è un intero (>= 1, clampato in UI) e `unita` è
+  testo libero opzionale mostrato accanto (`MaterialeUsato.quantitaLabel`); la
+  colonna `data` è stata rimossa (non serve all'uso reale, si ordina per `created_at`).
+- **Versione DB 4 -> 5 invece di correggere lo schema v4 in-place**: il primo giro
+  di questa modifica aveva "corretto" lo schema v4 senza cambiare il numero di
+  versione, assumendo che non fosse ancora in uso da nessuna parte — falso: bastava
+  aver aperto l'app una volta durante il testing del branch perché il device avesse
+  già una `materiali_usati` con lo schema vecchio (quantita TEXT, colonna data)
+  bloccata a versione 4, e `onUpgrade` non scatta mai se `oldVersion == newVersion`
+  → crash `type 'String' is not a subtype of type 'num?'` leggendo `quantita`.
+  Lezione: su un branch che si sta testando attivamente (anche solo in locale),
+  ogni modifica allo schema già rilasciato in una versione precedente richiede un
+  bump di versione con una vera migrazione in `_onUpgrade`, mai un edit in-place —
+  "non ancora rilasciato" vale solo per uno schema che nessun device ha mai aperto.
+  La migrazione v5 ricostruisce `materiali_usati` SOLO se rileva ancora la colonna
+  `data` (`PRAGMA table_info`), preservando i dati con un parsing best-effort del
+  vecchio `quantita` testuale (`^(\d+)\s*(.*)$`: numero iniziale -> `quantita`,
+  resto -> `unita`; nessun numero -> `quantita = 1`, tutto il testo in `unita`).
+- **`posizione` con CHECK ('AMBULANZA','BOMBOLINO','ZAINO')**: stesso pattern di
+  `codiciChiamata`/`codiciUscita` in `models.dart` (`posizioniMateriale` + ChoiceChip
+  in `materiale_usato_form.dart`) — valori fissi, non un catalogo editabile.
+- **Nessuno storico dei materiali ripristinati (v5 -> v6, su richiesta esplicita)**:
+  la v5 teneva le righe ripristinate in tabella con un flag `ripristinato` (soft
+  delete). Rimosso: `segnaMaterialeRipristinato`/`segnaTuttiMaterialiRipristinati`
+  ora fanno una DELETE vera (la prima delega a `deleteMaterialeUsato`); la colonna
+  `ripristinato` è stata tolta dallo schema e `getMaterialiUsati()` non ha più il
+  parametro `soloAttivi` — ogni riga in tabella è per definizione attiva. La
+  migrazione v6 ricostruisce `materiali_usati` (necessario per cambiare anche la
+  foreign key, vedi punto sotto) scartando le righe già `ripristinato = 1`: lo
+  storico pregresso viene proprio eliminato, non solo nascosto in UI.
+- **`materiale_id` con `ON DELETE CASCADE` (v6)**: prima cancellare un materiale dal
+  catalogo falliva con un errore di foreign key se aveva ancora utilizzi collegati
+  (comportamento non voluto: bloccava una cancellazione legittima). Ora l'eliminazione
+  di un materiale elimina a cascata anche i suoi utilizzi — coerente con "nessuno
+  storico": la UI (`MaterialiScreen._elimina`) avvisa nel dialog di conferma.
+- **`MaterialeUsatoForm` crea/modifica, `createdAt` passato esplicitamente in modalità
+  modifica**: `saveMaterialeUsato` fa un upsert generico via `toMap()` — se in
+  modifica si costruisce un `MaterialeUsato` nuovo senza riportare `createdAt`
+  dall'oggetto esistente, l'UPDATE lo sovrascriverebbe a NULL (i valori `null` nella
+  map passano comunque nella UPDATE, il `DEFAULT` SQL si applica solo agli INSERT che
+  omettono la colonna). Va passato esplicitamente `createdAt: widget.esistente?.createdAt`.
+- **Materiali come catalogo con creazione inline**: `MaterialePicker` in
+  `anag_pickers.dart` segue lo stesso pattern di `OspedalePicker` (RawAutocomplete +
+  "Aggiungi..." nel suffixIcon) invece di testo libero, per evitare doppioni
+  incoerenti (es. "Garze" vs "garze") nel catalogo materiali.
+- **Tools come 5° tab invece che sotto Impostazioni**: pensato per ospitare più
+  strumenti in futuro (per ora solo Materiali usati); un tab dedicato scala meglio
+  di una sezione dentro Impostazioni, che è già collassabile e affollata di CRUD.
 
 ---
 
@@ -263,6 +327,21 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   sfondo verde, generata per Android (icona legacy + adaptive icon) e Windows con
   `flutter_launcher_icons`. Verificata sia sui file generati (`analyze`/`build apk`)
   sia sul telefono reale via adb (icona corretta nel drawer app).
+- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 6): 5° tab
+  "Tools" con l'elenco degli strumenti extra dell'app. "Materiali usati" permette
+  di segnare un materiale (dal catalogo `materiali`, con creazione inline), la
+  quantità (intera, con +/- sia nel form che direttamente in lista per il ritocco
+  rapido) + unità di misura opzionale (testo libero), la posizione
+  (Ambulanza/Bombolino/Zaino) e note, usati durante un turno da ripristinare.
+  Niente campo data (si ordina per `created_at`, non richiesto dal flusso reale) e
+  nessuno storico: check singolo o pulsante "Ripristina tutto" in AppBar, oppure
+  swipe per eliminare una riga per errore, cancellano la riga per sempre (nessuna
+  vista storico prevista). Icona matita su ogni riga apre `MaterialeUsatoForm` in
+  modalità modifica (stesso form della creazione, precompilato) per correggere
+  materiale/quantità/unità/posizione/note senza ricreare la riga da capo. Icona
+  "Gestisci materiali" in AppBar apre `MaterialiScreen` per rinominare/eliminare
+  voci del catalogo; eliminare un materiale elimina anche i suoi utilizzi collegati
+  (`ON DELETE CASCADE`, con avviso nel dialog di conferma).
 
 ## TODO
 

@@ -521,6 +521,103 @@ Future<void> ricalcolaTutteLeNumerazioni() async {
 }
 
 // ---------------------------------------------------------------------------
+// TOOLS -> MATERIALI USATI
+// ---------------------------------------------------------------------------
+
+Future<List<Materiale>> getMateriali() async {
+  final db = await getDb();
+  final rows = await db.query('materiali', orderBy: 'nome ASC');
+  return rows.map(Materiale.fromMap).toList();
+}
+
+Future<void> saveMateriale(String nome, {String? id}) async {
+  final db = await getDb();
+  final now = _now();
+  if (id == null) {
+    await db.insert('materiali', {
+      'id': newId(),
+      'nome': nome,
+      'created_at': now,
+      'updated_at': now,
+      'is_synced': 0,
+    });
+  } else {
+    await db.update(
+      'materiali',
+      {'nome': nome, 'updated_at': now, 'is_synced': 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+}
+
+/// Elimina un materiale dal catalogo. ON DELETE CASCADE su materiali_usati.materiale_id
+/// elimina automaticamente anche gli eventuali utilizzi collegati (coerente con
+/// "nessuno storico": un materiale rimosso dal catalogo non lascia residui).
+Future<void> deleteMateriale(String id) async {
+  final db = await getDb();
+  await db.delete('materiali', where: 'id = ?', whereArgs: [id]);
+}
+
+/// Restituisce gli utilizzi di materiale attivi, dal più recente. Non esiste
+/// uno storico: una riga esiste solo finché non viene ripristinata o eliminata.
+Future<List<MaterialeUsato>> getMaterialiUsati() async {
+  final db = await getDb();
+  final rows = await db.rawQuery('''
+    SELECT mu.*, m.nome AS materiale_nome
+    FROM materiali_usati mu
+    LEFT JOIN materiali m ON m.id = mu.materiale_id
+    ORDER BY mu.created_at DESC
+  ''');
+  return rows.map(MaterialeUsato.fromMap).toList();
+}
+
+/// Aggiorna solo la quantità (pulsanti +/- nella lista) senza toccare gli
+/// altri campi. Il chiamante è responsabile di non scendere sotto 1.
+Future<void> aggiornaQuantitaMaterialeUsato(String id, int quantita) async {
+  final db = await getDb();
+  await db.update(
+    'materiali_usati',
+    {'quantita': quantita, 'updated_at': _now(), 'is_synced': 0},
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
+
+Future<void> saveMaterialeUsato(MaterialeUsato materialeUsato) async {
+  final db = await getDb();
+  final now = _now();
+  final map = materialeUsato.toMap()
+    ..['updated_at'] = now
+    ..['is_synced'] = 0;
+  final exists = await db.query('materiali_usati',
+      columns: ['id'], where: 'id = ?', whereArgs: [materialeUsato.id], limit: 1);
+  if (exists.isEmpty) {
+    await db.insert('materiali_usati', map);
+  } else {
+    final updateMap = Map<String, dynamic>.from(map)..remove('id');
+    await db.update('materiali_usati', updateMap,
+        where: 'id = ?', whereArgs: [materialeUsato.id]);
+  }
+}
+
+/// Segna un utilizzo come ripristinato: su richiesta esplicita non si tiene
+/// nessuno storico, quindi "ripristinato" equivale a eliminare la riga.
+Future<void> segnaMaterialeRipristinato(String id) => deleteMaterialeUsato(id);
+
+Future<void> deleteMaterialeUsato(String id) async {
+  final db = await getDb();
+  await db.delete('materiali_usati', where: 'id = ?', whereArgs: [id]);
+}
+
+/// Segna come ripristinati tutti gli utilizzi in un colpo solo (pulsante
+/// "Ripristina tutto"): svuota la tabella, stessa logica di sopra.
+Future<void> segnaTuttiMaterialiRipristinati() async {
+  final db = await getDb();
+  await db.delete('materiali_usati');
+}
+
+// ---------------------------------------------------------------------------
 // STATISTICHE
 // ---------------------------------------------------------------------------
 
