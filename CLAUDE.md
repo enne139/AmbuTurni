@@ -165,6 +165,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `INSERT OR REPLACE INTO` e funziona sia per create che per update.
 - **tipologie_extra**: `List<String>` in Dart, serializzata come `TEXT` JSON nel DB
   (`jsonEncode`/`jsonDecode` in `models.dart`). Stessa scelta dell'app RN originale.
+  Nota: fino a questo commit il codice faceva in realtà un parsing manuale con
+  `replaceAll`/`split` (fragile, e duplicato in `exportSemplificato`); ora usa
+  davvero `dart:convert` come questo documento ha sempre dichiarato.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e

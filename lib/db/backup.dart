@@ -88,15 +88,18 @@ Future<String?> exportSemplificato() async {
   for (final t in turniRows) {
     final turnoId = t['id'] as String;
 
-    // Tipologie: primaria + extra → lista di nomi.
+    // Tipologie: primaria + extra → lista di nomi. Stesso jsonDecode di
+    // Turno.fromMap (il campo è un array JSON di stringhe).
     final tipIds = <String>[];
     final pid = t['tipologia_id'] as String?;
     if (pid != null) tipIds.add(pid);
     final extraRaw = (t['tipologie_extra'] as String?) ?? '';
     if (extraRaw.isNotEmpty) {
-      final decoded = extraRaw.replaceAll('[', '').replaceAll(']', '');
-      if (decoded.isNotEmpty) {
-        tipIds.addAll(decoded.split(',').map((e) => e.trim().replaceAll('"', '')).where((e) => e.isNotEmpty));
+      try {
+        final decoded = jsonDecode(extraRaw);
+        if (decoded is List) tipIds.addAll(decoded.whereType<String>());
+      } catch (_) {
+        // Valore corrotto/legacy: l'export prosegue senza le tipologie extra.
       }
     }
 

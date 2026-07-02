@@ -1,5 +1,6 @@
 // Modelli Dart che rispecchiano 1:1 le tabelle del database locale (schema.dart).
 // Ogni classe ha fromMap() per leggere dal DB e toMap() per scrivere / fare backup.
+import 'dart:convert';
 
 class Associazione {
   final String id;
@@ -258,12 +259,14 @@ class Turno {
   factory Turno.fromMap(Map<String, dynamic> m) {
     List<String> extra = [];
     final rawExtra = m['tipologie_extra'];
-    if (rawExtra != null && rawExtra is String && rawExtra.isNotEmpty) {
+    if (rawExtra is String && rawExtra.isNotEmpty) {
+      // Il campo è un array JSON di stringhe: jsonDecode al posto del vecchio
+      // parsing manuale con replaceAll/split, fragile e duplicato. Il catch
+      // copre eventuali valori corrotti/legacy senza far crashare la lettura.
       try {
-        // Il campo è salvato come JSON array di stringhe.
-        final decoded = rawExtra.replaceAll('[', '').replaceAll(']', '');
-        if (decoded.isNotEmpty) {
-          extra = decoded.split(',').map((e) => e.trim().replaceAll('"', '')).where((e) => e.isNotEmpty).toList();
+        final decoded = jsonDecode(rawExtra);
+        if (decoded is List) {
+          extra = decoded.whereType<String>().toList();
         }
       } catch (_) {}
     }
@@ -306,7 +309,7 @@ class Turno {
         'data': data,
         'ore': ore,
         'tipologia_id': tipologiaId,
-        'tipologie_extra': '[${tipologieExtra.map((e) => '"$e"').join(',')}]',
+        'tipologie_extra': jsonEncode(tipologieExtra),
         'num_servizi': numServizi,
         'descrizione': descrizione,
         'note': note,
