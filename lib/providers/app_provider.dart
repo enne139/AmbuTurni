@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import '../db/helpers.dart';
 import '../db/models.dart';
@@ -14,11 +15,13 @@ class AnagraficheProvider extends ChangeNotifier {
 
   // Ogni load è indipendente: se una query fallisce (es. migrazione DB non ancora
   // applicata) le altre continuano e notifyListeners() viene chiamato comunque.
+  // Gli errori vengono comunque loggati: un catch completamente muto mascherava
+  // eventuali problemi reali del DB (liste vuote senza alcuna traccia del perché).
   Future<void> carica() async {
-    try { associazioni = await getAssociazioni(); } catch (_) {}
-    try { persone = await getPersone(); } catch (_) {}
-    try { ospedali = await getOspedali(); } catch (_) {}
-    try { tipologieTurno = await getTipologieTurno(); } catch (_) {}
+    try { associazioni = await getAssociazioni(); } catch (e) { debugPrint('[anagrafiche] associazioni non caricate: $e'); }
+    try { persone = await getPersone(); } catch (e) { debugPrint('[anagrafiche] persone non caricate: $e'); }
+    try { ospedali = await getOspedali(); } catch (e) { debugPrint('[anagrafiche] ospedali non caricati: $e'); }
+    try { tipologieTurno = await getTipologieTurno(); } catch (e) { debugPrint('[anagrafiche] tipologie non caricate: $e'); }
     _caricato = true;
     notifyListeners();
   }
