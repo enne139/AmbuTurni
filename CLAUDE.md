@@ -395,6 +395,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - ✅ Equipaggio: UI a colonna singola con label del ruolo sempre visibile a sinistra
   (redesign rispetto alla griglia 2-colonne originale in cui le label sparivano dopo selezione).
 - ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
+- ✅ Note del turno in card dedicata nel dettaglio (tra equipaggio e servizi):
+  sempre visibile ("Nessuna nota" se vuote), con matita per la modifica rapida
+  in un dialog senza passare dal form completo. Il salvataggio ricostruisce il
+  `Turno` via `toMap`/`fromMap` invece di `copyWith`, perché `copyWith`
+  (pattern `??`) non può riportare `note` a `null` quando il campo viene svuotato.
 - ✅ Assistenze: identico ai turni ma senza tipologia né servizi.
 - ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
   con filtro per associazione (chip).

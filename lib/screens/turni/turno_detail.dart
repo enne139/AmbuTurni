@@ -64,6 +64,40 @@ class _TurnoDetailState extends State<TurnoDetail> {
     _carica();
   }
 
+  /// Modifica rapida delle sole note in un dialog, senza passare dal form
+  /// completo del turno. Il salvataggio passa da toMap/fromMap invece di
+  /// copyWith perché copyWith non può riportare il campo a null (note vuote).
+  Future<void> _modificaNote() async {
+    final t = _turno!;
+    final ctrl = TextEditingController(text: t.note ?? '');
+    final salva = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Note'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 5,
+          minLines: 3,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Note del turno'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva', style: TextStyle(color: kPrimary))),
+        ],
+      ),
+    );
+    if (salva == true) {
+      final testo = ctrl.text.trim();
+      final map = t.toMap();
+      map['note'] = testo.isEmpty ? null : testo;
+      await saveTurno(Turno.fromMap(map));
+      _carica();
+    }
+    ctrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -97,6 +131,11 @@ class _TurnoDetailState extends State<TurnoDetail> {
             _EquipaggioCard(t: t, anag: anag),
             const SizedBox(height: 16),
           ],
+
+          // Note: sezione dedicata prima dei servizi, sempre visibile così la
+          // matita di modifica rapida è raggiungibile anche a note vuote
+          _NoteCard(note: t.note, onModifica: _modificaNote),
+          const SizedBox(height: 16),
 
           // Servizi
           Row(
@@ -177,7 +216,6 @@ class _InfoCard extends StatelessWidget {
                   .map((id) => anag.byIdTipologia(id)?.nome ?? id)
                   .join(', ')),
             if (t.descrizione != null) _Row('Descrizione', t.descrizione!),
-            if (t.note != null) _Row('Note', t.note!),
           ],
         ),
       ),
@@ -200,6 +238,47 @@ class _Row extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// Card dedicata alle note del turno: separata dal riepilogo perché le note
+/// possono essere lunghe e schiacciate nella riga label/valore erano poco leggibili.
+/// La matita apre la modifica rapida delle sole note.
+class _NoteCard extends StatelessWidget {
+  final String? note;
+  final VoidCallback onModifica;
+  const _NoteCard({required this.note, required this.onModifica});
+
+  @override
+  Widget build(BuildContext context) {
+    final vuote = note == null || note!.isEmpty;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Note', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 18, color: Colors.white60),
+                  onPressed: onModifica,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Modifica note',
+                ),
+              ],
+            ),
+            const Divider(height: 8),
+            const SizedBox(height: 8),
+            vuote
+                ? const Text('Nessuna nota', style: TextStyle(fontSize: 13, color: Colors.white38, fontStyle: FontStyle.italic))
+                : Text(note!, style: const TextStyle(fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _EquipaggioCard extends StatelessWidget {
