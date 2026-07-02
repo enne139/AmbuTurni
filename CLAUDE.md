@@ -23,6 +23,23 @@
    solo a documentazione/CI, che non richiedono test manuale.
 5. **Verifica prima di chiudere:** `flutter analyze` deve uscire senza errori (`error`).
    Gli `info` warning minori sono accettabili.
+6. **Esegui i test prima del commit:** oltre ad `analyze`, lancia `flutter test`
+   (test unitari in `test/db/helpers_test.dart`) prima di ogni commit di codice —
+   `analyze` non intercetta le regressioni logiche nel CRUD. Se aggiungi o modifichi
+   funzioni in `helpers.dart`, aggiorna anche i test corrispondenti.
+7. **Modifiche allo schema DB = bump di versione + migrazione:** ogni cambiamento a
+   uno schema che un device potrebbe già aver aperto (anche solo durante il test di
+   un branch) richiede un bump della versione DB con una vera migrazione in
+   `_onUpgrade`, mai un edit in-place dello schema esistente (lezione v4→v5, vedi
+   Decisioni tecniche). Le nuove tabelle vanno aggiunte anche a `_backupTables` in
+   `backup.dart`, valutando la compatibilità del backup JSON con l'app RN.
+8. **Testa su Android reale le modifiche a DB/piattaforma:** per modifiche che
+   toccano il DB, plugin nativi o comportamenti di piattaforma, verifica su un
+   telefono reale via adb — il bug del PRAGMA WAL era invisibile su Windows/desktop
+   e si manifestava solo su Android reale.
+9. **Processo di release:** bump della versione in `pubspec.yaml` (`X.Y.Z+N`,
+   incrementando entrambe le parti), commit su `main`, poi tag `vX.Y.Z`: il push
+   del tag fa pubblicare al workflow Gitea l'APK come artifact e come Release.
 
 ---
 
