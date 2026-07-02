@@ -161,6 +161,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 
 ## Decisioni tecniche rilevanti
 
+- **`android:allowBackup="false"` nel manifest**: il default Android (true) include
+  il DB SQLite — nomi di persone e turni, dati personali di terzi — nel backup
+  automatico su Google Drive e nel trasferimento device-to-device. Disattivato:
+  i dati restano solo sul device e il trasferimento si fa con l'export/import
+  JSON dell'app, che è esplicito e sotto controllo dell'utente.
 - **sqflite_common_ffi**: aggiunto per Windows; su Android è un no-op ma mantiene
   un codice identico su tutte le piattaforme.
 - **ConflictAlgorithm.replace** negli insert: upsert idiomatico di sqflite; equivale a
