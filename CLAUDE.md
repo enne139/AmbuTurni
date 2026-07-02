@@ -196,6 +196,20 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   PNG renderizzati da SVG con `sharp` (Node, via npx in una cartella temporanea) a
   1024×1024: gli strumenti nativi tipici (ImageMagick, Inkscape, cairosvg) non erano
   disponibili/installabili senza frizioni su questa macchina.
+- **Cache Android SDK + Gradle e build arm64-only in `build-android.yml`**: il
+  runner (`android`) è un pod ARC effimero — disco pulito a ogni job, quindi
+  ogni run riscaricava da zero ~150MB di cmdline-tools e ripopolava le cache
+  Gradle. Aggiunte due `actions/cache@v4` (una su `~/android-sdk` chiave fissa
+  sulle versioni platform/build-tools, una su `~/.gradle/caches` +
+  `~/.gradle/wrapper` chiave sull'hash di `gradle-wrapper.properties`) prima
+  dei rispettivi step, con lo step di installazione SDK reso idempotente
+  (`if [ ! -d "$TOOLS" ]`) per non reinstallare quando la cache è già calda.
+  In più `flutter build apk --release --target-platform android-arm64` invece
+  del fat APK multi-ABI di default: dimezza il tempo di compilazione nativa,
+  tradeoff accettato esplicitamente (APK non installa su emulatori x86/device
+  32-bit, irrilevante per l'uso reale via Obtainium su telefoni recenti). Se
+  l'istanza Gitea non ha un cache backend configurato, `actions/cache` fa
+  cache-miss silenzioso senza rompere la build.
 - **Rinominata l'app in "AmbuTurni"** (branch `feature/app-icon`, insieme all'icona):
   nome visibile (`android:label`, `MaterialApp.title`, titolo finestra/metadata
   Windows) **e** identificatori interni, su richiesta esplicita di rinominare

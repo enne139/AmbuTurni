@@ -4,6 +4,14 @@
 #
 # Requisiti runner: label `android`, Linux x86_64, wget/unzip/curl,
 # JDK 23 preinstallato o scaricabile, accesso a Internet, >= 8 GB RAM.
+# Runner ARC (pod effimero, disco pulito a ogni job): SDK Android e cache
+# Gradle sono affidate ad actions/cache per non ripartire da zero ogni run
+# (richiede un cache backend configurato sull'istanza Gitea; se assente,
+# l'action fa semplicemente cache-miss senza rompere la build).
+#
+# APK compilato solo per arm64 (--target-platform android-arm64): dimezza
+# il tempo di build nativo rispetto al fat APK multi-ABI, ma non installa
+# su emulatori x86 o device 32-bit/molto vecchi.
 #
 # Output: APK caricato come artifact della run. Sui push di tag, l'APK viene
 # ANCHE pubblicato come Release su Gitea (allegato al tag), con l'action
@@ -39,17 +47,29 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      - name: Cache Android SDK
+        # Runner ARC: pod effimero, disco pulito a ogni job. Senza questa cache
+        # ogni run riscarica ~150MB di cmdline-tools e reinstalla le stesse
+        # platform/build-tools. Chiave sulle versioni cosi' un cambio di
+        # platform/build-tools invalida la cache invece di usarne una stantia.
+        uses: actions/cache@v4
+        with:
+          path: ~/android-sdk
+          key: android-sdk-platform34-buildtools34.0.0
+
       - name: Installa Android SDK
         run: |
           SDK=$HOME/android-sdk
           TOOLS=$SDK/cmdline-tools/latest/bin
-          mkdir -p $SDK/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
-               -O /tmp/cmdtools.zip
-          unzip -q /tmp/cmdtools.zip -d $SDK/cmdline-tools
-          mv $SDK/cmdline-tools/cmdline-tools $SDK/cmdline-tools/latest
-          yes | $TOOLS/sdkmanager --licenses > /dev/null 2>&1 || true
-          $TOOLS/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          if [ ! -d "$TOOLS" ]; then
+            mkdir -p $SDK/cmdline-tools
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+                 -O /tmp/cmdtools.zip
+            unzip -q /tmp/cmdtools.zip -d $SDK/cmdline-tools
+            mv $SDK/cmdline-tools/cmdline-tools $SDK/cmdline-tools/latest
+            yes | $TOOLS/sdkmanager --licenses > /dev/null 2>&1 || true
+            $TOOLS/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          fi
           echo "ANDROID_HOME=$SDK"     >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$SDK" >> $GITHUB_ENV
           echo "$TOOLS"                >> $GITHUB_PATH
@@ -61,11 +81,27 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Cache Gradle
+        # Idem: ~/.gradle/caches contiene i .jar di Gradle/AGP/Kotlin scaricati
+        # a ogni build (decine di MB) che su un pod effimero altrimenti si
+        # riscaricano ogni volta. Chiave sul lockfile del wrapper cosi' un
+        # bump di versione Gradle invalida la cache automaticamente.
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+
       - name: Installa dipendenze Dart
         run: flutter pub get
 
       - name: Build APK release
-        run: flutter build apk --release
+        # target-platform limitato ad arm64 (praticamente tutti i device
+        # recenti): evita di compilare anche per armeabi-v7a/x86_64, il
+        # grosso del tempo di build nativo. Tradeoff esplicito: l'APK non
+        # installa su emulatori x86 o device molto vecchi/32-bit.
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Pubblica APK come artifact
         uses: actions/upload-artifact@v3
