@@ -228,7 +228,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   un tag immagine (3.44.4 locale -> 3.44.0 in CI, differenza accettabile). Se il
   runner ignorasse `container:` (label in modalità host) la build fallisce con
   "flutter: command not found": in quel caso l'immagine va messa come default
-  del runner. Restano due `actions/cache@v4` (Gradle su hash di
+  del runner. L'immagine non include Node.js, che act_runner richiede DENTRO il
+  container per eseguire le action JavaScript (checkout/cache/upload-artifact/
+  release): il primo step del job lo installa dal tarball ufficiale (~30MB,
+  pochi secondi) — senza, il job muore al checkout con "node: executable file
+  not found in $PATH". Restano due `actions/cache@v4` (Gradle su hash di
   `gradle-wrapper.properties`, `~/.pub-cache` su hash di `pubspec.yaml` perché
   `pubspec.lock` non è versionato) — utili solo se l'istanza Gitea ha un cache
   backend, altrimenti cache-miss silenzioso senza rompere la build. In più
