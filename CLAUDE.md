@@ -239,7 +239,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `flutter build apk --release --target-platform android-arm64` invece del fat
   APK multi-ABI di default: dimezza il tempo di compilazione nativa, tradeoff
   accettato esplicitamente (APK non installa su emulatori x86/device 32-bit,
-  irrilevante per l'uso reale via Obtainium su telefoni recenti).
+  irrilevante per l'uso reale via Obtainium su telefoni recenti). Supply chain:
+  il tarball di Node è verificato con lo SHA256 di `SHASUMS256.txt` (il job
+  fallisce se il download non corrisponde) e le action sono pinnate per commit
+  SHA con la versione nel commento — un tag può essere spostato su codice
+  diverso, lo SHA no; aggiornare SHA e commento insieme nei bump.
 - **Rinominata l'app in "AmbuTurni"** (branch `feature/app-icon`, insieme all'icona):
   nome visibile (`android:label`, `MaterialApp.title`, titolo finestra/metadata
   Windows) **e** identificatori interni, su richiesta esplicita di rinominare
