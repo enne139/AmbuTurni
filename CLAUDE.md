@@ -75,8 +75,10 @@ lib/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
     │   ├── tools_screen.dart          elenco strumenti extra (per ora solo Materiali usati)
-    │   ├── materiali_usati_screen.dart lista utilizzi attivi + swipe elimina + ripristina (singolo/tutto)
-    │   └── materiale_usato_form.dart  form di sola creazione (materiale, quantità, data, note)
+    │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
+    │   │                               swipe elimina, ripristina (singolo/tutto)
+    │   ├── materiale_usato_form.dart  form di sola creazione (materiale, quantità+unità, posizione, note)
+    │   └── materiali_screen.dart      gestione catalogo materiali: rinomina/elimina
     └── impostazioni/
         ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
         └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
@@ -175,10 +177,17 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   risultati — e `PRAGMA journal_mode = WAL` restituisce una riga col nuovo modo,
   quindi va lanciato con `rawQuery()`. Su sqflite_common_ffi (desktop) il problema
   non si presentava, per questo era passato inosservato in test/uso su Windows.
-- **`quantita` TEXT invece di REAL in `materiali_usati`**: le unità di misura dei
-  materiali in ambulanza sono eterogenee ("2 flaconi", "500ml", "1 confezione");
-  un campo numerico puro avrebbe perso quell'informazione. Il campo è testo libero,
-  non parsato/sommato: la schermata mostra solo la stringa così com'è.
+- **`quantita` INTEGER + `unita` TEXT separati in `materiali_usati`** (rivisto dopo il
+  primo giro d'uso): inizialmente `quantita` era testo libero unico per gestire unità
+  di misura eterogenee ("2 flaconi", "500ml"), ma non permetteva pulsanti +/- per la
+  variazione rapida. Ora `quantita` è un intero (>= 1, clampato in UI) e `unita` è
+  testo libero opzionale mostrato accanto (`MaterialeUsato.quantitaLabel`); la
+  colonna `data` è stata rimossa (non serve all'uso reale, si ordina per `created_at`).
+  Essendo la versione DB 4 non ancora rilasciata, lo schema è stato corretto in-place
+  invece di aggiungere una versione 5.
+- **`posizione` con CHECK ('AMBULANZA','BOMBOLINO','ZAINO')**: stesso pattern di
+  `codiciChiamata`/`codiciUscita` in `models.dart` (`posizioniMateriale` + ChoiceChip
+  in `materiale_usato_form.dart`) — valori fissi, non un catalogo editabile.
 - **Ripristino via flag, non DELETE**: `segnaMaterialeRipristinato` /
   `segnaTuttiMaterialiRipristinati` impostano `ripristinato = 1` invece di cancellare
   la riga. `getMaterialiUsati(soloAttivi: true)` (default) filtra `ripristinato = 0`
@@ -247,12 +256,17 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `helpers.dart`.
 - ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 4): 5° tab
   "Tools" con l'elenco degli strumenti extra dell'app. "Materiali usati" permette
-  di segnare un materiale (dal catalogo `materiali`, con creazione inline) e la
-  quantità (testo libero) usati durante un turno, da ripristinare in seguito.
+  di segnare un materiale (dal catalogo `materiali`, con creazione inline), la
+  quantità (intera, con +/- sia nel form che direttamente in lista per il ritocco
+  rapido) + unità di misura opzionale (testo libero), la posizione
+  (Ambulanza/Bombolino/Zaino) e note, usati durante un turno da ripristinare.
+  Niente campo data (si ordina per `created_at`, non richiesto dal flusso reale).
   La lista mostra solo gli utilizzi attivi (non ripristinati), con la quantità in
   evidenza in un badge; check singolo o pulsante "Ripristina tutto" in AppBar per
   segnarli ripristinati (soft, via flag — non cancellano la riga); swipe per
-  eliminare una riga inserita per errore.
+  eliminare una riga inserita per errore. Icona "Gestisci materiali" in AppBar apre
+  `MaterialiScreen` per rinominare/eliminare voci del catalogo (l'eliminazione fallisce
+  con un messaggio se il materiale è ancora usato in qualche riga, foreign key).
 
 ## TODO
 

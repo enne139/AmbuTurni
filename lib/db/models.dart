@@ -479,15 +479,19 @@ class Materiale {
       };
 }
 
-/// Un utilizzo di materiale da ripristinare. `quantita` è testo libero (non
-/// un numero puro) perché in ambulanza le unità di misura sono eterogenee
-/// (es. "2 flaconi", "500ml", "1 confezione") e forzare un campo numerico
-/// perderebbe quell'informazione.
+// Posizioni valide per un utilizzo di materiale (dove si trovava/va ripristinato).
+const List<String> posizioniMateriale = ['AMBULANZA', 'BOMBOLINO', 'ZAINO'];
+
+/// Un utilizzo di materiale da ripristinare. `quantita` è numerica (incrementabile
+/// con i pulsanti +/- in lista) mentre `unita` è testo libero separato, perché in
+/// ambulanza le unità di misura sono eterogenee (es. "flaconi", "ml", "confezioni")
+/// e un unico campo numerico non le rappresenterebbe.
 class MaterialeUsato {
   final String id;
   final String materialeId;
-  final String quantita;
-  final String data;
+  final int quantita;
+  final String? unita;
+  final String? posizione;
   final String? note;
   final bool ripristinato;
   final String? createdAt;
@@ -500,8 +504,9 @@ class MaterialeUsato {
   const MaterialeUsato({
     required this.id,
     required this.materialeId,
-    required this.quantita,
-    required this.data,
+    this.quantita = 1,
+    this.unita,
+    this.posizione,
     this.note,
     this.ripristinato = false,
     this.createdAt,
@@ -510,11 +515,15 @@ class MaterialeUsato {
     this.materialeNome,
   });
 
+  /// Etichetta quantità + unità per la visualizzazione (es. "3 flaconi", "500 ml", "2").
+  String get quantitaLabel => unita != null && unita!.isNotEmpty ? '$quantita $unita' : '$quantita';
+
   factory MaterialeUsato.fromMap(Map<String, dynamic> m) => MaterialeUsato(
         id: m['id'] as String,
         materialeId: m['materiale_id'] as String,
-        quantita: m['quantita'] as String,
-        data: m['data'] as String,
+        quantita: (m['quantita'] as num?)?.toInt() ?? 1,
+        unita: m['unita'] as String?,
+        posizione: m['posizione'] as String?,
         note: m['note'] as String?,
         ripristinato: ((m['ripristinato'] as int?) ?? 0) == 1,
         createdAt: m['created_at'] as String?,
@@ -527,13 +536,28 @@ class MaterialeUsato {
         'id': id,
         'materiale_id': materialeId,
         'quantita': quantita,
-        'data': data,
+        'unita': unita,
+        'posizione': posizione,
         'note': note,
         'ripristinato': ripristinato ? 1 : 0,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
       };
+
+  MaterialeUsato copyWith({int? quantita}) => MaterialeUsato(
+        id: id,
+        materialeId: materialeId,
+        quantita: quantita ?? this.quantita,
+        unita: unita,
+        posizione: posizione,
+        note: note,
+        ripristinato: ripristinato,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        isSynced: isSynced,
+        materialeNome: materialeNome,
+      );
 }
 
 class Assistenza {

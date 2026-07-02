@@ -3,6 +3,7 @@ import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../utils/theme.dart';
 import 'materiale_usato_form.dart';
+import 'materiali_screen.dart';
 
 /// Lista dei materiali usati non ancora ripristinati. Il tocco sul check
 /// segna la riga come ripristinata (sparisce dalla lista, resta in storico
@@ -34,7 +35,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Segna come ripristinato'),
-        content: Text('"${mu.materialeNome ?? '—'}" (${mu.quantita}) è stato ripristinato?'),
+        content: Text('"${mu.materialeNome ?? '—'}" (${mu.quantitaLabel}) è stato ripristinato?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sì, ripristinato')),
@@ -65,12 +66,31 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
     }
   }
 
+  /// Variazione rapida della quantità (+/- in lista): aggiorna prima lo stato
+  /// locale per una risposta immediata, poi persiste sul DB in background.
+  Future<void> _variaQuantita(MaterialeUsato mu, int delta) async {
+    final nuova = mu.quantita + delta;
+    if (nuova < 1) return;
+    final idx = _lista.indexWhere((m) => m.id == mu.id);
+    if (idx == -1) return;
+    setState(() => _lista[idx] = mu.copyWith(quantita: nuova));
+    await aggiornaQuantitaMaterialeUsato(mu.id, nuova);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Materiali usati'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_note),
+            tooltip: 'Gestisci materiali',
+            onPressed: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const MaterialiScreen()));
+              if (mounted) _carica();
+            },
+          ),
           if (_lista.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.done_all),
@@ -106,7 +126,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                         context: context,
                         builder: (dctx) => AlertDialog(
                           title: const Text('Elimina riga'),
-                          content: Text('Eliminare "${mu.materialeNome ?? '—'}" (${mu.quantita})?'),
+                          content: Text('Eliminare "${mu.materialeNome ?? '—'}" (${mu.quantitaLabel})?'),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Annulla')),
                             TextButton(
@@ -133,29 +153,45 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                       child: Card(
                         margin: const EdgeInsets.only(bottom: 10),
                         child: Padding(
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                           child: Row(children: [
-                            // Quantità in evidenza, stesso stile del badge "#numero"
-                            // usato nelle card di turni/assistenze.
+                            // Stepper +/- con la quantità in evidenza al centro: stesso
+                            // stile del badge "#numero" usato nelle card di turni/assistenze,
+                            // ma qui interattivo per un ritocco rapido durante il turno.
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, size: 20),
+                              color: Colors.white38,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: mu.quantita > 1 ? () => _variaQuantita(mu, -1) : null,
+                            ),
                             Container(
-                              constraints: const BoxConstraints(minWidth: 56),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              constraints: const BoxConstraints(minWidth: 48),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                               decoration: BoxDecoration(
                                 color: kPrimary.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: kPrimary.withOpacity(0.4)),
                               ),
                               alignment: Alignment.center,
-                              child: Text(mu.quantita,
+                              child: Text(mu.quantitaLabel,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 17)),
+                                  style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
                             ),
-                            const SizedBox(width: 12),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline, size: 20),
+                              color: Colors.white38,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _variaQuantita(mu, 1),
+                            ),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 Text(mu.materialeNome ?? '—', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                if (mu.note != null)
-                                  Text(mu.note!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                if (mu.posizione != null || mu.note != null)
+                                  Text(
+                                    [if (mu.posizione != null) mu.posizione!, if (mu.note != null) mu.note!].join(' · '),
+                                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                  ),
                               ]),
                             ),
                             IconButton(

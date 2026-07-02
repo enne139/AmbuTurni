@@ -129,8 +129,9 @@ CREATE TABLE IF NOT EXISTS materiali (
 CREATE TABLE IF NOT EXISTS materiali_usati (
   id TEXT PRIMARY KEY,
   materiale_id TEXT NOT NULL REFERENCES materiali(id),
-  quantita TEXT NOT NULL,
-  data TEXT NOT NULL,
+  quantita INTEGER NOT NULL DEFAULT 1,
+  unita TEXT,
+  posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
   note TEXT,
   ripristinato INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
@@ -225,8 +226,9 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
         CREATE TABLE IF NOT EXISTS materiali_usati (
           id TEXT PRIMARY KEY,
           materiale_id TEXT NOT NULL REFERENCES materiali(id),
-          quantita TEXT NOT NULL,
-          data TEXT NOT NULL,
+          quantita INTEGER NOT NULL DEFAULT 1,
+          unita TEXT,
+          posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
           note TEXT,
           ripristinato INTEGER DEFAULT 0,
           created_at TEXT DEFAULT (datetime('now')),

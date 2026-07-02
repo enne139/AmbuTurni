@@ -551,6 +551,14 @@ Future<void> saveMateriale(String nome, {String? id}) async {
   }
 }
 
+/// Elimina un materiale dal catalogo. Lancia un'eccezione SQLite se è ancora
+/// referenziato da una riga in materiali_usati (foreign_keys = ON, nessun
+/// ON DELETE): va gestita dalla UI mostrando che il materiale è in uso.
+Future<void> deleteMateriale(String id) async {
+  final db = await getDb();
+  await db.delete('materiali', where: 'id = ?', whereArgs: [id]);
+}
+
 /// Restituisce gli utilizzi di materiale, dal più recente. Se [soloAttivi] è
 /// true (default) esclude quelli già segnati come ripristinati — è la lista
 /// "da fare" mostrata nella schermata Tools.
@@ -562,9 +570,21 @@ Future<List<MaterialeUsato>> getMaterialiUsati({bool soloAttivi = true}) async {
     FROM materiali_usati mu
     LEFT JOIN materiali m ON m.id = mu.materiale_id
     $where
-    ORDER BY mu.data DESC, mu.created_at DESC
+    ORDER BY mu.created_at DESC
   ''');
   return rows.map(MaterialeUsato.fromMap).toList();
+}
+
+/// Aggiorna solo la quantità (pulsanti +/- nella lista) senza toccare gli
+/// altri campi. Il chiamante è responsabile di non scendere sotto 1.
+Future<void> aggiornaQuantitaMaterialeUsato(String id, int quantita) async {
+  final db = await getDb();
+  await db.update(
+    'materiali_usati',
+    {'quantita': quantita, 'updated_at': _now(), 'is_synced': 0},
+    where: 'id = ?',
+    whereArgs: [id],
+  );
 }
 
 Future<void> saveMaterialeUsato(MaterialeUsato materialeUsato) async {

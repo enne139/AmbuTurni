@@ -252,13 +252,16 @@ void main() {
       await saveMaterialeUsato(MaterialeUsato(
         id: newId(),
         materialeId: materiale.id,
-        quantita: '2 confezioni',
-        data: '2026-07-01',
+        quantita: 2,
+        unita: 'confezioni',
+        posizione: 'ZAINO',
       ));
       final lista = await getMaterialiUsati();
       final riga = lista.firstWhere((m) => m.materialeId == materiale.id);
       expect(riga.materialeNome, 'Garze sterili');
-      expect(riga.quantita, '2 confezioni');
+      expect(riga.quantita, 2);
+      expect(riga.quantitaLabel, '2 confezioni');
+      expect(riga.posizione, 'ZAINO');
       expect(riga.ripristinato, isFalse);
     });
 
@@ -267,12 +270,7 @@ void main() {
       final materiale = (await getMateriali())
           .firstWhere((m) => m.nome == 'Flaconi soluzione fisiologica');
       final id = newId();
-      await saveMaterialeUsato(MaterialeUsato(
-        id: id,
-        materialeId: materiale.id,
-        quantita: '1',
-        data: '2026-07-01',
-      ));
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id));
       await segnaMaterialeRipristinato(id);
       final attivi = await getMaterialiUsati();
       expect(attivi.where((m) => m.id == id), isEmpty);
@@ -285,12 +283,7 @@ void main() {
       final materiale =
           (await getMateriali()).firstWhere((m) => m.nome == 'Cerotti');
       final id = newId();
-      await saveMaterialeUsato(MaterialeUsato(
-        id: id,
-        materialeId: materiale.id,
-        quantita: '1 scatola',
-        data: '2026-07-01',
-      ));
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, quantita: 1));
       await deleteMaterialeUsato(id);
       final tutti = await getMaterialiUsati(soloAttivi: false);
       expect(tutti.where((m) => m.id == id), isEmpty);
@@ -302,13 +295,30 @@ void main() {
           (await getMateriali()).firstWhere((m) => m.nome == 'Siringhe');
       final id1 = newId();
       final id2 = newId();
-      await saveMaterialeUsato(MaterialeUsato(
-        id: id1, materialeId: materiale.id, quantita: '3', data: '2026-07-01'));
-      await saveMaterialeUsato(MaterialeUsato(
-        id: id2, materialeId: materiale.id, quantita: '5', data: '2026-07-01'));
+      await saveMaterialeUsato(MaterialeUsato(id: id1, materialeId: materiale.id, quantita: 3));
+      await saveMaterialeUsato(MaterialeUsato(id: id2, materialeId: materiale.id, quantita: 5));
       await segnaTuttiMaterialiRipristinati();
       final attivi = await getMaterialiUsati();
       expect(attivi.where((m) => m.id == id1 || m.id == id2), isEmpty);
+    });
+
+    test('aggiornaQuantitaMaterialeUsato modifica solo la quantità', () async {
+      await saveMateriale('Bende');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Bende');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, quantita: 1));
+      await aggiornaQuantitaMaterialeUsato(id, 4);
+      final riga = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(riga.quantita, 4);
+    });
+
+    test('deleteMateriale in uso lancia un errore (foreign key)', () async {
+      await saveMateriale('Collari cervicali');
+      final materiale = (await getMateriali())
+          .firstWhere((m) => m.nome == 'Collari cervicali');
+      await saveMaterialeUsato(MaterialeUsato(id: newId(), materialeId: materiale.id));
+      expect(() => deleteMateriale(materiale.id), throwsA(anything));
     });
   });
 }
