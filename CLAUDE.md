@@ -172,8 +172,15 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   in tempo reale e include una voce fissa "Aggiungi..." in fondo che apre un dialog di
   creazione inline. L'aggiornamento del campo dopo la creazione avviene in `didUpdateWidget`
   via `addPostFrameCallback` per evitare modifiche al controller durante il build.
-- **PRAGMA foreign_keys = OFF** durante l'import backup: permette di svuotare tutte
-  le tabelle nell'ordine corretto senza violare i vincoli FK durante il delete.
+- **PRAGMA foreign_keys = OFF durante l'import backup, FUORI dalla transazione**:
+  per specifica SQLite il PRAGMA è un no-op silenzioso dentro una transazione — la
+  prima versione lo eseguiva dentro `db.transaction` e le FK restavano attive (il
+  codice funzionava solo perché `_deleteOrder`/`_backupTables` sono già ordinate
+  FK-safe). Ora è eseguito prima della transazione e ripristinato a ON in un
+  `finally`. Le righe che comunque falliscono l'insert (colonne di un'altra
+  versione dello schema, vincoli UNIQUE/CHECK) non vengono più scartate in
+  silenzio: sono contate, loggate con `debugPrint` e segnalate nel messaggio
+  di esito dell'import.
 - **num_servizi escluso dall'UPDATE in saveTurno**: il campo è gestito esclusivamente
   da `_aggiornaNumServizi()` (chiamato da `saveServizio`/`deleteServizio`); includerlo
   nel UPDATE azzererebbe il contatore ogni volta che si modifica un turno.
