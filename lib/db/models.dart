@@ -485,7 +485,8 @@ const List<String> posizioniMateriale = ['AMBULANZA', 'BOMBOLINO', 'ZAINO'];
 /// Un utilizzo di materiale da ripristinare. `quantita` è numerica (incrementabile
 /// con i pulsanti +/- in lista) mentre `unita` è testo libero separato, perché in
 /// ambulanza le unità di misura sono eterogenee (es. "flaconi", "ml", "confezioni")
-/// e un unico campo numerico non le rappresenterebbe.
+/// e un unico campo numerico non le rappresenterebbe. Nessuno storico: una riga
+/// esiste solo finché non viene ripristinata o eliminata (vedi helpers.dart).
 class MaterialeUsato {
   final String id;
   final String materialeId;
@@ -493,7 +494,6 @@ class MaterialeUsato {
   final String? unita;
   final String? posizione;
   final String? note;
-  final bool ripristinato;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -508,7 +508,6 @@ class MaterialeUsato {
     this.unita,
     this.posizione,
     this.note,
-    this.ripristinato = false,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -525,7 +524,6 @@ class MaterialeUsato {
         unita: m['unita'] as String?,
         posizione: m['posizione'] as String?,
         note: m['note'] as String?,
-        ripristinato: ((m['ripristinato'] as int?) ?? 0) == 1,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -539,7 +537,6 @@ class MaterialeUsato {
         'unita': unita,
         'posizione': posizione,
         'note': note,
-        'ripristinato': ripristinato ? 1 : 0,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
@@ -552,7 +549,6 @@ class MaterialeUsato {
         unita: unita,
         posizione: posizione,
         note: note,
-        ripristinato: ripristinato,
         createdAt: createdAt,
         updatedAt: updatedAt,
         isSynced: isSynced,

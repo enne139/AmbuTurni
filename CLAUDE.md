@@ -201,11 +201,20 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - **`posizione` con CHECK ('AMBULANZA','BOMBOLINO','ZAINO')**: stesso pattern di
   `codiciChiamata`/`codiciUscita` in `models.dart` (`posizioniMateriale` + ChoiceChip
   in `materiale_usato_form.dart`) — valori fissi, non un catalogo editabile.
-- **Ripristino via flag, non DELETE**: `segnaMaterialeRipristinato` /
-  `segnaTuttiMaterialiRipristinati` impostano `ripristinato = 1` invece di cancellare
-  la riga. `getMaterialiUsati(soloAttivi: true)` (default) filtra `ripristinato = 0`
-  per la lista attiva; lo storico resta in tabella per un'eventuale vista futura,
-  ed è reversibile in caso di tocco per errore (a differenza di una DELETE).
+- **Nessuno storico dei materiali ripristinati (v5 -> v6, su richiesta esplicita)**:
+  la v5 teneva le righe ripristinate in tabella con un flag `ripristinato` (soft
+  delete). Rimosso: `segnaMaterialeRipristinato`/`segnaTuttiMaterialiRipristinati`
+  ora fanno una DELETE vera (la prima delega a `deleteMaterialeUsato`); la colonna
+  `ripristinato` è stata tolta dallo schema e `getMaterialiUsati()` non ha più il
+  parametro `soloAttivi` — ogni riga in tabella è per definizione attiva. La
+  migrazione v6 ricostruisce `materiali_usati` (necessario per cambiare anche la
+  foreign key, vedi punto sotto) scartando le righe già `ripristinato = 1`: lo
+  storico pregresso viene proprio eliminato, non solo nascosto in UI.
+- **`materiale_id` con `ON DELETE CASCADE` (v6)**: prima cancellare un materiale dal
+  catalogo falliva con un errore di foreign key se aveva ancora utilizzi collegati
+  (comportamento non voluto: bloccava una cancellazione legittima). Ora l'eliminazione
+  di un materiale elimina a cascata anche i suoi utilizzi — coerente con "nessuno
+  storico": la UI (`MaterialiScreen._elimina`) avvisa nel dialog di conferma.
 - **Materiali come catalogo con creazione inline**: `MaterialePicker` in
   `anag_pickers.dart` segue lo stesso pattern di `OspedalePicker` (RawAutocomplete +
   "Aggiungi..." nel suffixIcon) invece di testo libero, per evitare doppioni
@@ -267,19 +276,18 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   campo di ricerca che filtra su descrizione/note del turno e descrizione dei servizi
   collegati (combinabile col filtro associazione). `getTurni(ricerca: ...)` in
   `helpers.dart`.
-- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 5): 5° tab
+- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 6): 5° tab
   "Tools" con l'elenco degli strumenti extra dell'app. "Materiali usati" permette
   di segnare un materiale (dal catalogo `materiali`, con creazione inline), la
   quantità (intera, con +/- sia nel form che direttamente in lista per il ritocco
   rapido) + unità di misura opzionale (testo libero), la posizione
   (Ambulanza/Bombolino/Zaino) e note, usati durante un turno da ripristinare.
-  Niente campo data (si ordina per `created_at`, non richiesto dal flusso reale).
-  La lista mostra solo gli utilizzi attivi (non ripristinati), con la quantità in
-  evidenza in un badge; check singolo o pulsante "Ripristina tutto" in AppBar per
-  segnarli ripristinati (soft, via flag — non cancellano la riga); swipe per
-  eliminare una riga inserita per errore. Icona "Gestisci materiali" in AppBar apre
-  `MaterialiScreen` per rinominare/eliminare voci del catalogo (l'eliminazione fallisce
-  con un messaggio se il materiale è ancora usato in qualche riga, foreign key).
+  Niente campo data (si ordina per `created_at`, non richiesto dal flusso reale) e
+  nessuno storico: check singolo o pulsante "Ripristina tutto" in AppBar, oppure
+  swipe per eliminare una riga per errore, cancellano la riga per sempre (nessuna
+  vista storico prevista). Icona "Gestisci materiali" in AppBar apre `MaterialiScreen`
+  per rinominare/eliminare voci del catalogo; eliminare un materiale elimina anche
+  i suoi utilizzi collegati (`ON DELETE CASCADE`, con avviso nel dialog di conferma).
 
 ## TODO
 

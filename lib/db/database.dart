@@ -128,18 +128,15 @@ CREATE TABLE IF NOT EXISTS materiali (
 
 CREATE TABLE IF NOT EXISTS materiali_usati (
   id TEXT PRIMARY KEY,
-  materiale_id TEXT NOT NULL REFERENCES materiali(id),
+  materiale_id TEXT NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
   quantita INTEGER NOT NULL DEFAULT 1,
   unita TEXT,
   posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
   note TEXT,
-  ripristinato INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
 );
-
-CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato);
 
 CREATE TABLE IF NOT EXISTS sync_meta (
   key TEXT PRIMARY KEY,
@@ -186,7 +183,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 5,
+    version: 6,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -286,6 +283,42 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
           'updated_at': riga['updated_at'],
           'is_synced': 0,
         });
+      }
+    }
+  }
+  if (oldVersion < 6) {
+    // Su richiesta esplicita: niente più storico dei materiali ripristinati
+    // (prima restavano in tabella con ripristinato = 1) e la foreign key su
+    // materiali_usati diventa ON DELETE CASCADE, per poter eliminare un
+    // materiale dal catalogo anche se ha ancora utilizzi collegati (prima
+    // SQLite lo impediva). Entrambe richiedono di ricreare la tabella: SQLite
+    // non supporta ALTER per rimuovere una colonna vincolata da un CHECK
+    // impliclito né per cambiare i vincoli di una foreign key esistente.
+    // Le righe già ripristinate (ripristinato = 1) vengono scartate qui,
+    // proprio per non portarsi dietro lo storico che non si vuole più tenere;
+    // solo quelle ancora attive vengono preservate nella tabella ricostruita.
+    final cols = await db.rawQuery("PRAGMA table_info(materiali_usati)");
+    final haColonnaRipristinato = cols.any((c) => c['name'] == 'ripristinato');
+    if (haColonnaRipristinato) {
+      final righeAttive =
+          await db.query('materiali_usati', where: 'ripristinato = 0');
+      await db.execute('DROP TABLE materiali_usati');
+      await db.execute('''
+        CREATE TABLE materiali_usati (
+          id TEXT PRIMARY KEY,
+          materiale_id TEXT NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
+          quantita INTEGER NOT NULL DEFAULT 1,
+          unita TEXT,
+          posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+          note TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+      for (final riga in righeAttive) {
+        final nuovaRiga = Map<String, dynamic>.from(riga)..remove('ripristinato');
+        await db.insert('materiali_usati', nuovaRiga);
       }
     }
   }

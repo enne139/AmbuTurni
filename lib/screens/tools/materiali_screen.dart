@@ -59,7 +59,7 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Elimina materiale'),
-        content: Text('Eliminare "${m.nome}" dal catalogo?'),
+        content: Text('Eliminare "${m.nome}" dal catalogo? Vengono eliminati anche gli eventuali utilizzi registrati per questo materiale.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina', style: TextStyle(color: kPrimary))),
@@ -67,16 +67,8 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    try {
-      await deleteMateriale(m.id);
-      if (mounted) _carica();
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossibile eliminare: il materiale è usato in almeno un utilizzo registrato')),
-        );
-      }
-    }
+    await deleteMateriale(m.id);
+    if (mounted) _carica();
   }
 
   @override

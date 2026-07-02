@@ -551,25 +551,22 @@ Future<void> saveMateriale(String nome, {String? id}) async {
   }
 }
 
-/// Elimina un materiale dal catalogo. Lancia un'eccezione SQLite se è ancora
-/// referenziato da una riga in materiali_usati (foreign_keys = ON, nessun
-/// ON DELETE): va gestita dalla UI mostrando che il materiale è in uso.
+/// Elimina un materiale dal catalogo. ON DELETE CASCADE su materiali_usati.materiale_id
+/// elimina automaticamente anche gli eventuali utilizzi collegati (coerente con
+/// "nessuno storico": un materiale rimosso dal catalogo non lascia residui).
 Future<void> deleteMateriale(String id) async {
   final db = await getDb();
   await db.delete('materiali', where: 'id = ?', whereArgs: [id]);
 }
 
-/// Restituisce gli utilizzi di materiale, dal più recente. Se [soloAttivi] è
-/// true (default) esclude quelli già segnati come ripristinati — è la lista
-/// "da fare" mostrata nella schermata Tools.
-Future<List<MaterialeUsato>> getMaterialiUsati({bool soloAttivi = true}) async {
+/// Restituisce gli utilizzi di materiale attivi, dal più recente. Non esiste
+/// uno storico: una riga esiste solo finché non viene ripristinata o eliminata.
+Future<List<MaterialeUsato>> getMaterialiUsati() async {
   final db = await getDb();
-  final where = soloAttivi ? 'WHERE mu.ripristinato = 0' : '';
   final rows = await db.rawQuery('''
     SELECT mu.*, m.nome AS materiale_nome
     FROM materiali_usati mu
     LEFT JOIN materiali m ON m.id = mu.materiale_id
-    $where
     ORDER BY mu.created_at DESC
   ''');
   return rows.map(MaterialeUsato.fromMap).toList();
@@ -604,32 +601,20 @@ Future<void> saveMaterialeUsato(MaterialeUsato materialeUsato) async {
   }
 }
 
-/// Segna un utilizzo come ripristinato: sparisce dalla lista attiva senza
-/// perdere lo storico (flag, non DELETE — reversibile in caso di errore).
-Future<void> segnaMaterialeRipristinato(String id) async {
-  final db = await getDb();
-  await db.update(
-    'materiali_usati',
-    {'ripristinato': 1, 'updated_at': _now(), 'is_synced': 0},
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-}
+/// Segna un utilizzo come ripristinato: su richiesta esplicita non si tiene
+/// nessuno storico, quindi "ripristinato" equivale a eliminare la riga.
+Future<void> segnaMaterialeRipristinato(String id) => deleteMaterialeUsato(id);
 
 Future<void> deleteMaterialeUsato(String id) async {
   final db = await getDb();
   await db.delete('materiali_usati', where: 'id = ?', whereArgs: [id]);
 }
 
-/// Segna come ripristinati tutti gli utilizzi ancora attivi in un colpo solo
-/// (pulsante "Ripristina tutto" nella lista Tools).
+/// Segna come ripristinati tutti gli utilizzi in un colpo solo (pulsante
+/// "Ripristina tutto"): svuota la tabella, stessa logica di sopra.
 Future<void> segnaTuttiMaterialiRipristinati() async {
   final db = await getDb();
-  await db.update(
-    'materiali_usati',
-    {'ripristinato': 1, 'updated_at': _now(), 'is_synced': 0},
-    where: 'ripristinato = 0',
-  );
+  await db.delete('materiali_usati');
 }
 
 // ---------------------------------------------------------------------------

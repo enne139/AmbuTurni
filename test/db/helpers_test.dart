@@ -262,20 +262,17 @@ void main() {
       expect(riga.quantita, 2);
       expect(riga.quantitaLabel, '2 confezioni');
       expect(riga.posizione, 'ZAINO');
-      expect(riga.ripristinato, isFalse);
     });
 
-    test('segnaMaterialeRipristinato la rimuove dalla lista attiva', () async {
+    test('segnaMaterialeRipristinato elimina la riga (nessuno storico)', () async {
       await saveMateriale('Flaconi soluzione fisiologica');
       final materiale = (await getMateriali())
           .firstWhere((m) => m.nome == 'Flaconi soluzione fisiologica');
       final id = newId();
       await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id));
       await segnaMaterialeRipristinato(id);
-      final attivi = await getMaterialiUsati();
-      expect(attivi.where((m) => m.id == id), isEmpty);
-      final tutti = await getMaterialiUsati(soloAttivi: false);
-      expect(tutti.firstWhere((m) => m.id == id).ripristinato, isTrue);
+      final tutti = await getMaterialiUsati();
+      expect(tutti.where((m) => m.id == id), isEmpty);
     });
 
     test('deleteMaterialeUsato rimuove la riga definitivamente', () async {
@@ -285,7 +282,7 @@ void main() {
       final id = newId();
       await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, quantita: 1));
       await deleteMaterialeUsato(id);
-      final tutti = await getMaterialiUsati(soloAttivi: false);
+      final tutti = await getMaterialiUsati();
       expect(tutti.where((m) => m.id == id), isEmpty);
     });
 
@@ -313,12 +310,15 @@ void main() {
       expect(riga.quantita, 4);
     });
 
-    test('deleteMateriale in uso lancia un errore (foreign key)', () async {
+    test('deleteMateriale in uso elimina anche gli utilizzi collegati (CASCADE)', () async {
       await saveMateriale('Collari cervicali');
       final materiale = (await getMateriali())
           .firstWhere((m) => m.nome == 'Collari cervicali');
-      await saveMaterialeUsato(MaterialeUsato(id: newId(), materialeId: materiale.id));
-      expect(() => deleteMateriale(materiale.id), throwsA(anything));
+      final idUsato = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: idUsato, materialeId: materiale.id));
+      await deleteMateriale(materiale.id);
+      expect((await getMateriali()).where((m) => m.id == materiale.id), isEmpty);
+      expect((await getMaterialiUsati()).where((m) => m.id == idUsato), isEmpty);
     });
   });
 }
