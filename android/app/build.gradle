@@ -23,6 +23,17 @@ if (flutterVersionName == null) {
     flutterVersionName = "1.0"
 }
 
+// Firma di release: legge il keystore da android/key.properties (mai committato,
+// vedi .gitignore). In CI il file viene generato dal workflow a partire dai
+// secret Gitea; in locale punta al keystore in %USERPROFILE%\keystores.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader("UTF-8") { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
 android {
     namespace = "com.maratuck.ambu_turni"
     compileSdk = flutter.compileSdkVersion
@@ -48,11 +59,26 @@ android {
         versionName = flutterVersionName
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            release {
+                keyAlias = keystoreProperties["keyAlias"]
+                keyPassword = keystoreProperties["keyPassword"]
+                storeFile = file(keystoreProperties["storeFile"])
+                storePassword = keystoreProperties["storePassword"]
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            // Keystore di release se key.properties esiste, altrimenti fallback
+            // sulla firma debug: una build di sviluppo su una macchina senza
+            // keystore deve continuare a funzionare (ma il suo APK non va
+            // distribuito: firma diversa = niente aggiornamenti in-place).
+            signingConfig = keystorePropertiesFile.exists()
+                    ? signingConfigs.release
+                    : signingConfigs.debug
         }
     }
 }

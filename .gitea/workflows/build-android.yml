@@ -89,6 +89,20 @@ jobs:
       - name: Installa dipendenze Dart
         run: flutter pub get
 
+      - name: Prepara keystore di release
+        # Ricostruisce il keystore dai secret e genera android/key.properties
+        # (gitignorato): build.gradle lo legge e firma l'APK con la chiave di
+        # release. Senza questo step la build ricadrebbe sulla firma debug,
+        # che cambia tra runner e rompe gli aggiornamenti via Obtainium.
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > /tmp/ambuturni-release.jks
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            /tmp/ambuturni-release.jks "$KEYSTORE_PASSWORD" ambuturni "$KEYSTORE_PASSWORD" \
+            > android/key.properties
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+
       - name: Build APK release
         # target-platform limitato ad arm64 (praticamente tutti i device
         # recenti): evita di compilare anche per armeabi-v7a/x86_64, il

@@ -313,6 +313,21 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - **Tools come 5° tab invece che sotto Impostazioni**: pensato per ospitare più
   strumenti in futuro (per ora solo Materiali usati); un tab dedicato scala meglio
   di una sezione dentro Impostazioni, che è già collassabile e affollata di CRUD.
+- **Keystore di release vero (risolve il TODO storico)**: keystore PKCS12 in
+  `%USERPROFILE%\keystores\ambuturni-release.jks` (alias `ambuturni`, password nel
+  password manager dell'utente — MAI nel repo), generato con `keytool` del JDK 23.
+  `build.gradle` legge `android/key.properties` (gitignorato dal template Flutter):
+  se il file esiste firma con la chiave di release, altrimenti fallback sulla firma
+  debug così una build di sviluppo su macchina senza keystore funziona comunque.
+  In CI il keystore arriva dai secret Gitea `KEYSTORE_B64` + `KEYSTORE_PASSWORD`
+  (aggiunti via API): lo step "Prepara keystore di release" in `build-android.yml`
+  lo decodifica in `/tmp` e genera `key.properties` al volo. Gli APK delle release
+  passate (v1.0.0, v1.1.0) sono stati ri-firmati con `apksigner` e ri-caricati
+  sulle stesse Release Gitea, così tutta la storia pubblicata ha la stessa firma e
+  qualunque versione installata si aggiorna alle successive. Costo una tantum
+  inevitabile: i device con l'app firmata debug devono disinstallare/reinstallare
+  (backup JSON export/import per i dati) — la firma di un'app installata non è
+  aggiornabile in-place by design.
 
 ---
 
@@ -390,13 +405,3 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 ## TODO
 
 - [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
-- [ ] Keystore di release vero al posto di quello di debug (`android/app/build.gradle`,
-  `signingConfig = signingConfigs.debug` nel blocco `release`, TODO originale mai
-  risolto). Rischio concreto: se il keystore di debug usato dal runner Gitea non è
-  stabile tra una run e l'altra, o si passa da una build locale a una CI, Android
-  rifiuta di installare l'aggiornamento (firma diversa da quella già installata) —
-  rompe gli aggiornamenti automatici via Obtainium, che dipende dal repo pubblico
-  su Gitea (repo pubblico + Release con APK allegato via `build-android.yml`,
-  già verificati funzionanti su `v1.0.0`). Serve generare un keystore `.jks`,
-  configurare `key.properties` + `build.gradle`, e aggiungere il keystore/password
-  come secret nella CI Gitea.
