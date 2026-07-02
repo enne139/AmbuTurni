@@ -290,11 +290,18 @@ Future<void> saveTurno(Turno turno) async {
   // INSERT OR REPLACE cancella la riga e la reinserisce, innescando ON DELETE CASCADE
   // sui servizi figli. Si distingue invece tra INSERT (nuovo) e UPDATE (esistente)
   // per non perdere i servizi associati al turno in modifica.
+  // associazione_id viene letto qui perché, se il turno viene spostato su
+  // un'altra associazione, anche quella di provenienza va rinumerata.
   final exists = await db.query('turni',
-      columns: ['id'], where: 'id = ?', whereArgs: [turno.id], limit: 1);
+      columns: ['id', 'associazione_id'],
+      where: 'id = ?',
+      whereArgs: [turno.id],
+      limit: 1);
+  String? vecchiaAssociazione;
   if (exists.isEmpty) {
     await db.insert('turni', map);
   } else {
+    vecchiaAssociazione = exists.first['associazione_id'] as String?;
     // 'id' escluso: includerlo innesca ON DELETE CASCADE sui servizi figli.
     // 'num_servizi' escluso: è gestito esclusivamente da _aggiornaNumServizi;
     // includerlo azzererebbe il contatore ogni volta che si modifica il turno.
@@ -306,6 +313,11 @@ Future<void> saveTurno(Turno turno) async {
   // La numerazione va ricalcolata dopo ogni salvataggio perché l'ordine
   // per data potrebbe essere cambiato (es. si modifica la data di un turno).
   await _ricalcolaNumerazioneTurni(db, turno.associazioneId);
+  // Se il turno ha cambiato associazione, quella vecchia resterebbe con un
+  // buco nella sequenza: va rinumerata anche lei.
+  if (vecchiaAssociazione != null && vecchiaAssociazione != turno.associazioneId) {
+    await _ricalcolaNumerazioneTurni(db, vecchiaAssociazione);
+  }
 }
 
 /// Elimina un turno (i servizi figli vengono eliminati via ON DELETE CASCADE).
@@ -324,6 +336,8 @@ Future<void> deleteTurno(String id) async {
 /// Ricalcola numero_progressivo per tutti i turni di un'associazione.
 /// Il turno più vecchio (data ASC) riceve il numero 1; in caso di data
 /// uguale si usa created_at come discriminante per stabilità.
+/// Batch atomico invece di N UPDATE sequenziali: il ricalcolo avviene a ogni
+/// save/delete e con liste lunghe i round-trip singoli si sentono.
 Future<void> _ricalcolaNumerazioneTurni(dynamic db, String? assocId) async {
   if (assocId == null) return;
   final rows = await db.query(
@@ -333,10 +347,12 @@ Future<void> _ricalcolaNumerazioneTurni(dynamic db, String? assocId) async {
     whereArgs: [assocId],
     orderBy: 'data ASC, created_at ASC',
   );
+  final batch = db.batch();
   for (int i = 0; i < rows.length; i++) {
-    await db.update('turni', {'numero_progressivo': i + 1},
+    batch.update('turni', {'numero_progressivo': i + 1},
         where: 'id = ?', whereArgs: [rows[i]['id']]);
   }
+  await batch.commit(noResult: true);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,16 +484,27 @@ Future<void> saveAssistenza(Assistenza assistenza) async {
   final map = assistenza.toMap()
     ..['updated_at'] = now
     ..['is_synced'] = 0;
+  // associazione_id letto per rinumerare anche l'associazione di provenienza
+  // in caso di spostamento (stessa logica di saveTurno).
   final exists = await db.query('assistenze',
-      columns: ['id'], where: 'id = ?', whereArgs: [assistenza.id], limit: 1);
+      columns: ['id', 'associazione_id'],
+      where: 'id = ?',
+      whereArgs: [assistenza.id],
+      limit: 1);
+  String? vecchiaAssociazione;
   if (exists.isEmpty) {
     await db.insert('assistenze', map);
   } else {
+    vecchiaAssociazione = exists.first['associazione_id'] as String?;
     final updateMap = Map<String, dynamic>.from(map)..remove('id');
     await db.update('assistenze', updateMap,
         where: 'id = ?', whereArgs: [assistenza.id]);
   }
   await _ricalcolaNumerazioneAssistenze(db, assistenza.associazioneId);
+  if (vecchiaAssociazione != null &&
+      vecchiaAssociazione != assistenza.associazioneId) {
+    await _ricalcolaNumerazioneAssistenze(db, vecchiaAssociazione);
+  }
 }
 
 Future<void> deleteAssistenza(String id) async {
@@ -501,10 +528,12 @@ Future<void> _ricalcolaNumerazioneAssistenze(
     whereArgs: [assocId],
     orderBy: 'data ASC, created_at ASC',
   );
+  final batch = db.batch();
   for (int i = 0; i < rows.length; i++) {
-    await db.update('assistenze', {'numero_progressivo': i + 1},
+    batch.update('assistenze', {'numero_progressivo': i + 1},
         where: 'id = ?', whereArgs: [rows[i]['id']]);
   }
+  await batch.commit(noResult: true);
 }
 
 /// Ricalcola la numerazione progressiva di turni e assistenze per tutte le

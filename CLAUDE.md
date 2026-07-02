@@ -177,6 +177,12 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - **num_servizi escluso dall'UPDATE in saveTurno**: il campo è gestito esclusivamente
   da `_aggiornaNumServizi()` (chiamato da `saveServizio`/`deleteServizio`); includerlo
   nel UPDATE azzererebbe il contatore ogni volta che si modifica un turno.
+- **saveTurno/saveAssistenza rinumerano anche l'associazione di provenienza**: se si
+  sposta un turno/assistenza su un'altra associazione, quella vecchia resterebbe con
+  un buco nella numerazione progressiva (il ricalcolo copriva solo la nuova). L'id
+  dell'associazione precedente viene letto nella stessa query `exists` che distingue
+  INSERT da UPDATE. La rinumerazione usa un `batch` atomico invece di N UPDATE
+  sequenziali (gira a ogni save/delete: con liste lunghe i round-trip si sentono).
 - **tipologieExtra nella card lista**: risolte in nomi tramite `AnagraficheProvider`
   passato come parametro a `TurnoCard`; mostrate concatenate con il separatore `·`.
 - **`TurnoCard` estratta in `widgets/turno_card.dart`**: prima era una classe privata

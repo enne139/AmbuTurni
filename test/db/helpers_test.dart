@@ -202,6 +202,29 @@ void main() {
       expect(nums.contains(2), isTrue);
     });
 
+    test('cambiare associazione rinumera anche quella di provenienza', () async {
+      // Associazioni dedicate per non interferire con gli altri test del gruppo.
+      await saveAssociazione('Assoc Sposta A');
+      await saveAssociazione('Assoc Sposta B');
+      final assocs = await getAssociazioni();
+      final idA = assocs.firstWhere((a) => a.nome == 'Assoc Sposta A').id;
+      final idB = assocs.firstWhere((a) => a.nome == 'Assoc Sposta B').id;
+
+      final t1 = Turno(id: newId(), data: '2025-01-01', associazioneId: idA);
+      final t2 = Turno(id: newId(), data: '2025-01-02', associazioneId: idA);
+      await saveTurno(t1);
+      await saveTurno(t2);
+
+      // Sposta il turno più vecchio (numero 1) sull'associazione B: il turno
+      // rimasto in A deve scalare da 2 a 1, non restare con un buco.
+      await saveTurno(t1.copyWith(associazioneId: idB));
+
+      final turniA = await getTurni(associazioneId: idA);
+      final turniB = await getTurni(associazioneId: idB);
+      expect(turniA.single.numeroProgressivo, 1);
+      expect(turniB.single.numeroProgressivo, 1);
+    });
+
     test('getTurni con ricerca trova per descrizione, note o descrizione servizio', () async {
       final tDescr = newId();
       final tNota = newId();
