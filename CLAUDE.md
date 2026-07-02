@@ -8,8 +8,8 @@
 
 ## ⚠️ REGOLE OPERATIVE
 
-1. **Branch:** i commit vanno su `main`. Il branch `flutter-rewrite` è conservato
-   per riferimento storico ma non è più il branch attivo.
+1. **Branch:** i commit vanno su `main` (direttamente, oppure via branch di
+   feature/fix mergiati e poi cancellati).
 2. **Aggiorna sempre questo file:** ogni volta che cambi struttura, aggiungi una funzionalità
    o prendi una decisione tecnica, aggiorna `CLAUDE.md` nello **stesso commit**.
 3. **Commenta il codice in italiano:** ogni funzione/widget non banale deve avere un commento
