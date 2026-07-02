@@ -267,3 +267,13 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 ## TODO
 
 - [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+- [ ] Keystore di release vero al posto di quello di debug (`android/app/build.gradle`,
+  `signingConfig = signingConfigs.debug` nel blocco `release`, TODO originale mai
+  risolto). Rischio concreto: se il keystore di debug usato dal runner Gitea non è
+  stabile tra una run e l'altra, o si passa da una build locale a una CI, Android
+  rifiuta di installare l'aggiornamento (firma diversa da quella già installata) —
+  rompe gli aggiornamenti automatici via Obtainium, che dipende dal repo pubblico
+  su Gitea (repo pubblico + Release con APK allegato via `build-android.yml`,
+  già verificati funzionanti su `v1.0.0`). Serve generare un keystore `.jks`,
+  configurare `key.properties` + `build.gradle`, e aggiungere il keystore/password
+  come secret nella CI Gitea.
