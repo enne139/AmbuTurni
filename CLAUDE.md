@@ -349,6 +349,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
   Desktop (Windows/Linux/macOS): usa `FilePicker.saveFile()` invece di share_plus.
   Logica di salvataggio centralizzata in `_salvaFile()` in `backup.dart`.
+  Su mobile il file passato alla share sheet vive nella cache dir (non in
+  Documents, dove ogni export si accumulava per sempre con dentro dati
+  personali); gli export precedenti vengono eliminati a ogni nuovo export,
+  quello corrente resta fino alla volta successiva perché alcune app
+  destinatarie lo leggono in modo asincrono dopo la chiusura della share sheet.
 - ✅ Export JSON leggibile (solo turni): `exportSemplificato()` produce un JSON con nomi
   al posto degli UUID (associazione, persone, ospedali, tipologie) e servizi annidati
   dentro ogni turno. Pulsante dedicato nella sezione Backup di Impostazioni.
