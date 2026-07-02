@@ -36,6 +36,7 @@
 | File backup | `share_plus` (export) + `file_picker` (import) |
 | HTTP (sync) | `http` |
 | Preferenze | `shared_preferences` |
+| Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
 
 ---
@@ -81,6 +82,7 @@ lib/
 backend/                            API sync Node+Express+PostgreSQL (invariata)
 .gitea/workflows/build-backend.yml  CI Docker per il backend (invariata)
 windows/                            progetto CMake generato da flutter create --platforms windows
+assets/icon/                        sorgenti icona app (SVG + PNG 1024×1024), vedi sotto
 ```
 
 ---
@@ -167,6 +169,20 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   risultati — e `PRAGMA journal_mode = WAL` restituisce una riga col nuovo modo,
   quindi va lanciato con `rawQuery()`. Su sqflite_common_ffi (desktop) il problema
   non si presentava, per questo era passato inosservato in test/uso su Windows.
+- **Icona app generata con `flutter_launcher_icons`** (branch `feature/app-icon`) invece
+  di produrre a mano ogni singola dimensione: sorgenti in `assets/icon/` —
+  `app_icon.svg`/`.png` (con sfondo verde `#00A651` pieno, usato per Windows e come
+  icona Android "legacy") e `app_icon_foreground.svg`/`.png` (stesso disegno, sfondo
+  trasparente, usato come layer foreground dell'adaptive icon Android 8+ insieme a
+  `adaptive_icon_background` nello stesso verde). Il colore di sfondo è configurato
+  in `pubspec.yaml` sotto `flutter_launcher_icons:`, non in un file separato — il
+  generatore scrive comunque un `android/app/src/main/res/values/colors.xml` con
+  `ic_launcher_background` perché è così che l'adaptive icon Android referenzia il
+  colore (un `<color>` XML, non un valore inline). Rigenerare con
+  `dart run flutter_launcher_icons` dopo aver modificato le sorgenti in `assets/icon/`.
+  PNG renderizzati da SVG con `sharp` (Node, via npx in una cartella temporanea) a
+  1024×1024: gli strumenti nativi tipici (ImageMagick, Inkscape, cairosvg) non erano
+  disponibili/installabili senza frizioni su questa macchina.
 
 ---
 
@@ -221,6 +237,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   campo di ricerca che filtra su descrizione/note del turno e descrizione dei servizi
   collegati (combinabile col filtro associazione). `getTurni(ricerca: ...)` in
   `helpers.dart`.
+- ✅ Icona app personalizzata (branch `feature/app-icon`): ambulanza + orologio su
+  sfondo verde, generata per Android (icona legacy + adaptive icon) e Windows con
+  `flutter_launcher_icons`. Verificata sia sui file generati (`analyze`/`build apk`)
+  sia sul telefono reale via adb (icona corretta nel drawer app).
 
 ## TODO
 
