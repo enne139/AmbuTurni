@@ -233,13 +233,18 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   release): il primo step del job lo installa dal tarball ufficiale (~30MB,
   pochi secondi) — senza, il job muore al checkout con "node: executable file
   not found in $PATH". Restano due `actions/cache@v4` (Gradle su hash di
-  `gradle-wrapper.properties`, `~/.pub-cache` su hash di `pubspec.yaml` perché
-  `pubspec.lock` non è versionato) — utili solo se l'istanza Gitea ha un cache
+  `gradle-wrapper.properties`, `~/.pub-cache` su hash di `pubspec.lock`, ora
+  versionato — vedi punto dedicato) — utili solo se l'istanza Gitea ha un cache
   backend, altrimenti cache-miss silenzioso senza rompere la build. In più
   `flutter build apk --release --target-platform android-arm64` invece del fat
   APK multi-ABI di default: dimezza il tempo di compilazione nativa, tradeoff
   accettato esplicitamente (APK non installa su emulatori x86/device 32-bit,
   irrilevante per l'uso reale via Obtainium su telefoni recenti).
+- **`pubspec.lock` versionato**: raccomandazione Flutter per le applicazioni (a
+  differenza delle librerie) — CI e altre macchine risolvono le stesse identiche
+  versioni testate in locale, build riproducibili. La cache pub in
+  `build-android.yml` ora usa `hashFiles('pubspec.lock')` come chiave: si
+  invalida solo quando cambiano davvero le versioni risolte.
 - **Rinominata l'app in "AmbuTurni"** (branch `feature/app-icon`, insieme all'icona):
   nome visibile (`android:label`, `MaterialApp.title`, titolo finestra/metadata
   Windows) **e** identificatori interni, su richiesta esplicita di rinominare
