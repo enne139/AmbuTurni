@@ -243,4 +243,72 @@ void main() {
           greaterThan(after.indexWhere((t) => t.nome == 'Seconda')));
     });
   });
+
+  group('CRUD materiali usati', () {
+    test('saveMaterialeUsato crea riga attiva, getMaterialiUsati la trova', () async {
+      await saveMateriale('Garze sterili');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Garze sterili');
+      await saveMaterialeUsato(MaterialeUsato(
+        id: newId(),
+        materialeId: materiale.id,
+        quantita: '2 confezioni',
+        data: '2026-07-01',
+      ));
+      final lista = await getMaterialiUsati();
+      final riga = lista.firstWhere((m) => m.materialeId == materiale.id);
+      expect(riga.materialeNome, 'Garze sterili');
+      expect(riga.quantita, '2 confezioni');
+      expect(riga.ripristinato, isFalse);
+    });
+
+    test('segnaMaterialeRipristinato la rimuove dalla lista attiva', () async {
+      await saveMateriale('Flaconi soluzione fisiologica');
+      final materiale = (await getMateriali())
+          .firstWhere((m) => m.nome == 'Flaconi soluzione fisiologica');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(
+        id: id,
+        materialeId: materiale.id,
+        quantita: '1',
+        data: '2026-07-01',
+      ));
+      await segnaMaterialeRipristinato(id);
+      final attivi = await getMaterialiUsati();
+      expect(attivi.where((m) => m.id == id), isEmpty);
+      final tutti = await getMaterialiUsati(soloAttivi: false);
+      expect(tutti.firstWhere((m) => m.id == id).ripristinato, isTrue);
+    });
+
+    test('deleteMaterialeUsato rimuove la riga definitivamente', () async {
+      await saveMateriale('Cerotti');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Cerotti');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(
+        id: id,
+        materialeId: materiale.id,
+        quantita: '1 scatola',
+        data: '2026-07-01',
+      ));
+      await deleteMaterialeUsato(id);
+      final tutti = await getMaterialiUsati(soloAttivi: false);
+      expect(tutti.where((m) => m.id == id), isEmpty);
+    });
+
+    test('segnaTuttiMaterialiRipristinati svuota la lista attiva', () async {
+      await saveMateriale('Siringhe');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Siringhe');
+      final id1 = newId();
+      final id2 = newId();
+      await saveMaterialeUsato(MaterialeUsato(
+        id: id1, materialeId: materiale.id, quantita: '3', data: '2026-07-01'));
+      await saveMaterialeUsato(MaterialeUsato(
+        id: id2, materialeId: materiale.id, quantita: '5', data: '2026-07-01'));
+      await segnaTuttiMaterialiRipristinati();
+      final attivi = await getMaterialiUsati();
+      expect(attivi.where((m) => m.id == id1 || m.id == id2), isEmpty);
+    });
+  });
 }

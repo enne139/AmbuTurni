@@ -443,6 +443,99 @@ class Servizio {
       };
 }
 
+// ---------------------------------------------------------------------------
+// TOOLS -> MATERIALI USATI
+// ---------------------------------------------------------------------------
+
+class Materiale {
+  final String id;
+  final String nome;
+  final String? createdAt;
+  final String? updatedAt;
+  final int isSynced;
+
+  const Materiale({
+    required this.id,
+    required this.nome,
+    this.createdAt,
+    this.updatedAt,
+    this.isSynced = 0,
+  });
+
+  factory Materiale.fromMap(Map<String, dynamic> m) => Materiale(
+        id: m['id'] as String,
+        nome: m['nome'] as String,
+        createdAt: m['created_at'] as String?,
+        updatedAt: m['updated_at'] as String?,
+        isSynced: (m['is_synced'] as int?) ?? 0,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'nome': nome,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+        'is_synced': isSynced,
+      };
+}
+
+/// Un utilizzo di materiale da ripristinare. `quantita` è testo libero (non
+/// un numero puro) perché in ambulanza le unità di misura sono eterogenee
+/// (es. "2 flaconi", "500ml", "1 confezione") e forzare un campo numerico
+/// perderebbe quell'informazione.
+class MaterialeUsato {
+  final String id;
+  final String materialeId;
+  final String quantita;
+  final String data;
+  final String? note;
+  final bool ripristinato;
+  final String? createdAt;
+  final String? updatedAt;
+  final int isSynced;
+
+  // Denormalizzato dal JOIN con materiali.
+  final String? materialeNome;
+
+  const MaterialeUsato({
+    required this.id,
+    required this.materialeId,
+    required this.quantita,
+    required this.data,
+    this.note,
+    this.ripristinato = false,
+    this.createdAt,
+    this.updatedAt,
+    this.isSynced = 0,
+    this.materialeNome,
+  });
+
+  factory MaterialeUsato.fromMap(Map<String, dynamic> m) => MaterialeUsato(
+        id: m['id'] as String,
+        materialeId: m['materiale_id'] as String,
+        quantita: m['quantita'] as String,
+        data: m['data'] as String,
+        note: m['note'] as String?,
+        ripristinato: ((m['ripristinato'] as int?) ?? 0) == 1,
+        createdAt: m['created_at'] as String?,
+        updatedAt: m['updated_at'] as String?,
+        isSynced: (m['is_synced'] as int?) ?? 0,
+        materialeNome: m['materiale_nome'] as String?,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'materiale_id': materialeId,
+        'quantita': quantita,
+        'data': data,
+        'note': note,
+        'ripristinato': ripristinato ? 1 : 0,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+        'is_synced': isSynced,
+      };
+}
+
 class Assistenza {
   final String id;
   final String? associazioneId;

@@ -56,10 +56,10 @@ lib/
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider
 ├── navigation/
-│   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack)
+│   └── app_navigator.dart         Scaffold con NavigationBar a 5 tab (IndexedStack)
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
-│   ├── anag_pickers.dart          PersonaPicker e OspedalePicker (RawAutocomplete + Aggiungi...)
+│   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
 │   └── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
 └── screens/
     ├── turni/
@@ -73,6 +73,10 @@ lib/
     │   └── assistenza_detail.dart
     ├── statistiche/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
+    ├── tools/
+    │   ├── tools_screen.dart          elenco strumenti extra (per ora solo Materiali usati)
+    │   ├── materiali_usati_screen.dart lista utilizzi attivi + swipe elimina + ripristina (singolo/tutto)
+    │   └── materiale_usato_form.dart  form di sola creazione (materiale, quantità, data, note)
     └── impostazioni/
         ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
         └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
@@ -92,6 +96,10 @@ import/export JSON è compatibile tra le due versioni dell'app.
 
 Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
 `tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
+
+`materiali` e `materiali_usati` (introdotte in versione DB 4, branch `feature/tools`)
+sono nuove e NON esistono nell'app React Native — non fanno parte del formato di
+import/export JSON condiviso tra le due versioni.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni sono idempotenti: `CREATE TABLE IF NOT EXISTS` a ogni apertura.
@@ -167,6 +175,22 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   risultati — e `PRAGMA journal_mode = WAL` restituisce una riga col nuovo modo,
   quindi va lanciato con `rawQuery()`. Su sqflite_common_ffi (desktop) il problema
   non si presentava, per questo era passato inosservato in test/uso su Windows.
+- **`quantita` TEXT invece di REAL in `materiali_usati`**: le unità di misura dei
+  materiali in ambulanza sono eterogenee ("2 flaconi", "500ml", "1 confezione");
+  un campo numerico puro avrebbe perso quell'informazione. Il campo è testo libero,
+  non parsato/sommato: la schermata mostra solo la stringa così com'è.
+- **Ripristino via flag, non DELETE**: `segnaMaterialeRipristinato` /
+  `segnaTuttiMaterialiRipristinati` impostano `ripristinato = 1` invece di cancellare
+  la riga. `getMaterialiUsati(soloAttivi: true)` (default) filtra `ripristinato = 0`
+  per la lista attiva; lo storico resta in tabella per un'eventuale vista futura,
+  ed è reversibile in caso di tocco per errore (a differenza di una DELETE).
+- **Materiali come catalogo con creazione inline**: `MaterialePicker` in
+  `anag_pickers.dart` segue lo stesso pattern di `OspedalePicker` (RawAutocomplete +
+  "Aggiungi..." nel suffixIcon) invece di testo libero, per evitare doppioni
+  incoerenti (es. "Garze" vs "garze") nel catalogo materiali.
+- **Tools come 5° tab invece che sotto Impostazioni**: pensato per ospitare più
+  strumenti in futuro (per ora solo Materiali usati); un tab dedicato scala meglio
+  di una sezione dentro Impostazioni, che è già collassabile e affollata di CRUD.
 
 ---
 
@@ -221,6 +245,14 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   campo di ricerca che filtra su descrizione/note del turno e descrizione dei servizi
   collegati (combinabile col filtro associazione). `getTurni(ricerca: ...)` in
   `helpers.dart`.
+- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 4): 5° tab
+  "Tools" con l'elenco degli strumenti extra dell'app. "Materiali usati" permette
+  di segnare un materiale (dal catalogo `materiali`, con creazione inline) e la
+  quantità (testo libero) usati durante un turno, da ripristinare in seguito.
+  La lista mostra solo gli utilizzi attivi (non ripristinati), con la quantità in
+  evidenza in un badge; check singolo o pulsante "Ripristina tutto" in AppBar per
+  segnarli ripristinati (soft, via flag — non cancellano la riga); swipe per
+  eliminare una riga inserita per errore.
 
 ## TODO
 

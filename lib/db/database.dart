@@ -118,6 +118,28 @@ CREATE INDEX IF NOT EXISTS idx_servizi_turno ON servizi(turno_id);
 CREATE INDEX IF NOT EXISTS idx_turni_assoc ON turni(associazione_id);
 CREATE INDEX IF NOT EXISTS idx_assistenze_assoc ON assistenze(associazione_id);
 
+CREATE TABLE IF NOT EXISTS materiali (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  is_synced INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS materiali_usati (
+  id TEXT PRIMARY KEY,
+  materiale_id TEXT NOT NULL REFERENCES materiali(id),
+  quantita TEXT NOT NULL,
+  data TEXT NOT NULL,
+  note TEXT,
+  ripristinato INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  is_synced INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato);
+
 CREATE TABLE IF NOT EXISTS sync_meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -163,7 +185,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 3,
+    version: 4,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -171,7 +193,7 @@ Future<Database> getDb() async {
   return _db!;
 }
 
-/// Upgrade del DB: aggiunge le colonne per ogni nuova versione.
+/// Upgrade del DB: aggiunge le colonne/tabelle per ogni nuova versione.
 /// ALTER TABLE fallisce silenziosamente se la colonna esiste già (catch intenzionale).
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
@@ -182,6 +204,38 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 3) {
     try { await db.execute('ALTER TABLE associazioni ADD COLUMN colore TEXT'); } catch (_) {}
     try { await db.execute('ALTER TABLE tipologie_turno ADD COLUMN colore TEXT'); } catch (_) {}
+  }
+  if (oldVersion < 4) {
+    // Tabelle nuove (Tools -> Materiali usati): CREATE TABLE IF NOT EXISTS è
+    // già idempotente di suo, il try/catch è solo per uniformità con le altre
+    // entry di questo metodo.
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS materiali (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL UNIQUE,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    } catch (_) {}
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS materiali_usati (
+          id TEXT PRIMARY KEY,
+          materiale_id TEXT NOT NULL REFERENCES materiali(id),
+          quantita TEXT NOT NULL,
+          data TEXT NOT NULL,
+          note TEXT,
+          ripristinato INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    } catch (_) {}
+    try { await db.execute('CREATE INDEX IF NOT EXISTS idx_materiali_usati_ripristinato ON materiali_usati(ripristinato)'); } catch (_) {}
   }
 }
 

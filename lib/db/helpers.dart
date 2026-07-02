@@ -521,6 +521,98 @@ Future<void> ricalcolaTutteLeNumerazioni() async {
 }
 
 // ---------------------------------------------------------------------------
+// TOOLS -> MATERIALI USATI
+// ---------------------------------------------------------------------------
+
+Future<List<Materiale>> getMateriali() async {
+  final db = await getDb();
+  final rows = await db.query('materiali', orderBy: 'nome ASC');
+  return rows.map(Materiale.fromMap).toList();
+}
+
+Future<void> saveMateriale(String nome, {String? id}) async {
+  final db = await getDb();
+  final now = _now();
+  if (id == null) {
+    await db.insert('materiali', {
+      'id': newId(),
+      'nome': nome,
+      'created_at': now,
+      'updated_at': now,
+      'is_synced': 0,
+    });
+  } else {
+    await db.update(
+      'materiali',
+      {'nome': nome, 'updated_at': now, 'is_synced': 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+}
+
+/// Restituisce gli utilizzi di materiale, dal più recente. Se [soloAttivi] è
+/// true (default) esclude quelli già segnati come ripristinati — è la lista
+/// "da fare" mostrata nella schermata Tools.
+Future<List<MaterialeUsato>> getMaterialiUsati({bool soloAttivi = true}) async {
+  final db = await getDb();
+  final where = soloAttivi ? 'WHERE mu.ripristinato = 0' : '';
+  final rows = await db.rawQuery('''
+    SELECT mu.*, m.nome AS materiale_nome
+    FROM materiali_usati mu
+    LEFT JOIN materiali m ON m.id = mu.materiale_id
+    $where
+    ORDER BY mu.data DESC, mu.created_at DESC
+  ''');
+  return rows.map(MaterialeUsato.fromMap).toList();
+}
+
+Future<void> saveMaterialeUsato(MaterialeUsato materialeUsato) async {
+  final db = await getDb();
+  final now = _now();
+  final map = materialeUsato.toMap()
+    ..['updated_at'] = now
+    ..['is_synced'] = 0;
+  final exists = await db.query('materiali_usati',
+      columns: ['id'], where: 'id = ?', whereArgs: [materialeUsato.id], limit: 1);
+  if (exists.isEmpty) {
+    await db.insert('materiali_usati', map);
+  } else {
+    final updateMap = Map<String, dynamic>.from(map)..remove('id');
+    await db.update('materiali_usati', updateMap,
+        where: 'id = ?', whereArgs: [materialeUsato.id]);
+  }
+}
+
+/// Segna un utilizzo come ripristinato: sparisce dalla lista attiva senza
+/// perdere lo storico (flag, non DELETE — reversibile in caso di errore).
+Future<void> segnaMaterialeRipristinato(String id) async {
+  final db = await getDb();
+  await db.update(
+    'materiali_usati',
+    {'ripristinato': 1, 'updated_at': _now(), 'is_synced': 0},
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
+
+Future<void> deleteMaterialeUsato(String id) async {
+  final db = await getDb();
+  await db.delete('materiali_usati', where: 'id = ?', whereArgs: [id]);
+}
+
+/// Segna come ripristinati tutti gli utilizzi ancora attivi in un colpo solo
+/// (pulsante "Ripristina tutto" nella lista Tools).
+Future<void> segnaTuttiMaterialiRipristinati() async {
+  final db = await getDb();
+  await db.update(
+    'materiali_usati',
+    {'ripristinato': 1, 'updated_at': _now(), 'is_synced': 0},
+    where: 'ripristinato = 0',
+  );
+}
+
+// ---------------------------------------------------------------------------
 // STATISTICHE
 // ---------------------------------------------------------------------------
 

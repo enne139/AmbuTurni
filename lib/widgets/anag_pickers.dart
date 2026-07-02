@@ -362,3 +362,158 @@ class _OspedalePickerState extends State<OspedalePicker> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// MaterialePicker
+// ---------------------------------------------------------------------------
+
+/// Combobox con ricerca per selezionare un materiale dal catalogo (Tools ->
+/// Materiali usati). Stesso pattern di OspedalePicker ma con solo il nome.
+class MaterialePicker extends StatefulWidget {
+  final List<Materiale> materiali;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  const MaterialePicker({
+    super.key,
+    required this.materiali,
+    this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  State<MaterialePicker> createState() => _MaterialePickerState();
+}
+
+class _MaterialePickerState extends State<MaterialePicker> {
+  late TextEditingController _ctrl;
+  late FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: _nomeOf(widget.selectedId));
+    _focus = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(MaterialePicker old) {
+    super.didUpdateWidget(old);
+    if (old.selectedId != widget.selectedId) {
+      final name = _nomeOf(widget.selectedId);
+      if (_ctrl.text != name) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _ctrl.text = name;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  String _nomeOf(String? id) {
+    if (id == null) return '';
+    return widget.materiali.where((m) => m.id == id).firstOrNull?.nome ?? '';
+  }
+
+  Future<void> _creaMateriale() async {
+    _focus.unfocus();
+    final nomeCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nuovo materiale'),
+        content: TextField(
+          controller: nomeCtrl,
+          decoration: const InputDecoration(labelText: 'Nome'),
+          textCapitalization: TextCapitalization.sentences,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final nome = nomeCtrl.text.trim();
+    if (nome.isEmpty) return;
+    await saveMateriale(nome);
+    if (!mounted) return;
+    final materiali = await getMateriali();
+    if (!mounted) return;
+    final m = materiali.where((m) => m.nome == nome).firstOrNull;
+    if (m != null) {
+      _ctrl.text = m.nome;
+      widget.onChanged(m.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Materiale>(
+      textEditingController: _ctrl,
+      focusNode: _focus,
+      displayStringForOption: (m) => m.nome,
+      optionsBuilder: (tev) {
+        final q = tev.text.toLowerCase();
+        return q.isEmpty
+            ? widget.materiali
+            : widget.materiali.where((m) => m.nome.toLowerCase().contains(q));
+      },
+      onSelected: (m) => widget.onChanged(m.id),
+      fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
+        controller: ctrl,
+        focusNode: focus,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Cerca materiale...',
+          hintStyle: const TextStyle(color: Colors.white38),
+          prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white38),
+          suffixIcon: widget.selectedId != null
+              ? InkWell(
+                  onTap: () {
+                    ctrl.clear();
+                    focus.unfocus();
+                    widget.onChanged(null);
+                  },
+                  child: const Icon(Icons.clear, size: 16, color: Colors.white38),
+                )
+              : InkWell(
+                  onTap: _creaMateriale,
+                  child: const Icon(Icons.add, size: 16, color: kPrimary),
+                ),
+        ),
+      ),
+      optionsViewBuilder: (ctx, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          color: kSurface,
+          elevation: 8,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              children: options.map(
+                (m) => InkWell(
+                  onTap: () => onSelected(m),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Text(m.nome, style: const TextStyle(fontSize: 14)),
+                  ),
+                ),
+              ).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
