@@ -9,21 +9,29 @@ import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
 const int _backupVersion = 1;
 
 // Ordine di eliminazione rispettoso dei vincoli FK: prima le righe figlie,
-// poi le righe padre.
+// poi le righe padre. (In pratica l'ordine non è vincolante durante l'import:
+// la transazione gira con PRAGMA foreign_keys = OFF dall'inizio alla fine —
+// vedi importBackup — ma lo teniamo comunque corretto per chiarezza/difesa.)
 const _deleteOrder = [
   'deletions',
   'sync_meta',
   'servizi',
+  'materiali_usati',
   'turni',
   'assistenze',
   'tipologie_turno',
   'tipologie_assistenza',
   'ospedali',
   'persone',
+  'materiali',
   'associazioni',
 ];
 
-// Tabelle incluse nel backup (stesso ordine dell'app RN per compatibilità JSON).
+// Tabelle incluse nel backup. Stesse tabelle e stesso ordine dell'app RN per
+// compatibilità JSON, con in più materiali/materiali_usati (esclusive
+// dell'app Flutter): un backup Flutter importato nell'app RN le ignorerebbe
+// semplicemente (chiavi JSON sconosciute), e un vecchio backup RN importato
+// qui le lascia assenti (tables[table] == null → nessuna riga da reinserire).
 const _backupTables = [
   'associazioni',
   'persone',
@@ -33,6 +41,8 @@ const _backupTables = [
   'turni',
   'servizi',
   'assistenze',
+  'materiali',
+  'materiali_usati',
 ];
 
 /// Esporta tutti i dati in un file JSON.

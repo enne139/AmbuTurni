@@ -100,8 +100,11 @@ Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
 `tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
 
 `materiali` e `materiali_usati` (introdotte in versione DB 4, branch `feature/tools`)
-sono nuove e NON esistono nell'app React Native — non fanno parte del formato di
-import/export JSON condiviso tra le due versioni.
+sono nuove e NON esistono nell'app React Native. Sono comunque incluse nel backup
+JSON (`_backupTables` in `backup.dart`) insieme alle tabelle condivise: un backup
+Flutter importato nell'app RN ignorerebbe semplicemente quelle due chiavi, e un
+vecchio backup RN importato qui le lascia assenti — l'aggiunta non rompe la
+compatibilità in nessuna delle due direzioni.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni sono idempotenti: `CREATE TABLE IF NOT EXISTS` a ogni apertura.
