@@ -11,13 +11,18 @@
 
 name: build-backend-image
 
+# Trigger SOLO su modifiche al backend: il filtro paths limita le push su main,
+# e il trigger sui tag e' stato rimosso perche' i tag vX.Y.Z sono release
+# dell'APP Flutter — facevano ricostruire l'immagine backend a ogni release
+# APK anche senza alcuna modifica al backend (l'immagine e' taggata con
+# SHA+latest, non con la versione: il tag trigger non aggiungeva nulla).
+# Per una build manuale resta workflow_dispatch.
 on:
   push:
     branches: [main]
     paths:
       - 'backend/**'
       - '.gitea/workflows/build-backend.yml'
-    tags: ['v*']
   workflow_dispatch:
 
 jobs:

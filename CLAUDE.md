@@ -106,7 +106,7 @@ lib/
                                         assistenze) in cui compare una persona/ospedale
 
 backend/                            API sync Node+Express+PostgreSQL (invariata)
-.gitea/workflows/build-backend.yml  CI Docker per il backend (invariata)
+.gitea/workflows/build-backend.yml  CI Docker backend (solo su modifiche a backend/)
 windows/                            progetto CMake generato da flutter create --platforms windows
 assets/icon/                        sorgenti icona app (SVG + PNG 1024×1024), vedi sotto
 ```
