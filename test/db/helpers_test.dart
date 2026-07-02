@@ -346,6 +346,21 @@ void main() {
       expect(riga.quantita, 4);
     });
 
+    test('quantita < 1 rifiutata dal CHECK dello schema (v7)', () async {
+      // Il vincolo vive nel DB, non solo nei clamp della UI: una scrittura
+      // difettosa non può salvare quantità zero o negative.
+      await saveMateriale('Guanti sterili');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Guanti sterili');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, quantita: 1));
+      await expectLater(
+          aggiornaQuantitaMaterialeUsato(id, 0), throwsA(isA<Exception>()));
+      // La riga esistente resta intatta.
+      final riga = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(riga.quantita, 1);
+    });
+
     test('deleteMateriale in uso elimina anche gli utilizzi collegati (CASCADE)', () async {
       await saveMateriale('Collari cervicali');
       final materiale = (await getMateriali())
