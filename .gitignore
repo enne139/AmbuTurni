@@ -5,7 +5,8 @@
 .packages
 build/
 *.g.dart
-pubspec.lock
+# pubspec.lock è VERSIONATO (raccomandazione Flutter per le app, non librerie):
+# la CI e le altre macchine risolvono le stesse identiche versioni testate qui.
 
 # Android (generato da flutter build — non versionato)
 android/.gradle/
