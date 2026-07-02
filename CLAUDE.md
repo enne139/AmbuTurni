@@ -77,7 +77,7 @@ lib/
     │   ├── tools_screen.dart          elenco strumenti extra (per ora solo Materiali usati)
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
-    │   ├── materiale_usato_form.dart  form di sola creazione (materiale, quantità+unità, posizione, note)
+    │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
     │   └── materiali_screen.dart      gestione catalogo materiali: rinomina/elimina
     └── impostazioni/
         ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
@@ -215,6 +215,12 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   (comportamento non voluto: bloccava una cancellazione legittima). Ora l'eliminazione
   di un materiale elimina a cascata anche i suoi utilizzi — coerente con "nessuno
   storico": la UI (`MaterialiScreen._elimina`) avvisa nel dialog di conferma.
+- **`MaterialeUsatoForm` crea/modifica, `createdAt` passato esplicitamente in modalità
+  modifica**: `saveMaterialeUsato` fa un upsert generico via `toMap()` — se in
+  modifica si costruisce un `MaterialeUsato` nuovo senza riportare `createdAt`
+  dall'oggetto esistente, l'UPDATE lo sovrascriverebbe a NULL (i valori `null` nella
+  map passano comunque nella UPDATE, il `DEFAULT` SQL si applica solo agli INSERT che
+  omettono la colonna). Va passato esplicitamente `createdAt: widget.esistente?.createdAt`.
 - **Materiali come catalogo con creazione inline**: `MaterialePicker` in
   `anag_pickers.dart` segue lo stesso pattern di `OspedalePicker` (RawAutocomplete +
   "Aggiungi..." nel suffixIcon) invece di testo libero, per evitare doppioni
@@ -285,9 +291,12 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   Niente campo data (si ordina per `created_at`, non richiesto dal flusso reale) e
   nessuno storico: check singolo o pulsante "Ripristina tutto" in AppBar, oppure
   swipe per eliminare una riga per errore, cancellano la riga per sempre (nessuna
-  vista storico prevista). Icona "Gestisci materiali" in AppBar apre `MaterialiScreen`
-  per rinominare/eliminare voci del catalogo; eliminare un materiale elimina anche
-  i suoi utilizzi collegati (`ON DELETE CASCADE`, con avviso nel dialog di conferma).
+  vista storico prevista). Icona matita su ogni riga apre `MaterialeUsatoForm` in
+  modalità modifica (stesso form della creazione, precompilato) per correggere
+  materiale/quantità/unità/posizione/note senza ricreare la riga da capo. Icona
+  "Gestisci materiali" in AppBar apre `MaterialiScreen` per rinominare/eliminare
+  voci del catalogo; eliminare un materiale elimina anche i suoi utilizzi collegati
+  (`ON DELETE CASCADE`, con avviso nel dialog di conferma).
 
 ## TODO
 

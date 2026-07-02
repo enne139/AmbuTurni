@@ -4,11 +4,12 @@ import '../../db/models.dart';
 import '../../utils/theme.dart';
 import '../../widgets/anag_pickers.dart';
 
-/// Form per registrare un utilizzo di materiale da ripristinare.
-/// Solo creazione: gli utilizzi non si modificano, si eliminano o si
-/// segnano come ripristinati dalla lista (vedi MaterialiUsatiScreen).
+/// Form per registrare o modificare un utilizzo di materiale da ripristinare.
+/// Se [esistente] è non-null si è in modalità modifica: i campi vengono
+/// precompilati e il salvataggio aggiorna la riga invece di crearne una nuova.
 class MaterialeUsatoForm extends StatefulWidget {
-  const MaterialeUsatoForm({super.key});
+  final MaterialeUsato? esistente;
+  const MaterialeUsatoForm({super.key, this.esistente});
 
   @override
   State<MaterialeUsatoForm> createState() => _MaterialeUsatoFormState();
@@ -28,8 +29,12 @@ class _MaterialeUsatoFormState extends State<MaterialeUsatoForm> {
   @override
   void initState() {
     super.initState();
-    _unitaCtrl = TextEditingController();
-    _noteCtrl = TextEditingController();
+    final esistente = widget.esistente;
+    _unitaCtrl = TextEditingController(text: esistente?.unita ?? '');
+    _noteCtrl = TextEditingController(text: esistente?.note ?? '');
+    _materialeId = esistente?.materialeId;
+    _quantita = esistente?.quantita ?? 1;
+    _posizione = esistente?.posizione;
     _carica();
   }
 
@@ -48,12 +53,13 @@ class _MaterialeUsatoFormState extends State<MaterialeUsatoForm> {
     setState(() => _saving = true);
     try {
       final mu = MaterialeUsato(
-        id: newId(),
+        id: widget.esistente?.id ?? newId(),
         materialeId: _materialeId!,
         quantita: _quantita,
         unita: _unitaCtrl.text.trim().isEmpty ? null : _unitaCtrl.text.trim(),
         posizione: _posizione,
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+        createdAt: widget.esistente?.createdAt,
       );
       await saveMaterialeUsato(mu);
       if (mounted) Navigator.pop(context, true);
@@ -80,7 +86,7 @@ class _MaterialeUsatoFormState extends State<MaterialeUsatoForm> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Materiale usato'),
+        title: Text(widget.esistente == null ? 'Materiale usato' : 'Modifica materiale usato'),
         actions: [
           if (_saving)
             const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))

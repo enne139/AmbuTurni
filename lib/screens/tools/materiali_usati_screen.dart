@@ -195,6 +195,16 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                               ]),
                             ),
                             IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 20),
+                              color: Colors.white38,
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Modifica',
+                              onPressed: () async {
+                                await Navigator.push(context, MaterialPageRoute(builder: (_) => MaterialeUsatoForm(esistente: mu)));
+                                if (mounted) _carica();
+                              },
+                            ),
+                            IconButton(
                               icon: const Icon(Icons.check_circle_outline),
                               color: Colors.white38,
                               tooltip: 'Segna come ripristinato',
