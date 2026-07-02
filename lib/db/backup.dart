@@ -159,7 +159,23 @@ Future<String?> _salvaFile(String contenuto, String nomeFile, String shareText) 
     await File(outputPath).writeAsString(contenuto, encoding: utf8);
     return outputPath;
   } else {
-    final dir = await getApplicationDocumentsDirectory();
+    // Cache dir invece di Documents: prima ogni export lasciava per sempre
+    // nel sandbox una copia del file (con dentro dati personali). La cache
+    // può essere ripulita dal sistema e comunque gli export delle volte
+    // precedenti vengono eliminati qui sotto. Il file corrente NON viene
+    // cancellato subito dopo la share: alcune app destinatarie lo leggono
+    // in modo asincrono dopo la chiusura della share sheet.
+    final dir = await getTemporaryDirectory();
+    await for (final f in dir.list()) {
+      final nome = f.uri.pathSegments.last;
+      if (f is File && nome.startsWith('ambuturni_') && nome.endsWith('.json')) {
+        try {
+          await f.delete();
+        } catch (_) {
+          // Best-effort: un file bloccato non deve impedire l'export.
+        }
+      }
+    }
     final file = File('${dir.path}/$nomeFile');
     await file.writeAsString(contenuto, encoding: utf8);
     await Share.shareXFiles([XFile(file.path)], text: shareText);
