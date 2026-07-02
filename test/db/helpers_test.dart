@@ -145,6 +145,19 @@ void main() {
       final after = await getPersone();
       expect(after.any((x) => x.id == p.id), isFalse);
     });
+
+    test('savePersona restituisce l\'id giusto anche con omonimi', () async {
+      // Due persone con lo stesso nome: l'id restituito deve identificare
+      // la riga appena creata, non la prima trovata per nome.
+      final id1 = await savePersona('Omonimo', 'Test');
+      final id2 = await savePersona('Omonimo', 'Test');
+      expect(id1, isNot(id2));
+      final list = await getPersone();
+      expect(list.where((p) => p.cognome == 'Omonimo').length, 2);
+      expect(list.any((p) => p.id == id2), isTrue);
+      // In modalità update l'id restituito è quello passato.
+      expect(await savePersona('Omonimo', 'Rinominato', id: id1), id1);
+    });
   });
 
   group('CRUD turni', () {
