@@ -89,58 +89,86 @@ class _ServizioFormState extends State<ServizioForm> {
             IconButton(icon: const Icon(Icons.check), onPressed: _salva),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Codice chiamata
-          const Text('Codice chiamata', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: codiciChiamata.map((c) => ChoiceChip(
-              label: Text(c),
-              selected: _codiceChiamata == c,
-              selectedColor: getCodiceColor(c).withOpacity(0.3),
-              labelStyle: TextStyle(color: _codiceChiamata == c ? getCodiceColor(c) : Colors.white60),
-              onSelected: (sel) => setState(() => _codiceChiamata = sel ? c : null),
-            )).toList(),
-          ),
-          const SizedBox(height: 20),
+      // CustomScrollView + SliverFillRemaining invece di una Column con
+      // Expanded diretto: quando la tastiera riduce l'altezza disponibile
+      // (o su schermi piccoli), i campi fissi sopra la descrizione non ci
+      // starebbero più nello spazio rimasto e Flutter andrebbe in overflow
+      // (il tipico rettangolo giallo/nero). Con lo sliver, se il contenuto
+      // fisso non lascia spazio, l'intera schermata diventa scrollabile
+      // invece di rompersi; quando lo spazio c'è, il campo lo riempie tutto
+      // come richiesto.
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Codice chiamata
+                  const Text('Codice chiamata', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: codiciChiamata.map((c) => ChoiceChip(
+                      label: Text(c),
+                      selected: _codiceChiamata == c,
+                      selectedColor: getCodiceColor(c).withOpacity(0.3),
+                      labelStyle: TextStyle(color: _codiceChiamata == c ? getCodiceColor(c) : Colors.white60),
+                      onSelected: (sel) => setState(() => _codiceChiamata = sel ? c : null),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 20),
 
-          // Codice uscita
-          const Text('Codice uscita', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: codiciUscita.map((c) => ChoiceChip(
-              label: Text(c),
-              selected: _codiceUscita == c,
-              selectedColor: getCodiceColor(c).withOpacity(0.3),
-              labelStyle: TextStyle(color: _codiceUscita == c ? getCodiceColor(c) : Colors.white60),
-              onSelected: (sel) => setState(() => _codiceUscita = sel ? c : null),
-            )).toList(),
-          ),
-          const SizedBox(height: 20),
+                  // Codice uscita
+                  const Text('Codice uscita', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: codiciUscita.map((c) => ChoiceChip(
+                      label: Text(c),
+                      selected: _codiceUscita == c,
+                      selectedColor: getCodiceColor(c).withOpacity(0.3),
+                      labelStyle: TextStyle(color: _codiceUscita == c ? getCodiceColor(c) : Colors.white60),
+                      onSelected: (sel) => setState(() => _codiceUscita = sel ? c : null),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 20),
 
-          // Ospedale
-          const Text('Ospedale', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          OspedalePicker(
-            ospedali: anag.ospedali,
-            selectedId: _ospedaleId,
-            onChanged: (v) => setState(() => _ospedaleId = v),
-          ),
-          const SizedBox(height: 20),
+                  // Ospedale
+                  const Text('Ospedale', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  OspedalePicker(
+                    ospedali: anag.ospedali,
+                    selectedId: _ospedaleId,
+                    onChanged: (v) => setState(() => _ospedaleId = v),
+                  ),
+                  const SizedBox(height: 20),
 
-          // Descrizione
-          const Text('Descrizione', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _descCtrl,
-            maxLines: 3,
-            decoration: const InputDecoration(hintText: 'Descrizione del servizio (opzionale)'),
+                  // Descrizione: accetta markdown.
+                  const Text('Descrizione', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 32),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            sliver: SliverFillRemaining(
+              hasScrollBody: false,
+              child: TextFormField(
+                controller: _descCtrl,
+                expands: true,
+                maxLines: null,
+                minLines: null,
+                textAlignVertical: TextAlignVertical.top,
+                decoration: const InputDecoration(
+                  hintText: 'Descrizione del servizio in markdown (opzionale)',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

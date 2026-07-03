@@ -415,7 +415,7 @@ class _ServizioCard extends StatelessWidget {
                   ],
                   if (s.descrizione != null && s.descrizione!.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(s.descrizione!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    NotaMarkdown(data: s.descrizione!, fontSize: 12, color: Colors.white54),
                   ],
                 ],
               ),

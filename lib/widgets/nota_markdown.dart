@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
-/// Rende il testo markdown delle note con uno stile coerente con il tema
-/// scuro dell'app: senza uno style sheet esplicito flutter_markdown_plus usa
-/// i colori di default di Material (pensati per sfondo chiaro), poco
-/// leggibili sul nostro sfondo scuro. Condiviso tra il dettaglio turno e il
-/// dettaglio assistenza.
+/// Rende testo markdown con uno stile coerente con il tema scuro dell'app:
+/// senza uno style sheet esplicito flutter_markdown_plus usa i colori di
+/// default di Material (pensati per sfondo chiaro), poco leggibili sul
+/// nostro sfondo scuro. Condiviso tra le note di turno/assistenza (stile di
+/// default) e la descrizione dei servizi nel dettaglio turno (fontSize/color
+/// più piccoli e attenuati, per restare coerente con lo stile "info
+/// secondaria" già usato lì).
 class NotaMarkdown extends StatelessWidget {
   final String data;
-  const NotaMarkdown({super.key, required this.data});
+  final double fontSize;
+  final Color color;
+  const NotaMarkdown({super.key, required this.data, this.fontSize = 13, this.color = Colors.white});
 
   @override
   Widget build(BuildContext context) {
-    const testo = TextStyle(fontSize: 13, color: Colors.white);
+    final testo = TextStyle(fontSize: fontSize, color: color);
     return MarkdownBody(
       data: data,
       styleSheet: MarkdownStyleSheet(
@@ -29,7 +33,7 @@ class NotaMarkdown extends StatelessWidget {
         listBullet: testo,
         blockquote: testo.copyWith(color: Colors.white70),
         code: testo.copyWith(fontFamily: 'monospace', backgroundColor: Colors.white12),
-        a: const TextStyle(fontSize: 13, color: Colors.lightBlueAccent),
+        a: TextStyle(fontSize: fontSize, color: Colors.lightBlueAccent),
       ),
     );
   }

@@ -260,6 +260,28 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `toMap`/`fromMap` invece di `copyWith`, che non può riportare `note` a
   `null` quando il campo viene svuotato (stessa scelta già fatta per la
   prima versione del dialog).
+- **Descrizione dei servizi in markdown; campo di modifica a tutta altezza**:
+  estensione della stessa richiesta al campo `descrizione` di `Servizio`,
+  mostrato in `_ServizioCard` (dettaglio turno) con `NotaMarkdown`. `NotaMarkdown`
+  ha guadagnato i parametri opzionali `fontSize`/`color` (default 13/bianco,
+  come le note) per poterla usare qui con lo stile "info secondaria" già
+  presente nella card (12/`white54`) senza duplicare lo style sheet. A
+  differenza delle note, qui non c'è un editor dedicato a schermo intero: il
+  campo Descrizione in `ServizioForm` (già una schermata propria, non un
+  dialog) è stato semplicemente allargato per riempire tutto lo spazio
+  verticale libero sotto codice chiamata/uscita/ospedale, al posto delle 3
+  righe fisse di prima.
+  **`CustomScrollView` + `SliverFillRemaining` invece di `Column` + `Expanded`
+  diretto**: il primo tentativo (`Expanded(child: TextFormField(expands: true))`
+  dentro una `Column` non scrollabile) andava in overflow (il classico
+  rettangolo giallo/nero) su telefono reale quando la tastiera si apre — lo
+  spazio verticale disponibile si riduce e i campi fissi sopra (chip codice
+  chiamata/uscita, ospedale) non ci stanno più, ma una `Column` non può
+  scrollare per compensare. Con `SliverPadding`/`SliverToBoxAdapter` per i
+  campi fissi e `SliverFillRemaining(hasScrollBody: false)` per il campo
+  descrizione, l'intera schermata diventa scrollabile quando il contenuto
+  fisso non lascia spazio (niente più overflow), mentre il campo riempie
+  comunque tutto lo spazio libero quando c'è.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -483,6 +505,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   assistenza le due parti sono invece affiancate riga per ruolo quando c'è
   un 2° equipaggio (v. Decisioni tecniche).
 - ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
+  Descrizione in markdown (renderizzata con `NotaMarkdown`, stile compatto);
+  il campo nel form riempie tutto lo spazio verticale libero (v. Decisioni tecniche).
 - ✅ Note (turno e assistenza) in card dedicata nel dettaglio, sempre visibile
   ("Nessuna nota" se vuote), in markdown (`NotaMarkdown`). Matita per la modifica
   rapida che apre `NoteEditorScreen` a schermo intero, senza passare dal form
