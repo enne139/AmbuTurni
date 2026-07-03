@@ -77,7 +77,7 @@ lib/
 │   ├── helpers.dart               TUTTE le funzioni CRUD + StatisticheData
 │   └── backup.dart                exportBackup() + importBackup() via share_plus/file_picker
 ├── providers/
-│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider
+│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider, StatisticheProvider
 ├── navigation/
 │   └── app_navigator.dart         Scaffold con NavigationBar a 5 tab (IndexedStack)
 ├── widgets/
@@ -188,24 +188,28 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   via `AnagraficheProvider.byIdTipologia` nelle schermate, come già per le extra.
   `importBackup` fonde `tipologia_id`/`tipologie_extra` → `tipologie` nelle
   righe dei backup pre-v8 (RN inclusi), che restano quindi importabili.
-- **Eliminazione turno solo dal dettaglio (rimossi swipe e long-press dalla
-  lista)**: la lista turni aveva due gesti di eliminazione rapida (Dismissible
-  a swipe e long-press sulla card), entrambi con conferma. Rimossi su richiesta
-  esplicita: restava comunque il cestino nell'AppBar di `TurnoDetail`, quindi
-  i due gesti erano solo scorciatoie ridondanti — e più a rischio di
-  cancellazione accidentale mentre si scorre la lista o si tiene premuto per
-  altri motivi. La lista assistenze mantiene invece lo swipe-to-delete
-  (non toccata da questa richiesta).
-- **Equipaggio 1ª/2ª parte affiancate nel dettaglio turno (`_EquipaggioCard`
-  in `turno_detail.dart`)**: quando il turno ha un 2° equipaggio (cambio a
-  metà turno), le due parti sono mostrate una riga per ruolo con i due nomi
-  affiancati (trattino attenuato se il ruolo non è coperto in una delle due
-  parti), invece di due blocchi "1ª parte"/"2ª parte" impilati — più facile
-  confrontarle a colpo d'occhio. Se il turno ha un solo equipaggio (niente
-  campi eq2 valorizzati) resta l'elenco singolo di prima: una colonna "2ª
-  parte" piena di trattini non avrebbe aggiunto informazione. Riguarda solo
-  la visualizzazione: il form (`TurnoForm`/`AssistenzaForm`) resta con le due
-  sezioni sequenziali, non toccato da questa richiesta.
+- **Eliminazione solo dal dettaglio (rimossi swipe e long-press dalle
+  liste)**: sia la lista turni che quella assistenze avevano due gesti di
+  eliminazione rapida (Dismissible a swipe e long-press sulla card),
+  entrambi con conferma. Rimossi su richiesta esplicita (prima solo per i
+  turni, poi estesa esplicitamente anche alle assistenze): restava comunque
+  il cestino nell'AppBar dei rispettivi dettagli, quindi i due gesti erano
+  solo scorciatoie ridondanti — e più a rischio di cancellazione accidentale
+  mentre si scorre la lista o si tiene premuto per altri motivi.
+- **Equipaggio 1ª/2ª parte affiancate nel dettaglio (`_EquipaggioCard` in
+  `turno_detail.dart` e, identica ma su `Assistenza`, in
+  `assistenza_detail.dart`)**: quando c'è un 2° equipaggio (cambio a metà
+  turno/assistenza), le due parti sono mostrate una riga per ruolo con i due
+  nomi affiancati (trattino attenuato se il ruolo non è coperto in una delle
+  due parti), invece di due blocchi "1ª parte"/"2ª parte" impilati — più
+  facile confrontarle a colpo d'occhio. Con un solo equipaggio (niente campi
+  eq2 valorizzati) resta l'elenco singolo di prima: una colonna "2ª parte"
+  piena di trattini non avrebbe aggiunto informazione. Le due card non sono
+  condivise in un widget comune perché `Turno` e `Assistenza` sono classi
+  diverse pur con gli stessi 10 campi eq1/eq2 — stessa scelta già fatta per
+  `_Row`/`_InfoCard` nei due file. Riguarda solo la visualizzazione: il form
+  (`TurnoForm`/`AssistenzaForm`) resta con le due sezioni sequenziali, non
+  toccato da questa richiesta.
 - **Export JSON leggibile esteso alle assistenze**: `exportSemplificato()` in
   `backup.dart` produceva solo `{'turni': [...]}`; ora produce anche
   `{'assistenze': [...]}` nello stesso file, con la stessa risoluzione
@@ -220,6 +224,17 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   (es. `ambuturni_backup_20260703_14_32.json`), costruito a mano con
   `padLeft` come `todayIso()` invece di introdurre `intl` in un file che non
   lo usava già.
+- **`StatisticheProvider`**: le ore/contatori di `StatisticheScreen` non si
+  aggiornavano subito dopo un import backup (bug segnalato dall'utente).
+  Causa: la schermata caricava i dati una sola volta in uno stato locale
+  (`initState`), mai invalidato da altre schermate — e `AppNavigator` tiene
+  tutte le tab montate contemporaneamente con `IndexedStack`, quindi
+  cambiare tab non la ricostruiva (c'era già un `if (i == 2)` vuoto in
+  `onDestinationSelected` che tentava di risolvere lo stesso problema,
+  mai completato: rimosso). Estratto un `StatisticheProvider` con lo stesso
+  pattern `carica`/`ricarica` di `TurniProvider`/`AssistezeProvider`;
+  `ImpostazioniScreen._import()` ora chiama anche `.ricarica()` su di esso,
+  come già faceva per gli altri tre provider.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -439,9 +454,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   completo (assoc. obbligatoria, data, ore, tipologia + extra chip, equipaggio 1ª/2ª parte).
 - ✅ Equipaggio: form con UI a colonna singola per ciascuna parte, label del
   ruolo sempre visibile a sinistra (redesign rispetto alla griglia 2-colonne
-  originale in cui le label sparivano dopo selezione). Nel dettaglio turno le
-  due parti sono invece affiancate riga per ruolo quando c'è un 2° equipaggio
-  (v. Decisioni tecniche).
+  originale in cui le label sparivano dopo selezione). Nei dettagli turno e
+  assistenza le due parti sono invece affiancate riga per ruolo quando c'è
+  un 2° equipaggio (v. Decisioni tecniche).
 - ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
 - ✅ Note del turno in card dedicata nel dettaglio (tra equipaggio e servizi):
   sempre visibile ("Nessuna nota" se vuote), con matita per la modifica rapida
@@ -450,7 +465,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   (pattern `??`) non può riportare `note` a `null` quando il campo viene svuotato.
 - ✅ Assistenze: identico ai turni ma senza tipologia né servizi.
 - ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
-  con filtro per associazione (chip).
+  con filtro per associazione (chip). Dati in `StatisticheProvider`: si aggiornano anche
+  dopo un import backup fatto da un'altra schermata (v. Decisioni tecniche).
 - ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
   tipologie turno (rinominabili, riordinabili ↑↓, non eliminabili).
   Ogni sezione è collassata di default, con badge contatore sempre visibile,
@@ -479,9 +495,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   il dettaglio in un'unica riga "Tipologia".
 - ✅ Equipaggio: pulsante "Copia 1ª parte" nel titolo della sezione 2ª parte
   copia tutti e 5 i ruoli da eq1 a eq2 con un tap.
-- ✅ Dismissible swipe-to-delete: gesto sinistra con conferma sulla lista assistenze.
-  Rimosso dalla lista turni (v. Decisioni tecniche): lì l'eliminazione passa solo
-  dal cestino nel dettaglio.
+- ✅ Eliminazione turni/assistenze solo dal cestino nel dettaglio (v. Decisioni
+  tecniche): rimossi swipe e long-press dalle liste, prima presenti su entrambe.
 - ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
 - ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
 - ✅ Release automatica su Gitea: sui push di tag `vX.Y.Z`, `build-android.yml`
@@ -531,5 +546,5 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - [x] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools
       (già soddisfatto: `materiali`/`materiali_usati` sono in `_backupTables` da quando
       sono state introdotte, v. sezione Schema DB — nessuna modifica necessaria)
-- [ ] 6. quando viene fatto l'import non aggiorna subito le ore fatte
-- [ ] 7. il campo note deve accettare il markdown
+- [x] 6. quando viene fatto l'import non aggiorna subito le ore fatte
+- [ ] 7. il campo note deve accettare il markdown, quindi voglio che quando modifico le note si apra un campo di modifica più adatto e facile da navigare

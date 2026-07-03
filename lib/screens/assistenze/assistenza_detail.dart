@@ -90,28 +90,7 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
           ),
           if (_hasEquipaggio(a)) ...[
             const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Equipaggio', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
-                    const Divider(height: 16),
-                    const Text('1ª parte', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                    const SizedBox(height: 6),
-                    ..._eqRows(anag, a.eq1AutostaId, a.eq1CsId, a.eq1TerzoId, a.eq1QuartoId, a.eq1CentralinistaId),
-                    if (a.eq2AutostaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
-                        a.eq2QuartoId != null || a.eq2CentralinistaId != null) ...[
-                      const SizedBox(height: 12),
-                      const Text('2ª parte', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                      const SizedBox(height: 6),
-                      ..._eqRows(anag, a.eq2AutostaId, a.eq2CsId, a.eq2TerzoId, a.eq2QuartoId, a.eq2CentralinistaId),
-                    ],
-                  ],
-                ),
-              ),
-            ),
+            _EquipaggioCard(a: a, anag: anag),
           ],
         ],
       ),
@@ -123,21 +102,6 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
       a.eq1QuartoId != null || a.eq1CentralinistaId != null ||
       a.eq2AutostaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
       a.eq2QuartoId != null || a.eq2CentralinistaId != null;
-
-  /// Mostra solo i ruoli valorizzati, omettendo quelli null per non sprecare spazio.
-  List<Widget> _eqRows(AnagraficheProvider anag, String? aut, String? cs, String? terzo, String? quarto, String? central) {
-    final roles = {'Autista': aut, 'CS': cs, 'Terzo': terzo, 'Quarto': quarto, 'Centralinista': central};
-    return roles.entries
-        .where((e) => e.value != null)
-        .map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(children: [
-                SizedBox(width: 100, child: Text(e.key, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-                Text(anag.byIdPersona(e.value)?.nomeCompleto ?? '', style: const TextStyle(fontSize: 13)),
-              ]),
-            ))
-        .toList();
-  }
 }
 
 class _Row extends StatelessWidget {
@@ -152,4 +116,89 @@ class _Row extends StatelessWidget {
           Expanded(child: Text(val, style: const TextStyle(fontSize: 13))),
         ]),
       );
+}
+
+/// Card equipaggio nel dettaglio assistenza. Stesso pattern di
+/// _EquipaggioCard in turno_detail.dart (non condiviso perché Turno e
+/// Assistenza sono due classi diverse, pur con gli stessi 10 campi eq1/eq2):
+/// quando c'è un 2° equipaggio le due parti sono affiancate riga per ruolo,
+/// con un solo equipaggio resta l'elenco singolo.
+class _EquipaggioCard extends StatelessWidget {
+  final Assistenza a;
+  final AnagraficheProvider anag;
+  const _EquipaggioCard({required this.a, required this.anag});
+
+  String _n(String? id) => anag.byIdPersona(id)?.nomeCompleto ?? '';
+
+  bool get _ha2aParte =>
+      a.eq2AutostaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
+      a.eq2QuartoId != null || a.eq2CentralinistaId != null;
+
+  List<({String label, String? v1, String? v2})> get _ruoliCompilati {
+    final ruoli = [
+      (label: 'Autista', v1: a.eq1AutostaId, v2: a.eq2AutostaId),
+      (label: 'CS', v1: a.eq1CsId, v2: a.eq2CsId),
+      (label: 'Terzo', v1: a.eq1TerzoId, v2: a.eq2TerzoId),
+      (label: 'Quarto', v1: a.eq1QuartoId, v2: a.eq2QuartoId),
+      (label: 'Centralino', v1: a.eq1CentralinistaId, v2: a.eq2CentralinistaId),
+    ];
+    return ruoli.where((r) => r.v1 != null || r.v2 != null).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Equipaggio', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
+            const Divider(height: 16),
+            if (_ha2aParte) ..._righeAffiancate() else ..._righeSingole(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _righeAffiancate() {
+    return [
+      const Padding(
+        padding: EdgeInsets.only(bottom: 6),
+        child: Row(children: [
+          SizedBox(width: 72),
+          Expanded(child: Text('1ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
+          SizedBox(width: 12),
+          Expanded(child: Text('2ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
+        ]),
+      ),
+      ..._ruoliCompilati.map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+                Expanded(child: _valorePersona(r.v1)),
+                const SizedBox(width: 12),
+                Expanded(child: _valorePersona(r.v2)),
+              ],
+            ),
+          )),
+    ];
+  }
+
+  List<Widget> _righeSingole() => _ruoliCompilati
+      .map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+              Text(_n(r.v1), style: const TextStyle(fontSize: 13)),
+            ]),
+          ))
+      .toList();
+
+  Widget _valorePersona(String? id) => id == null
+      ? const Text('—', style: TextStyle(fontSize: 13, color: Colors.white24))
+      : Text(_n(id), style: const TextStyle(fontSize: 13));
 }
