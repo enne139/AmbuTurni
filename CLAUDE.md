@@ -196,6 +196,16 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   cancellazione accidentale mentre si scorre la lista o si tiene premuto per
   altri motivi. La lista assistenze mantiene invece lo swipe-to-delete
   (non toccata da questa richiesta).
+- **Equipaggio 1ª/2ª parte affiancate nel dettaglio turno (`_EquipaggioCard`
+  in `turno_detail.dart`)**: quando il turno ha un 2° equipaggio (cambio a
+  metà turno), le due parti sono mostrate una riga per ruolo con i due nomi
+  affiancati (trattino attenuato se il ruolo non è coperto in una delle due
+  parti), invece di due blocchi "1ª parte"/"2ª parte" impilati — più facile
+  confrontarle a colpo d'occhio. Se il turno ha un solo equipaggio (niente
+  campi eq2 valorizzati) resta l'elenco singolo di prima: una colonna "2ª
+  parte" piena di trattini non avrebbe aggiunto informazione. Riguarda solo
+  la visualizzazione: il form (`TurnoForm`/`AssistenzaForm`) resta con le due
+  sezioni sequenziali, non toccato da questa richiesta.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -413,8 +423,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 
 - ✅ Turni: lista ordinata per data desc, filtro associazione, create/edit/delete, form
   completo (assoc. obbligatoria, data, ore, tipologia + extra chip, equipaggio 1ª/2ª parte).
-- ✅ Equipaggio: UI a colonna singola con label del ruolo sempre visibile a sinistra
-  (redesign rispetto alla griglia 2-colonne originale in cui le label sparivano dopo selezione).
+- ✅ Equipaggio: form con UI a colonna singola per ciascuna parte, label del
+  ruolo sempre visibile a sinistra (redesign rispetto alla griglia 2-colonne
+  originale in cui le label sparivano dopo selezione). Nel dettaglio turno le
+  due parti sono invece affiancate riga per ruolo quando c'è un 2° equipaggio
+  (v. Decisioni tecniche).
 - ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
 - ✅ Note del turno in card dedicata nel dettaglio (tra equipaggio e servizi):
   sempre visibile ("Nessuna nota" se vuote), con matita per la modifica rapida
@@ -498,6 +511,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 
 - [ ] 1. Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
 - [x] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
-- [ ] 3. Affiancare l'equipaggio 1 e 2 
+- [x] 3. Affiancare l'equipaggio 1 e 2 
 - [ ] 4. aggiungere al esportazione semplificata anche le assistenze
 - [ ] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools
+- [ ] 6. quando viene fatto l'import non aggiorna subito le ore fatte

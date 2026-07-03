@@ -280,12 +280,34 @@ class _NoteCard extends StatelessWidget {
   }
 }
 
+/// Card equipaggio nel dettaglio turno. Quando c'è un 2° equipaggio (cambio a
+/// metà turno), le due parti sono affiancate riga per ruolo invece che in due
+/// blocchi impilati, per confrontarle a colpo d'occhio senza scorrere; con un
+/// solo equipaggio resta una lista singola (non avrebbe senso una colonna
+/// "2ª parte" vuota di trattini).
 class _EquipaggioCard extends StatelessWidget {
   final Turno t;
   final AnagraficheProvider anag;
   const _EquipaggioCard({required this.t, required this.anag});
 
   String _n(String? id) => anag.byIdPersona(id)?.nomeCompleto ?? '';
+
+  bool get _ha2aParte =>
+      t.eq2AutostaId != null || t.eq2CsId != null || t.eq2TerzoId != null ||
+      t.eq2QuartoId != null || t.eq2CentralinistaId != null;
+
+  /// Ruoli con almeno una persona assegnata in una delle due parti, in
+  /// ordine fisso (Autista, CS, Terzo, Quarto, Centralinista).
+  List<({String label, String? v1, String? v2})> get _ruoliCompilati {
+    final ruoli = [
+      (label: 'Autista', v1: t.eq1AutostaId, v2: t.eq2AutostaId),
+      (label: 'CS', v1: t.eq1CsId, v2: t.eq2CsId),
+      (label: 'Terzo', v1: t.eq1TerzoId, v2: t.eq2TerzoId),
+      (label: 'Quarto', v1: t.eq1QuartoId, v2: t.eq2QuartoId),
+      (label: 'Centralino', v1: t.eq1CentralinistaId, v2: t.eq2CentralinistaId),
+    ];
+    return ruoli.where((r) => r.v1 != null || r.v2 != null).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -297,35 +319,54 @@ class _EquipaggioCard extends StatelessWidget {
           children: [
             const Text('Equipaggio', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
             const Divider(height: 16),
-            const Text('1ª parte', style: TextStyle(color: Colors.white54, fontSize: 12)),
-            const SizedBox(height: 6),
-            ..._eq(t.eq1AutostaId, t.eq1CsId, t.eq1TerzoId, t.eq1QuartoId, t.eq1CentralinistaId),
-            if (t.eq2AutostaId != null || t.eq2CsId != null || t.eq2TerzoId != null ||
-                t.eq2QuartoId != null || t.eq2CentralinistaId != null) ...[
-              const SizedBox(height: 12),
-              const Text('2ª parte', style: TextStyle(color: Colors.white54, fontSize: 12)),
-              const SizedBox(height: 6),
-              ..._eq(t.eq2AutostaId, t.eq2CsId, t.eq2TerzoId, t.eq2QuartoId, t.eq2CentralinistaId),
-            ],
+            if (_ha2aParte) ..._righeAffiancate() else ..._righeSingole(),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _eq(String? aut, String? cs, String? terzo, String? quarto, String? central) {
-    final roles = {'Autista': aut, 'CS': cs, 'Terzo': terzo, 'Quarto': quarto, 'Centralinista': central};
-    return roles.entries
-        .where((e) => e.value != null)
-        .map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(children: [
-                SizedBox(width: 100, child: Text(e.key, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-                Text(_n(e.value), style: const TextStyle(fontSize: 13)),
-              ]),
-            ))
-        .toList();
+  List<Widget> _righeAffiancate() {
+    return [
+      const Padding(
+        padding: EdgeInsets.only(bottom: 6),
+        child: Row(children: [
+          SizedBox(width: 72),
+          Expanded(child: Text('1ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
+          SizedBox(width: 12),
+          Expanded(child: Text('2ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
+        ]),
+      ),
+      ..._ruoliCompilati.map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+                Expanded(child: _valorePersona(r.v1)),
+                const SizedBox(width: 12),
+                Expanded(child: _valorePersona(r.v2)),
+              ],
+            ),
+          )),
+    ];
   }
+
+  List<Widget> _righeSingole() => _ruoliCompilati
+      .map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+              Text(_n(r.v1), style: const TextStyle(fontSize: 13)),
+            ]),
+          ))
+      .toList();
+
+  /// Nome della persona, oppure un trattino attenuato se il ruolo non è
+  /// coperto in questa parte del turno.
+  Widget _valorePersona(String? id) => id == null
+      ? const Text('—', style: TextStyle(fontSize: 13, color: Colors.white24))
+      : Text(_n(id), style: const TextStyle(fontSize: 13));
 }
 
 class _ServizioCard extends StatelessWidget {
