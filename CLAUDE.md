@@ -32,7 +32,9 @@
    un branch) richiede un bump della versione DB con una vera migrazione in
    `_onUpgrade`, mai un edit in-place dello schema esistente (lezione v4→v5, vedi
    Decisioni tecniche). Le nuove tabelle vanno aggiunte anche a `_backupTables` in
-   `backup.dart`, valutando la compatibilità del backup JSON con l'app RN.
+   `backup.dart`; i backup JSON dei formati precedenti (inclusi quelli della
+   vecchia app RN) devono restare importabili — le normalizzazioni vivono in
+   `importBackup`.
 8. **Testa su Android reale le modifiche a DB/piattaforma:** per modifiche che
    toccano il DB, plugin nativi o comportamenti di piattaforma, verifica su un
    telefono reale via adb — il bug del PRAGMA WAL era invisibile su Windows/desktop
@@ -115,22 +117,23 @@ assets/icon/                        sorgenti icona app (SVG + PNG 1024×1024), v
 
 ## Schema DB
 
-Identico all'app React Native (stesse tabelle, stessi CHECK, stessi indici) — così un
-import/export JSON è compatibile tra le due versioni dell'app.
+Nato identico all'app React Native (stesse tabelle, stessi CHECK, stessi indici)
+per la compatibilità dell'import/export JSON. **L'app RN è stata dismessa
+(2026-07)**: dalla versione DB 8 lo schema è libero di evolvere — la
+compatibilità con i vecchi backup (RN e Flutter pre-v8) è mantenuta in
+`importBackup`, che normalizza le righe dei formati precedenti.
 
 Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
 `tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
 
 `materiali` e `materiali_usati` (introdotte in versione DB 4, branch `feature/tools`)
-sono nuove e NON esistono nell'app React Native. Sono comunque incluse nel backup
-JSON (`_backupTables` in `backup.dart`) insieme alle tabelle condivise: un backup
-Flutter importato nell'app RN ignorerebbe semplicemente quelle due chiavi, e un
-vecchio backup RN importato qui le lascia assenti — l'aggiunta non rompe la
-compatibilità in nessuna delle due direzioni.
+non esistevano nell'app React Native. Sono incluse nel backup JSON
+(`_backupTables` in `backup.dart`): un vecchio backup RN importato qui le
+lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 7); `_onOpen` esegue soltanto i PRAGMA di connessione
+(versione corrente: 8); `_onOpen` esegue soltanto i PRAGMA di connessione
 (WAL + foreign_keys).
 
 ### Desktop (Windows/Linux/macOS)
@@ -170,11 +173,21 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   un codice identico su tutte le piattaforme.
 - **ConflictAlgorithm.replace** negli insert: upsert idiomatico di sqflite; equivale a
   `INSERT OR REPLACE INTO` e funziona sia per create che per update.
-- **tipologie_extra**: `List<String>` in Dart, serializzata come `TEXT` JSON nel DB
-  (`jsonEncode`/`jsonDecode` in `models.dart`). Stessa scelta dell'app RN originale.
-  Nota: fino a questo commit il codice faceva in realtà un parsing manuale con
-  `replaceAll`/`split` (fragile, e duplicato in `exportSemplificato`); ora usa
-  davvero `dart:convert` come questo documento ha sempre dichiarato.
+- **`tipologie` colonna unica multi-valore (v8)**: `List<String>` in Dart,
+  serializzata come `TEXT` JSON nel DB (`jsonEncode`/`jsonDecode` in
+  `models.dart`). Sostituisce la coppia `tipologia_id` (FK singola "primaria") +
+  `tipologie_extra` (JSON), che esisteva solo per compatibilità con lo schema
+  dell'app RN, dismessa: per l'utente la tipologia è sempre stata un unico campo
+  con più valori (il form era già un multi-select unico). La migrazione v8
+  ricostruisce `turni` (SQLite non può rimuovere una colonna con REFERENCES via
+  ALTER) fondendo primaria + extra, primaria in testa, e ricrea l'indice
+  `idx_turni_assoc` che cade col DROP. Le FK sono spente durante `_onUpgrade`
+  (il PRAGMA vive in `_onOpen`, che gira dopo), quindi il DROP non tocca i
+  servizi figli. Sparisce il JOIN su `tipologie_turno` dalle query dei turni
+  (`tipologia_nome`/`tipologia_colore` rimossi dal modello): i nomi si risolvono
+  via `AnagraficheProvider.byIdTipologia` nelle schermate, come già per le extra.
+  `importBackup` fonde `tipologia_id`/`tipologie_extra` → `tipologie` nelle
+  righe dei backup pre-v8 (RN inclusi), che restano quindi importabili.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -208,7 +221,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - **Turni/assistenze per persona via OR sui 10 campi equipaggio**: `getTurniPerPersona` e
   `getAssistenzePerPersona` cercano l'id in tutti e 10 i ruoli (eq1/eq2 x 5 ruoli) con
   una WHERE a OR, perché lo schema usa colonne dedicate per ruolo invece di una tabella
-  ponte persona↔turno (schema condiviso con l'app RN, non modificabile senza migrazione).
+  ponte persona↔turno (eredità dello schema RN; cambiarlo richiederebbe una migrazione).
 - **Turni per ospedale via INNER JOIN + DISTINCT**: `getTurniPerOspedale` fa JOIN su
   `servizi` filtrando per `ospedale_id`; il DISTINCT sull'intera riga evita duplicati
   quando un turno ha più servizi collegati allo stesso ospedale.
@@ -425,7 +438,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
 - ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
 - ✅ Tipologie multi-select nel form turno: FilterChip, ordine personalizzabile.
-  La card della lista mostra tutte le tipologie (primaria + extra) separate da `·`.
+  Dalla DB v8 sono un unico campo `tipologie` anche nello schema (niente più
+  primaria/extra); la card della lista le mostra tutte separate da `·`,
+  il dettaglio in un'unica riga "Tipologia".
 - ✅ Equipaggio: pulsante "Copia 1ª parte" nel titolo della sezione 2ª parte
   copia tutti e 5 i ruoli da eq1 a eq2 con un tap.
 - ✅ Dismissible swipe-to-delete: gesto sinistra con conferma su lista turni e assistenze.
@@ -471,4 +486,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 
 ## TODO
 
-- [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+- [ ] 1. Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+- [ ] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
+- [ ] 3. Affiancare l'equipaggio 1 e 2 
+- [ ] 4. aggiungere al esportazione semplificata anche le assistenze
+- [ ] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools

@@ -28,11 +28,11 @@ const _deleteOrder = [
   'associazioni',
 ];
 
-// Tabelle incluse nel backup. Stesse tabelle e stesso ordine dell'app RN per
-// compatibilità JSON, con in più materiali/materiali_usati (esclusive
-// dell'app Flutter): un backup Flutter importato nell'app RN le ignorerebbe
-// semplicemente (chiavi JSON sconosciute), e un vecchio backup RN importato
-// qui le lascia assenti (tables[table] == null → nessuna riga da reinserire).
+// Tabelle incluse nel backup. L'app RN è dismessa, ma i suoi vecchi backup
+// (e quelli Flutter pre-v8) restano importabili: le tabelle assenti nel file
+// vengono lasciate vuote (tables[table] == null → nessuna riga da reinserire)
+// e le righe dei turni vengono normalizzate in importBackup (date ISO,
+// fusione tipologia_id/tipologie_extra → tipologie).
 const _backupTables = [
   'associazioni',
   'persone',
@@ -89,18 +89,16 @@ Future<String?> exportSemplificato() async {
   for (final t in turniRows) {
     final turnoId = t['id'] as String;
 
-    // Tipologie: primaria + extra → lista di nomi. Stesso jsonDecode di
-    // Turno.fromMap (il campo è un array JSON di stringhe).
+    // Tipologie → lista di nomi. Stesso jsonDecode di Turno.fromMap
+    // (il campo è un array JSON di stringhe).
     final tipIds = <String>[];
-    final pid = t['tipologia_id'] as String?;
-    if (pid != null) tipIds.add(pid);
-    final extraRaw = (t['tipologie_extra'] as String?) ?? '';
-    if (extraRaw.isNotEmpty) {
+    final tipRaw = (t['tipologie'] as String?) ?? '';
+    if (tipRaw.isNotEmpty) {
       try {
-        final decoded = jsonDecode(extraRaw);
+        final decoded = jsonDecode(tipRaw);
         if (decoded is List) tipIds.addAll(decoded.whereType<String>());
       } catch (_) {
-        // Valore corrotto/legacy: l'export prosegue senza le tipologie extra.
+        // Valore corrotto/legacy: l'export prosegue senza le tipologie.
       }
     }
 
@@ -221,8 +219,13 @@ Future<String> importBackup() async {
     tables = payload;
   }
 
-  // Normalizza le date dei turni: l'app RN salvava "YYYY-MM-DDT00:00:00.000Z"
-  // (ISO datetime), l'app Flutter si aspetta "YYYY-MM-DD" (solo data).
+  // Normalizza le righe dei turni dei backup più vecchi:
+  // - date: l'app RN salvava "YYYY-MM-DDT00:00:00.000Z" (ISO datetime),
+  //   l'app Flutter si aspetta "YYYY-MM-DD" (solo data);
+  // - tipologie: i backup pre-v8 (RN e Flutter fino alla DB v7) hanno le
+  //   colonne separate tipologia_id/tipologie_extra — vanno fuse nella
+  //   colonna unica `tipologie`, altrimenti l'INSERT fallirebbe su colonne
+  //   che non esistono più e la riga verrebbe scartata.
   if (tables['turni'] is List) {
     tables['turni'] = (tables['turni'] as List).map((row) {
       final map = Map<String, dynamic>.from(row as Map);
@@ -230,6 +233,24 @@ Future<String> importBackup() async {
       if (data is String && data.length > 10) {
         map['data'] = data.substring(0, 10);
       }
+      if (!map.containsKey('tipologie')) {
+        final tipologie = <String>[];
+        final pid = map['tipologia_id'];
+        if (pid is String && pid.isNotEmpty) tipologie.add(pid);
+        final extraRaw = map['tipologie_extra'];
+        if (extraRaw is String && extraRaw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(extraRaw);
+            if (decoded is List) tipologie.addAll(decoded.whereType<String>());
+          } catch (_) {
+            // Valore corrotto/legacy: la riga si importa senza tipologie extra.
+          }
+        }
+        map['tipologie'] = jsonEncode(tipologie);
+      }
+      map
+        ..remove('tipologia_id')
+        ..remove('tipologie_extra');
       return map;
     }).toList();
   }

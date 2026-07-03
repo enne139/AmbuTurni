@@ -196,8 +196,11 @@ class Turno {
   final int? numeroProgressivo;
   final String data;
   final double? ore;
-  final String? tipologiaId;
-  final List<String> tipologieExtra; // id tipologie aggiuntive
+  // Id delle tipologie del turno (multi-valore, v8): la vecchia distinzione
+  // tipologia_id/tipologie_extra esisteva solo per compatibilità con lo schema
+  // dell'app React Native, ormai dismessa. I nomi si risolvono via
+  // AnagraficheProvider.byIdTipologia nelle schermate.
+  final List<String> tipologie;
   final int numServizi;
   final String? descrizione;
   final String? note;
@@ -222,8 +225,6 @@ class Turno {
   // Campi denormalizzati (JOIN) — popolati dalla query lista.
   final String? associazioneNome;
   final String? associazioneColore;
-  final String? tipologiaNome;
-  final String? tipologiaColore;
 
   const Turno({
     required this.id,
@@ -231,8 +232,7 @@ class Turno {
     this.numeroProgressivo,
     required this.data,
     this.ore,
-    this.tipologiaId,
-    this.tipologieExtra = const [],
+    this.tipologie = const [],
     this.numServizi = 0,
     this.descrizione,
     this.note,
@@ -252,21 +252,19 @@ class Turno {
     this.isSynced = 0,
     this.associazioneNome,
     this.associazioneColore,
-    this.tipologiaNome,
-    this.tipologiaColore,
   });
 
   factory Turno.fromMap(Map<String, dynamic> m) {
-    List<String> extra = [];
-    final rawExtra = m['tipologie_extra'];
-    if (rawExtra is String && rawExtra.isNotEmpty) {
+    List<String> tipologie = [];
+    final rawTipologie = m['tipologie'];
+    if (rawTipologie is String && rawTipologie.isNotEmpty) {
       // Il campo è un array JSON di stringhe: jsonDecode al posto del vecchio
       // parsing manuale con replaceAll/split, fragile e duplicato. Il catch
       // copre eventuali valori corrotti/legacy senza far crashare la lettura.
       try {
-        final decoded = jsonDecode(rawExtra);
+        final decoded = jsonDecode(rawTipologie);
         if (decoded is List) {
-          extra = decoded.whereType<String>().toList();
+          tipologie = decoded.whereType<String>().toList();
         }
       } catch (_) {}
     }
@@ -276,8 +274,7 @@ class Turno {
       numeroProgressivo: m['numero_progressivo'] as int?,
       data: m['data'] as String,
       ore: (m['ore'] as num?)?.toDouble(),
-      tipologiaId: m['tipologia_id'] as String?,
-      tipologieExtra: extra,
+      tipologie: tipologie,
       numServizi: (m['num_servizi'] as int?) ?? 0,
       descrizione: m['descrizione'] as String?,
       note: m['note'] as String?,
@@ -297,8 +294,6 @@ class Turno {
       isSynced: (m['is_synced'] as int?) ?? 0,
       associazioneNome: m['associazione_nome'] as String?,
       associazioneColore: m['associazione_colore'] as String?,
-      tipologiaNome: m['tipologia_nome'] as String?,
-      tipologiaColore: m['tipologia_colore'] as String?,
     );
   }
 
@@ -308,8 +303,7 @@ class Turno {
         'numero_progressivo': numeroProgressivo,
         'data': data,
         'ore': ore,
-        'tipologia_id': tipologiaId,
-        'tipologie_extra': jsonEncode(tipologieExtra),
+        'tipologie': jsonEncode(tipologie),
         'num_servizi': numServizi,
         'descrizione': descrizione,
         'note': note,
@@ -335,8 +329,7 @@ class Turno {
     int? numeroProgressivo,
     String? data,
     double? ore,
-    String? tipologiaId,
-    List<String>? tipologieExtra,
+    List<String>? tipologie,
     int? numServizi,
     String? descrizione,
     String? note,
@@ -360,8 +353,7 @@ class Turno {
         numeroProgressivo: numeroProgressivo ?? this.numeroProgressivo,
         data: data ?? this.data,
         ore: ore ?? this.ore,
-        tipologiaId: tipologiaId ?? this.tipologiaId,
-        tipologieExtra: tipologieExtra ?? this.tipologieExtra,
+        tipologie: tipologie ?? this.tipologie,
         numServizi: numServizi ?? this.numServizi,
         descrizione: descrizione ?? this.descrizione,
         note: note ?? this.note,

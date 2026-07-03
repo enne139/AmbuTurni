@@ -190,8 +190,9 @@ Future<void> spostaTipologia(int fromIndex, int toIndex) async {
 // ---------------------------------------------------------------------------
 
 /// Restituisce i turni ordinati per data decrescente.
-/// LEFT JOIN su associazioni e tipologie_turno per denormalizzare i nomi
-/// ed evitare N+1 query nelle liste (un'unica query basta per tutto).
+/// LEFT JOIN su associazioni per denormalizzare nome/colore ed evitare N+1
+/// query nelle liste; le tipologie (colonna JSON multi-valore) si risolvono
+/// in nomi via AnagraficheProvider nelle schermate.
 ///
 /// Se [ricerca] è valorizzato, filtra sui turni la cui descrizione/note oppure
 /// la descrizione di un servizio collegato contengono il testo (case-insensitive
@@ -219,12 +220,9 @@ Future<List<Turno>> getTurni({String? associazioneId, String? ricerca}) async {
   final rows = await db.rawQuery('''
     SELECT $distinct t.*,
            a.nome AS associazione_nome,
-           a.colore AS associazione_colore,
-           tp.nome AS tipologia_nome,
-           tp.colore AS tipologia_colore
+           a.colore AS associazione_colore
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
-    LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
     $joinServizi
     $where
     ORDER BY t.data DESC, t.created_at DESC
@@ -239,12 +237,9 @@ Future<List<Turno>> getTurniPerPersona(String personaId) async {
   final rows = await db.rawQuery('''
     SELECT t.*,
            a.nome AS associazione_nome,
-           a.colore AS associazione_colore,
-           tp.nome AS tipologia_nome,
-           tp.colore AS tipologia_colore
+           a.colore AS associazione_colore
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
-    LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
     WHERE t.eq1_autista_id = ? OR t.eq1_cs_id = ? OR t.eq1_terzo_id = ? OR t.eq1_quarto_id = ? OR t.eq1_centralinista_id = ?
        OR t.eq2_autista_id = ? OR t.eq2_cs_id = ? OR t.eq2_terzo_id = ? OR t.eq2_quarto_id = ? OR t.eq2_centralinista_id = ?
     ORDER BY t.data DESC, t.created_at DESC
@@ -259,12 +254,9 @@ Future<List<Turno>> getTurniPerOspedale(String ospedaleId) async {
   final rows = await db.rawQuery('''
     SELECT DISTINCT t.*,
            a.nome AS associazione_nome,
-           a.colore AS associazione_colore,
-           tp.nome AS tipologia_nome,
-           tp.colore AS tipologia_colore
+           a.colore AS associazione_colore
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
-    LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
     INNER JOIN servizi s ON s.turno_id = t.id
     WHERE s.ospedale_id = ?
     ORDER BY t.data DESC, t.created_at DESC
@@ -278,12 +270,9 @@ Future<Turno?> getTurnoById(String id) async {
   final rows = await db.rawQuery('''
     SELECT t.*,
            a.nome AS associazione_nome,
-           a.colore AS associazione_colore,
-           tp.nome AS tipologia_nome,
-           tp.colore AS tipologia_colore
+           a.colore AS associazione_colore
     FROM turni t
     LEFT JOIN associazioni a ON a.id = t.associazione_id
-    LEFT JOIN tipologie_turno tp ON tp.id = t.tipologia_id
     WHERE t.id = ?
   ''', [id]);
   if (rows.isEmpty) return null;

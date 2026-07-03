@@ -56,13 +56,9 @@ class TurnoCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Builder(builder: (_) {
-                      final tipNomi = [
-                        if (turno.tipologiaNome != null) turno.tipologiaNome!,
-                        ...turno.tipologieExtra.map(
-                          (id) => anag.byIdTipologia(id)?.nome ?? id,
-                        ),
-                      ];
-                      final tipStr = tipNomi.join(' · ');
+                      final tipStr = turno.tipologie
+                          .map((id) => anag.byIdTipologia(id)?.nome ?? id)
+                          .join(' · ');
                       return Text(
                         [
                           if (turno.associazioneNome != null) turno.associazioneNome!,

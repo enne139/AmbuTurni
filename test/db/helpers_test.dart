@@ -60,22 +60,22 @@ void main() {
   });
 
   group('Modello Turno', () {
-    test('tipologieExtra deserializzate correttamente', () {
+    test('tipologie deserializzate correttamente', () {
       final map = {
         'id': 'turno1',
         'data': '2024-06-01',
-        'tipologie_extra': '["id1","id2"]',
+        'tipologie': '["id1","id2"]',
         'num_servizi': 0,
         'is_synced': 0,
       };
       final t = Turno.fromMap(map);
-      expect(t.tipologieExtra, ['id1', 'id2']);
+      expect(t.tipologie, ['id1', 'id2']);
     });
 
-    test('tipologieExtra vuote con stringa []', () {
-      final map = {'id': 'turno2', 'data': '2024-06-01', 'tipologie_extra': '[]'};
+    test('tipologie vuote con stringa []', () {
+      final map = {'id': 'turno2', 'data': '2024-06-01', 'tipologie': '[]'};
       final t = Turno.fromMap(map);
-      expect(t.tipologieExtra, isEmpty);
+      expect(t.tipologie, isEmpty);
     });
 
     test('cambioMeta serializzato come 0/1', () {

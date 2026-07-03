@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-// Schema SQL locale — identico a quello del branch React Native (schema.ts).
+// Schema SQL locale. Nato identico a quello dell'app React Native (schema.ts),
+// ora dismessa: dalla v8 lo schema è libero di evolvere (vedi `tipologie`).
 const _schema = '''
 CREATE TABLE IF NOT EXISTS associazioni (
   id TEXT PRIMARY KEY,
@@ -57,8 +59,7 @@ CREATE TABLE IF NOT EXISTS turni (
   numero_progressivo INTEGER,
   data TEXT NOT NULL,
   ore REAL,
-  tipologia_id TEXT REFERENCES tipologie_turno(id),
-  tipologie_extra TEXT DEFAULT '[]',
+  tipologie TEXT DEFAULT '[]',
   num_servizi INTEGER DEFAULT 0,
   descrizione TEXT,
   note TEXT,
@@ -183,7 +184,7 @@ Future<Database> getDb() async {
   final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 7,
+    version: 8,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -358,6 +359,77 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
       await db.insert('materiali_usati', nuovaRiga);
     }
   }
+  if (oldVersion < 8) {
+    // L'app React Native è stata dismessa: la distinzione tipologia_id
+    // (primaria) / tipologie_extra (JSON) esisteva solo per compatibilità col
+    // suo schema. Le due colonne vengono fuse in un'unica colonna `tipologie`
+    // (array JSON di id, primaria in testa). SQLite non può rimuovere una
+    // colonna con REFERENCES né fonderne due con ALTER: la tabella va
+    // ricostruita. Le FK sono disattivate durante onUpgrade (il PRAGMA viene
+    // acceso solo in _onOpen, che gira dopo), quindi il DROP non tocca i
+    // servizi figli, che restano validi perché gli id dei turni non cambiano.
+    final cols = await db.rawQuery('PRAGMA table_info(turni)');
+    final haSchemaVecchio = cols.any((c) => c['name'] == 'tipologia_id');
+    if (haSchemaVecchio) {
+      final righe = await db.query('turni');
+      await db.execute('DROP TABLE turni');
+      await db.execute('''
+        CREATE TABLE turni (
+          id TEXT PRIMARY KEY,
+          associazione_id TEXT REFERENCES associazioni(id),
+          numero_progressivo INTEGER,
+          data TEXT NOT NULL,
+          ore REAL,
+          tipologie TEXT DEFAULT '[]',
+          num_servizi INTEGER DEFAULT 0,
+          descrizione TEXT,
+          note TEXT,
+          eq1_autista_id TEXT REFERENCES persone(id),
+          eq1_cs_id TEXT REFERENCES persone(id),
+          eq1_terzo_id TEXT REFERENCES persone(id),
+          eq1_quarto_id TEXT REFERENCES persone(id),
+          eq1_centralinista_id TEXT REFERENCES persone(id),
+          eq2_autista_id TEXT REFERENCES persone(id),
+          eq2_cs_id TEXT REFERENCES persone(id),
+          eq2_terzo_id TEXT REFERENCES persone(id),
+          eq2_quarto_id TEXT REFERENCES persone(id),
+          eq2_centralinista_id TEXT REFERENCES persone(id),
+          cambio_meta INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+      // L'indice viene eliminato insieme alla tabella: va ricreato.
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_turni_assoc ON turni(associazione_id)');
+      for (final riga in righe) {
+        final nuovaRiga = Map<String, dynamic>.from(riga);
+        nuovaRiga['tipologie'] =
+            jsonEncode(_fondiTipologie(riga['tipologia_id'], riga['tipologie_extra']));
+        nuovaRiga
+          ..remove('tipologia_id')
+          ..remove('tipologie_extra');
+        await db.insert('turni', nuovaRiga);
+      }
+    }
+  }
+}
+
+/// Fonde tipologia primaria ed extra nella lista unica della v8:
+/// la primaria (se presente) resta in testa, seguono le extra nell'ordine
+/// salvato. Il catch copre valori corrotti/legacy senza far fallire la
+/// migrazione (stesso approccio del vecchio Turno.fromMap).
+List<String> _fondiTipologie(dynamic tipologiaId, dynamic tipologieExtra) {
+  final tipologie = <String>[
+    if (tipologiaId is String && tipologiaId.isNotEmpty) tipologiaId,
+  ];
+  if (tipologieExtra is String && tipologieExtra.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(tipologieExtra);
+      if (decoded is List) tipologie.addAll(decoded.whereType<String>());
+    } catch (_) {}
+  }
+  return tipologie;
 }
 
 /// Assegna a `ordine` l'indice alfabetico corrente (migrazione v1 -> v2:

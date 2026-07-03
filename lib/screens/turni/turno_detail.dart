@@ -210,9 +210,8 @@ class _InfoCard extends StatelessWidget {
             _Row('Associazione', t.associazioneNome ?? '—'),
             _Row('Data', formatDate(t.data)),
             _Row('Ore', formatOre(t.ore)),
-            if (t.tipologiaNome != null) _Row('Tipologia', t.tipologiaNome!),
-            if (t.tipologieExtra.isNotEmpty)
-              _Row('Tipologie extra', t.tipologieExtra
+            if (t.tipologie.isNotEmpty)
+              _Row('Tipologia', t.tipologie
                   .map((id) => anag.byIdTipologia(id)?.nome ?? id)
                   .join(', ')),
             if (t.descrizione != null) _Row('Descrizione', t.descrizione!),
