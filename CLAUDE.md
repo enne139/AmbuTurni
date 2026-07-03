@@ -188,6 +188,14 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   via `AnagraficheProvider.byIdTipologia` nelle schermate, come già per le extra.
   `importBackup` fonde `tipologia_id`/`tipologie_extra` → `tipologie` nelle
   righe dei backup pre-v8 (RN inclusi), che restano quindi importabili.
+- **Eliminazione turno solo dal dettaglio (rimossi swipe e long-press dalla
+  lista)**: la lista turni aveva due gesti di eliminazione rapida (Dismissible
+  a swipe e long-press sulla card), entrambi con conferma. Rimossi su richiesta
+  esplicita: restava comunque il cestino nell'AppBar di `TurnoDetail`, quindi
+  i due gesti erano solo scorciatoie ridondanti — e più a rischio di
+  cancellazione accidentale mentre si scorre la lista o si tiene premuto per
+  altri motivi. La lista assistenze mantiene invece lo swipe-to-delete
+  (non toccata da questa richiesta).
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -443,7 +451,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   il dettaglio in un'unica riga "Tipologia".
 - ✅ Equipaggio: pulsante "Copia 1ª parte" nel titolo della sezione 2ª parte
   copia tutti e 5 i ruoli da eq1 a eq2 con un tap.
-- ✅ Dismissible swipe-to-delete: gesto sinistra con conferma su lista turni e assistenze.
+- ✅ Dismissible swipe-to-delete: gesto sinistra con conferma sulla lista assistenze.
+  Rimosso dalla lista turni (v. Decisioni tecniche): lì l'eliminazione passa solo
+  dal cestino nel dettaglio.
 - ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
 - ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
 - ✅ Release automatica su Gitea: sui push di tag `vX.Y.Z`, `build-android.yml`
@@ -487,7 +497,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 ## TODO
 
 - [ ] 1. Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
-- [ ] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
+- [x] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
 - [ ] 3. Affiancare l'equipaggio 1 e 2 
 - [ ] 4. aggiungere al esportazione semplificata anche le assistenze
 - [ ] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools

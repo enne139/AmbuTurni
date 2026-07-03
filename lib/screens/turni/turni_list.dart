@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../db/helpers.dart';
-import '../../db/models.dart';
 import '../../providers/app_provider.dart';
-import '../../utils/format.dart';
 import '../../utils/theme.dart';
 import '../../widgets/turno_card.dart';
 import 'turno_form.dart';
 import 'turno_detail.dart';
 
-/// Lista turni ordinata per data decrescente, con filtro per associazione e
-/// long-press per eliminare (con conferma).
+/// Lista turni ordinata per data decrescente, con filtro per associazione.
+/// L'eliminazione (swipe e long-press) è stata rimossa dalla lista su
+/// richiesta esplicita: l'unico modo per eliminare un turno resta il
+/// cestino nell'AppBar del dettaglio, per evitare cancellazioni accidentali
+/// mentre si scorre o si tocca a lungo una card per sbaglio.
 class TurniList extends StatefulWidget {
   const TurniList({super.key});
 
@@ -56,27 +56,6 @@ class _TurniListState extends State<TurniList> {
       _searchCtrl.clear();
     });
     context.read<TurniProvider>().carica(associazioneId: _filtroAssocId);
-  }
-
-  Future<void> _elimina(Turno turno) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Elimina turno'),
-        content: Text('Eliminare il turno del ${formatDate(turno.data)}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Elimina', style: TextStyle(color: kPrimary)),
-          ),
-        ],
-      ),
-    );
-    if (ok == true && mounted) {
-      await deleteTurno(turno.id);
-      if (mounted) context.read<TurniProvider>().ricarica();
-    }
   }
 
   @override
@@ -157,50 +136,16 @@ class _TurniListState extends State<TurniList> {
               itemCount: turni.length,
               itemBuilder: (ctx, i) {
                 final turno = turni[i];
-                return Dismissible(
-                  key: ValueKey(turno.id),
-                  direction: DismissDirection.endToStart,
-                  // Conferma prima di rimuovere: se l'utente annulla, l'item torna indietro.
-                  confirmDismiss: (_) => showDialog<bool>(
-                    context: context,
-                    builder: (dctx) => AlertDialog(
-                      title: const Text('Elimina turno'),
-                      content: Text('Eliminare il turno del ${formatDate(turno.data)}?'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Annulla')),
-                        TextButton(
-                          onPressed: () => Navigator.pop(dctx, true),
-                          child: const Text('Elimina', style: TextStyle(color: kPrimary)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  onDismissed: (_) async {
-                    await deleteTurno(turno.id);
+                return TurnoCard(
+                  turno: turno,
+                  anag: anag,
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turno.id)),
+                    );
                     if (mounted) context.read<TurniProvider>().ricarica();
                   },
-                  background: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    decoration: BoxDecoration(
-                      color: kPrimary.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  child: TurnoCard(
-                    turno: turno,
-                    anag: anag,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turno.id)),
-                      );
-                      if (mounted) context.read<TurniProvider>().ricarica();
-                    },
-                    onLongPress: () => _elimina(turno),
-                  ),
                 );
               },
             ),
