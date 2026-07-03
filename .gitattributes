@@ -1,0 +1,7 @@
+# I file generati da flutter/cmake per Windows sono scritti sempre con LF,
+# indipendentemente dal sistema che li rigenera. Senza questa regola, git su
+# Windows (core.autocrlf) li segna come "modificati" a ogni checkout/rebuild
+# pur non essendoci alcuna differenza di contenuto reale — solo fine riga.
+windows/flutter/generated_plugins.cmake text eol=lf
+windows/flutter/generated_plugin_registrant.cc text eol=lf
+windows/flutter/generated_plugin_registrant.h text eol=lf

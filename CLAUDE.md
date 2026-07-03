@@ -168,431 +168,153 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 
 ## Decisioni tecniche rilevanti
 
-- **`android:allowBackup="false"` nel manifest**: il default Android (true) include
-  il DB SQLite — nomi di persone e turni, dati personali di terzi — nel backup
-  automatico su Google Drive e nel trasferimento device-to-device. Disattivato:
-  i dati restano solo sul device e il trasferimento si fa con l'export/import
-  JSON dell'app, che è esplicito e sotto controllo dell'utente.
-- **sqflite_common_ffi**: aggiunto per Windows; su Android è un no-op ma mantiene
-  un codice identico su tutte le piattaforme.
-- **ConflictAlgorithm.replace** negli insert: upsert idiomatico di sqflite; equivale a
-  `INSERT OR REPLACE INTO` e funziona sia per create che per update.
-- **`tipologie` colonna unica multi-valore (v8)**: `List<String>` in Dart,
-  serializzata come `TEXT` JSON nel DB (`jsonEncode`/`jsonDecode` in
-  `models.dart`). Sostituisce la coppia `tipologia_id` (FK singola "primaria") +
-  `tipologie_extra` (JSON), che esisteva solo per compatibilità con lo schema
-  dell'app RN, dismessa: per l'utente la tipologia è sempre stata un unico campo
-  con più valori (il form era già un multi-select unico). La migrazione v8
-  ricostruisce `turni` (SQLite non può rimuovere una colonna con REFERENCES via
-  ALTER) fondendo primaria + extra, primaria in testa, e ricrea l'indice
-  `idx_turni_assoc` che cade col DROP. Le FK sono spente durante `_onUpgrade`
-  (il PRAGMA vive in `_onOpen`, che gira dopo), quindi il DROP non tocca i
-  servizi figli. Sparisce il JOIN su `tipologie_turno` dalle query dei turni
-  (`tipologia_nome`/`tipologia_colore` rimossi dal modello): i nomi si risolvono
-  via `AnagraficheProvider.byIdTipologia` nelle schermate, come già per le extra.
-  `importBackup` fonde `tipologia_id`/`tipologie_extra` → `tipologie` nelle
-  righe dei backup pre-v8 (RN inclusi), che restano quindi importabili.
-- **Eliminazione solo dal dettaglio (rimossi swipe e long-press dalle
-  liste)**: sia la lista turni che quella assistenze avevano due gesti di
-  eliminazione rapida (Dismissible a swipe e long-press sulla card),
-  entrambi con conferma. Rimossi su richiesta esplicita (prima solo per i
-  turni, poi estesa esplicitamente anche alle assistenze): restava comunque
-  il cestino nell'AppBar dei rispettivi dettagli, quindi i due gesti erano
-  solo scorciatoie ridondanti — e più a rischio di cancellazione accidentale
-  mentre si scorre la lista o si tiene premuto per altri motivi.
-- **Equipaggio 1ª/2ª parte affiancate nel dettaglio (`_EquipaggioCard` in
-  `turno_detail.dart` e, identica ma su `Assistenza`, in
-  `assistenza_detail.dart`)**: quando c'è un 2° equipaggio (cambio a metà
-  turno/assistenza), le due parti sono mostrate una riga per ruolo con i due
-  nomi affiancati (trattino attenuato se il ruolo non è coperto in una delle
-  due parti), invece di due blocchi "1ª parte"/"2ª parte" impilati — più
-  facile confrontarle a colpo d'occhio. Con un solo equipaggio (niente campi
-  eq2 valorizzati) resta l'elenco singolo di prima: una colonna "2ª parte"
-  piena di trattini non avrebbe aggiunto informazione. Le due card non sono
-  condivise in un widget comune perché `Turno` e `Assistenza` sono classi
-  diverse pur con gli stessi 10 campi eq1/eq2 — stessa scelta già fatta per
-  `_Row`/`_InfoCard` nei due file. Riguarda solo la visualizzazione: il form
-  (`TurnoForm`/`AssistenzaForm`) resta con le due sezioni sequenziali, non
-  toccato da questa richiesta.
-- **Export JSON leggibile esteso alle assistenze**: `exportSemplificato()` in
-  `backup.dart` produceva solo `{'turni': [...]}`; ora produce anche
-  `{'assistenze': [...]}` nello stesso file, con la stessa risoluzione
-  ID → nome (associazione, persone) ma senza tipologie né servizi annidati,
-  perché la tabella `assistenze` non li ha. File e testo di condivisione
-  rinominati di conseguenza (`ambuturni_export_$ts.json`, non più
-  `_export_turni_`) e il pulsante in Impostazioni non dice più "solo turni".
-- **Nomi dei file esportati con timestamp leggibile (`_timestampFile()` in
-  `backup.dart`)**: backup ed export usavano i millisecondi da epoch
-  (`ambuturni_backup_1751500000000.json`), un numero che l'utente non può
-  interpretare guardando i file salvati. Sostituito con `AAAAMMGG_HH_MM`
-  (es. `ambuturni_backup_20260703_14_32.json`), costruito a mano con
-  `padLeft` come `todayIso()` invece di introdurre `intl` in un file che non
-  lo usava già.
-- **`StatisticheProvider`**: le ore/contatori di `StatisticheScreen` non si
-  aggiornavano subito dopo un import backup (bug segnalato dall'utente).
-  Causa: la schermata caricava i dati una sola volta in uno stato locale
-  (`initState`), mai invalidato da altre schermate — e `AppNavigator` tiene
-  tutte le tab montate contemporaneamente con `IndexedStack`, quindi
-  cambiare tab non la ricostruiva (c'era già un `if (i == 2)` vuoto in
-  `onDestinationSelected` che tentava di risolvere lo stesso problema,
-  mai completato: rimosso). Estratto un `StatisticheProvider` con lo stesso
-  pattern `carica`/`ricarica` di `TurniProvider`/`AssistezeProvider`;
-  `ImpostazioniScreen._import()` ora chiama anche `.ricarica()` su di esso,
-  come già faceva per gli altri tre provider.
-- **Note in markdown con editor a schermo intero (`NotaMarkdown` in
-  `widgets/`, `NoteEditorScreen` in `screens/shared/`)**: su richiesta
-  esplicita, le note di turni e assistenze accettano markdown, renderizzato
-  con `flutter_markdown_plus` — non l'ufficiale `flutter_markdown`, che
-  risulta `discontinued` su pub.dev (il team Flutter ne ha smesso la
-  manutenzione a favore della community), mentre il fork si è risolto senza
-  alcun avviso e mantiene la stessa API (`MarkdownBody`, `MarkdownStyleSheet`).
-  Serve uno style sheet esplicito (`NotaMarkdown`) perché senza override i
-  colori di default di `flutter_markdown_plus` sono pensati per sfondo
-  chiaro e risultano poco leggibili sul tema scuro dell'app. Il vecchio
-  dialog di modifica rapida (`AlertDialog` con `TextField` a 3-5 righe) è
-  stato sostituito da `NoteEditorScreen`, una pagina a schermo intero: con
-  testo che può contenere sintassi markdown multi-riga, il dialog piccolo
-  era scomodo da scrivere e scorrere. Nessuna barra di formattazione né
-  anteprima (scelta esplicita per restare minimale): si scrive il markdown a
-  mano. `NoteEditorScreen` è condivisa tra `TurnoDetail` e `AssistenzaDetail`
-  (stesso contratto: testo iniziale in, nuovo testo fuori al pop, o `null` se
-  l'utente torna indietro senza salvare); il salvataggio in entrambi passa da
-  `toMap`/`fromMap` invece di `copyWith`, che non può riportare `note` a
-  `null` quando il campo viene svuotato (stessa scelta già fatta per la
-  prima versione del dialog).
-- **Descrizione dei servizi in markdown; campo di modifica a tutta altezza**:
-  estensione della stessa richiesta al campo `descrizione` di `Servizio`,
-  mostrato in `_ServizioCard` (dettaglio turno) con `NotaMarkdown`. `NotaMarkdown`
-  ha guadagnato i parametri opzionali `fontSize`/`color` (default 13/bianco,
-  come le note) per poterla usare qui con lo stile "info secondaria" già
-  presente nella card (12/`white54`) senza duplicare lo style sheet. A
-  differenza delle note, qui non c'è un editor dedicato a schermo intero: il
-  campo Descrizione in `ServizioForm` (già una schermata propria, non un
-  dialog) è stato semplicemente allargato per riempire tutto lo spazio
-  verticale libero sotto codice chiamata/uscita/ospedale, al posto delle 3
-  righe fisse di prima.
-  **`CustomScrollView` + `SliverFillRemaining` invece di `Column` + `Expanded`
-  diretto**: il primo tentativo (`Expanded(child: TextFormField(expands: true))`
-  dentro una `Column` non scrollabile) andava in overflow (il classico
-  rettangolo giallo/nero) su telefono reale quando la tastiera si apre — lo
-  spazio verticale disponibile si riduce e i campi fissi sopra (chip codice
-  chiamata/uscita, ospedale) non ci stanno più, ma una `Column` non può
-  scrollare per compensare. Con `SliverPadding`/`SliverToBoxAdapter` per i
-  campi fissi e `SliverFillRemaining(hasScrollBody: false)` per il campo
-  descrizione, l'intera schermata diventa scrollabile quando il contenuto
-  fisso non lascia spazio (niente più overflow), mentre il campo riempie
-  comunque tutto lo spazio libero quando c'è.
-- **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
-  usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
-- **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
-  ospedale si usa `RawAutocomplete<T>` con controller+focus esterni; filtra la lista
-  in tempo reale e include una voce fissa "Aggiungi..." in fondo che apre un dialog di
-  creazione inline. L'aggiornamento del campo dopo la creazione avviene in `didUpdateWidget`
-  via `addPostFrameCallback` per evitare modifiche al controller durante il build.
-- **PRAGMA foreign_keys = OFF durante l'import backup, FUORI dalla transazione**:
-  per specifica SQLite il PRAGMA è un no-op silenzioso dentro una transazione — la
-  prima versione lo eseguiva dentro `db.transaction` e le FK restavano attive (il
-  codice funzionava solo perché `_deleteOrder`/`_backupTables` sono già ordinate
-  FK-safe). Ora è eseguito prima della transazione e ripristinato a ON in un
-  `finally`. Le righe che comunque falliscono l'insert (colonne di un'altra
-  versione dello schema, vincoli UNIQUE/CHECK) non vengono più scartate in
-  silenzio: sono contate, loggate con `debugPrint` e segnalate nel messaggio
-  di esito dell'import.
-- **num_servizi escluso dall'UPDATE in saveTurno**: il campo è gestito esclusivamente
-  da `_aggiornaNumServizi()` (chiamato da `saveServizio`/`deleteServizio`); includerlo
-  nel UPDATE azzererebbe il contatore ogni volta che si modifica un turno.
-- **saveTurno/saveAssistenza rinumerano anche l'associazione di provenienza**: se si
-  sposta un turno/assistenza su un'altra associazione, quella vecchia resterebbe con
-  un buco nella numerazione progressiva (il ricalcolo copriva solo la nuova). L'id
-  dell'associazione precedente viene letto nella stessa query `exists` che distingue
-  INSERT da UPDATE. La rinumerazione usa un `batch` atomico invece di N UPDATE
-  sequenziali (gira a ogni save/delete: con liste lunghe i round-trip si sentono).
-- **tipologieExtra nella card lista**: risolte in nomi tramite `AnagraficheProvider`
-  passato come parametro a `TurnoCard`; mostrate concatenate con il separatore `·`.
-- **`TurnoCard` estratta in `widgets/turno_card.dart`**: prima era una classe privata
-  di `turni_list.dart`; resa pubblica per essere condivisa anche da `turni_filtrati_screen.dart`
-  (viste "turni di una persona/ospedale") senza duplicare il layout.
-- **Turni/assistenze per persona via OR sui 10 campi equipaggio**: `getTurniPerPersona` e
-  `getAssistenzePerPersona` cercano l'id in tutti e 10 i ruoli (eq1/eq2 x 5 ruoli) con
-  una WHERE a OR, perché lo schema usa colonne dedicate per ruolo invece di una tabella
-  ponte persona↔turno (eredità dello schema RN; cambiarlo richiederebbe una migrazione).
-- **Turni per ospedale via INNER JOIN + DISTINCT**: `getTurniPerOspedale` fa JOIN su
-  `servizi` filtrando per `ospedale_id`; il DISTINCT sull'intera riga evita duplicati
-  quando un turno ha più servizi collegati allo stesso ospedale.
-- **Ricerca testuale in `getTurni(ricerca: ...)`**: il JOIN su `servizi` e il `DISTINCT`
-  si attivano solo quando `ricerca` è valorizzata, per non introdurre righe duplicate
-  (turni con più servizi) né overhead nelle query normali della lista turni. Il filtro
-  associazione e la ricerca si combinano in AND. Debounce di 300ms in `turni_list.dart`
-  per non lanciare una query a ogni tasto premuto.
-- **PRAGMA journal_mode = WAL spostato in `_onOpen` (con `rawQuery`, non `execute`)**:
-  in `_schema` causava schermata nera su Android reale all'apertura del DB. Motivo
-  doppio: (1) sqflite esegue `_onCreate`/`_onUpgrade` sempre dentro una transazione
-  implicita e SQLite rifiuta il passaggio a WAL da dentro una transazione; (2) il
-  driver nativo Android mappa `execute()` su `execSQL()`, che rifiuta le query con
-  risultati — e `PRAGMA journal_mode = WAL` restituisce una riga col nuovo modo,
-  quindi va lanciato con `rawQuery()`. Su sqflite_common_ffi (desktop) il problema
-  non si presentava, per questo era passato inosservato in test/uso su Windows.
-- **Icona app generata con `flutter_launcher_icons`** (branch `feature/app-icon`) invece
-  di produrre a mano ogni singola dimensione: sorgenti in `assets/icon/` —
-  `app_icon.svg`/`.png` (con sfondo verde `#00A651` pieno, usato per Windows e come
-  icona Android "legacy") e `app_icon_foreground.svg`/`.png` (stesso disegno, sfondo
-  trasparente, usato come layer foreground dell'adaptive icon Android 8+ insieme a
-  `adaptive_icon_background` nello stesso verde). Il colore di sfondo è configurato
-  in `pubspec.yaml` sotto `flutter_launcher_icons:`, non in un file separato — il
-  generatore scrive comunque un `android/app/src/main/res/values/colors.xml` con
-  `ic_launcher_background` perché è così che l'adaptive icon Android referenzia il
-  colore (un `<color>` XML, non un valore inline). Rigenerare con
-  `dart run flutter_launcher_icons` dopo aver modificato le sorgenti in `assets/icon/`.
-  PNG renderizzati da SVG con `sharp` (Node, via npx in una cartella temporanea) a
-  1024×1024: gli strumenti nativi tipici (ImageMagick, Inkscape, cairosvg) non erano
-  disponibili/installabili senza frizioni su questa macchina.
-- **Job CI dentro `ghcr.io/cirruslabs/flutter` in `build-android.yml`**: il
-  runner (`android`) è un pod ARC effimero — disco pulito a ogni job, quindi
-  "Setup Flutter" riscaricava ed estraeva l'SDK (~10 minuti) a ogni run, e lo
-  stesso valeva per JDK e Android SDK. Il job ora gira con
-  `container: ghcr.io/cirruslabs/flutter:3.44.0` (Flutter + JDK + Android SDK
-  preinstallati): spariscono i tre step di setup e il toolchain non dipende dal
-  cache backend di Gitea, perché l'immagine resta nella cache immagini del nodo
-  k8s che sopravvive ai pod. La versione è pinnata per build riproducibili e va
-  aggiornata a mano insieme a Flutter locale; le patch release non sempre hanno
-  un tag immagine (3.44.4 locale -> 3.44.0 in CI, differenza accettabile). Se il
-  runner ignorasse `container:` (label in modalità host) la build fallisce con
-  "flutter: command not found": in quel caso l'immagine va messa come default
-  del runner. L'immagine non include Node.js, che act_runner richiede DENTRO il
-  container per eseguire le action JavaScript (checkout/cache/upload-artifact/
-  release): il primo step del job lo installa dal tarball ufficiale (~30MB,
-  pochi secondi) — senza, il job muore al checkout con "node: executable file
-  not found in $PATH". Restano due `actions/cache@v4` (Gradle su hash di
-  `gradle-wrapper.properties`, `~/.pub-cache` su hash di `pubspec.lock`, ora
-  versionato — vedi punto dedicato) — utili solo se l'istanza Gitea ha un cache
-  backend, altrimenti cache-miss silenzioso senza rompere la build. In più
-  `flutter build apk --release --target-platform android-arm64` invece del fat
-  APK multi-ABI di default: dimezza il tempo di compilazione nativa, tradeoff
-  accettato esplicitamente (APK non installa su emulatori x86/device 32-bit,
-  irrilevante per l'uso reale via Obtainium su telefoni recenti). Supply chain:
-  il tarball di Node è verificato con lo SHA256 di `SHASUMS256.txt` (il job
-  fallisce se il download non corrisponde) e le action sono pinnate per commit
-  SHA con la versione nel commento — un tag può essere spostato su codice
-  diverso, lo SHA no; aggiornare SHA e commento insieme nei bump.
-- **`pubspec.lock` versionato**: raccomandazione Flutter per le applicazioni (a
-  differenza delle librerie) — CI e altre macchine risolvono le stesse identiche
-  versioni testate in locale, build riproducibili. La cache pub in
-  `build-android.yml` ora usa `hashFiles('pubspec.lock')` come chiave: si
-  invalida solo quando cambiano davvero le versioni risolte.
-- **Rinominata l'app in "AmbuTurni"** (branch `feature/app-icon`, insieme all'icona):
-  nome visibile (`android:label`, `MaterialApp.title`, titolo finestra/metadata
-  Windows) **e** identificatori interni, su richiesta esplicita di rinominare
-  "tutto". Package Dart `ambulanza_turni` -> `ambu_turni` (vincolo Dart: solo
-  minuscolo/snake_case, "AmbuTurni" non è un nome di package valido) — tocca
-  `pubspec.yaml` e i 3 import in `test/db/helpers_test.dart`, nessun altro file usa
-  `package:ambu_turni/...` (il resto del codice usa import relativi). Android
-  `namespace`/`applicationId` `com.maratuck.ambulanza_turni` -> `com.maratuck.ambu_turni`
-  (**cambia l'identità dell'app per Android**: non è un aggiornamento in-place,
-  l'app già installata con l'ID vecchio resta un'app separata/orfana — accettato
-  esplicitamente). `MainActivity.kt` spostato nella cartella di package corrispondente
-  (`android/app/src/main/kotlin/com/maratuck/ambu_turni/`). Windows: `BINARY_NAME`/
-  `project()` in `CMakeLists.txt`, titolo finestra in `main.cpp`, metadata
-  (FileDescription/InternalName/ProductName/OriginalFilename) in `Runner.rc`.
-  **Eccezione deliberata**: il nome del file SQLite (`ambulanza_turni.db` in
-  `database.dart`) NON è stato rinominato — a differenza degli altri identificatori
-  è un dettaglio interno mai visto dall'utente, e rinominarlo avrebbe fatto sì che
-  l'app (su un device/desktop dove è già in uso) non trovasse più il DB esistente
-  e ne creasse uno nuovo vuoto, perdendo l'accesso ai dati locali già inseriti.
-  Rinominati anche, per coerenza: prefissi dei file di backup/export in
-  `backup.dart` (solo i futuri file esportati, non tocca backup già salvati),
-  nome artifact nel workflow Gitea, `README.md`, il file IntelliJ `.iml`.
-- **`quantita` INTEGER + `unita` TEXT separati in `materiali_usati`** (rivisto dopo il
-  primo giro d'uso): inizialmente `quantita` era testo libero unico per gestire unità
-  di misura eterogenee ("2 flaconi", "500ml"), ma non permetteva pulsanti +/- per la
-  variazione rapida. Ora `quantita` è un intero (>= 1, clampato in UI) e `unita` è
-  testo libero opzionale mostrato accanto (`MaterialeUsato.quantitaLabel`); la
-  colonna `data` è stata rimossa (non serve all'uso reale, si ordina per `created_at`).
-- **Versione DB 4 -> 5 invece di correggere lo schema v4 in-place**: il primo giro
-  di questa modifica aveva "corretto" lo schema v4 senza cambiare il numero di
-  versione, assumendo che non fosse ancora in uso da nessuna parte — falso: bastava
-  aver aperto l'app una volta durante il testing del branch perché il device avesse
-  già una `materiali_usati` con lo schema vecchio (quantita TEXT, colonna data)
-  bloccata a versione 4, e `onUpgrade` non scatta mai se `oldVersion == newVersion`
-  → crash `type 'String' is not a subtype of type 'num?'` leggendo `quantita`.
-  Lezione: su un branch che si sta testando attivamente (anche solo in locale),
-  ogni modifica allo schema già rilasciato in una versione precedente richiede un
-  bump di versione con una vera migrazione in `_onUpgrade`, mai un edit in-place —
-  "non ancora rilasciato" vale solo per uno schema che nessun device ha mai aperto.
-  La migrazione v5 ricostruisce `materiali_usati` SOLO se rileva ancora la colonna
-  `data` (`PRAGMA table_info`), preservando i dati con un parsing best-effort del
-  vecchio `quantita` testuale (`^(\d+)\s*(.*)$`: numero iniziale -> `quantita`,
-  resto -> `unita`; nessun numero -> `quantita = 1`, tutto il testo in `unita`).
-- **`posizione` con CHECK ('AMBULANZA','BOMBOLINO','ZAINO')**: stesso pattern di
-  `codiciChiamata`/`codiciUscita` in `models.dart` (`posizioniMateriale` + ChoiceChip
-  in `materiale_usato_form.dart`) — valori fissi, non un catalogo editabile.
-- **Nessuno storico dei materiali ripristinati (v5 -> v6, su richiesta esplicita)**:
-  la v5 teneva le righe ripristinate in tabella con un flag `ripristinato` (soft
-  delete). Rimosso: `segnaMaterialeRipristinato`/`segnaTuttiMaterialiRipristinati`
-  ora fanno una DELETE vera (la prima delega a `deleteMaterialeUsato`); la colonna
-  `ripristinato` è stata tolta dallo schema e `getMaterialiUsati()` non ha più il
-  parametro `soloAttivi` — ogni riga in tabella è per definizione attiva. La
-  migrazione v6 ricostruisce `materiali_usati` (necessario per cambiare anche la
-  foreign key, vedi punto sotto) scartando le righe già `ripristinato = 1`: lo
-  storico pregresso viene proprio eliminato, non solo nascosto in UI.
-- **Migrazioni consolidate sul solo sistema versionato (v7)**: rimosso il vecchio
-  `_runMigrations` idempotente che rieseguiva l'intero schema + tre ALTER a ogni
-  apertura. Due sistemi di migrazione paralleli rendevano ambiguo dove aggiungere
-  un cambiamento — l'origine della lezione v4→v5. Il backfill di `ordine` per le
-  tipologie è stato portato dentro `_onUpgrade < 2` (`_backfillOrdine`); ogni DB
-  già esistente ha comunque tutte le tabelle perché il vecchio codice le creava a
-  ogni apertura.
-- **`CHECK (quantita >= 1)` su `materiali_usati` (v7)**: prima il vincolo viveva
-  solo nei clamp della UI; ora una scrittura difettosa non può salvare quantità
-  zero o negative. SQLite non supporta ALTER per aggiungere un CHECK: la
-  migrazione v7 ricostruisce la tabella clampando a 1 gli eventuali valori già
-  fuori range.
-- **`materiale_id` con `ON DELETE CASCADE` (v6)**: prima cancellare un materiale dal
-  catalogo falliva con un errore di foreign key se aveva ancora utilizzi collegati
-  (comportamento non voluto: bloccava una cancellazione legittima). Ora l'eliminazione
-  di un materiale elimina a cascata anche i suoi utilizzi — coerente con "nessuno
-  storico": la UI (`MaterialiScreen._elimina`) avvisa nel dialog di conferma.
-- **Delete anagrafiche con conferma + messaggio sul vincolo FK**: il cestino su
-  associazioni/persone/ospedali in Impostazioni chiede conferma prima di eliminare
-  (prima un tap accidentale cancellava subito) e gestisce l'eccezione FK: eliminare
-  una voce ancora referenziata (persona in un turno, ospedale con servizi, assoc.
-  con turni) è bloccato dalle foreign key del DB — comportamento voluto, a differenza
-  dei materiali (CASCADE) — ma prima falliva in silenzio. `_confermaEdElimina` in
-  `_SezioneAnag` fa il match su "FOREIGN KEY" nel testo dell'eccezione (identico su
-  sqflite nativo e FFI) e mostra il `messaggioVincolo` specifico della sezione.
-- **`MaterialeUsatoForm` crea/modifica, `createdAt` passato esplicitamente in modalità
-  modifica**: `saveMaterialeUsato` fa un upsert generico via `toMap()` — se in
-  modifica si costruisce un `MaterialeUsato` nuovo senza riportare `createdAt`
-  dall'oggetto esistente, l'UPDATE lo sovrascriverebbe a NULL (i valori `null` nella
-  map passano comunque nella UPDATE, il `DEFAULT` SQL si applica solo agli INSERT che
-  omettono la colonna). Va passato esplicitamente `createdAt: widget.esistente?.createdAt`.
-- **Materiali come catalogo con creazione inline**: `MaterialePicker` in
-  `anag_pickers.dart` segue lo stesso pattern di `OspedalePicker` (RawAutocomplete +
-  "Aggiungi..." nel suffixIcon) invece di testo libero, per evitare doppioni
-  incoerenti (es. "Garze" vs "garze") nel catalogo materiali.
-- **`savePersona`/`saveOspedale`/`saveMateriale` restituiscono l'id della riga**:
-  i picker con creazione inline usano l'id restituito per l'auto-selezione della
-  voce appena creata. Prima la ritrovavano cercando per nome nella lista
-  ricaricata: con due omonimi veniva selezionata la prima trovata, potenzialmente
-  quella sbagliata.
-- **Tools come 5° tab invece che sotto Impostazioni**: pensato per ospitare più
-  strumenti in futuro (per ora solo Materiali usati); un tab dedicato scala meglio
-  di una sezione dentro Impostazioni, che è già collassabile e affollata di CRUD.
-- **Keystore di release vero (risolve il TODO storico)**: keystore PKCS12 in
-  `%USERPROFILE%\keystores\ambuturni-release.jks` (alias `ambuturni`, password nel
-  password manager dell'utente — MAI nel repo), generato con `keytool` del JDK 23.
-  `build.gradle` legge `android/key.properties` (gitignorato dal template Flutter):
-  se il file esiste firma con la chiave di release, altrimenti fallback sulla firma
-  debug così una build di sviluppo su macchina senza keystore funziona comunque.
-  In CI il keystore arriva dai secret Gitea `KEYSTORE_B64` + `KEYSTORE_PASSWORD`
-  (aggiunti via API): lo step "Prepara keystore di release" in `build-android.yml`
-  lo decodifica in `/tmp` e genera `key.properties` al volo. Gli APK delle release
-  passate (v1.0.0, v1.1.0) sono stati ri-firmati con `apksigner` e ri-caricati
-  sulle stesse Release Gitea, così tutta la storia pubblicata ha la stessa firma e
-  qualunque versione installata si aggiorna alle successive. Costo una tantum
-  inevitabile: i device con l'app firmata debug devono disinstallare/reinstallare
-  (backup JSON export/import per i dati) — la firma di un'app installata non è
-  aggiornabile in-place by design.
+- **`android:allowBackup="false"`**: il default includerebbe il DB (dati
+  personali di terzi) nel backup automatico Android/Drive. Trasferimento solo
+  via export/import JSON esplicito.
+- **`sqflite_common_ffi`** per Windows: no-op su Android, codice identico ovunque.
+- **`ConflictAlgorithm.replace`** negli insert: upsert idiomatico (`INSERT OR REPLACE`).
+- **`tipologie` colonna unica multi-valore (v8)**: sostituisce `tipologia_id`
+  (FK "primaria") + `tipologie_extra` (JSON), che esistevano solo per
+  compatibilità con lo schema RN dismesso — per l'utente è sempre stato un
+  campo unico multi-valore. Migrazione v8: ricostruisce `turni` (ALTER non
+  rimuove colonne con REFERENCES) fondendo i due campi, FK disattivate
+  durante `_onUpgrade`. Nomi risolti via `AnagraficheProvider.byIdTipologia`
+  (anche in `TurnoCard`, concatenati con `·`); `importBackup` fonde i campi
+  vecchi per i backup pre-v8, che restano importabili.
+- **Eliminazione solo dal cestino nel dettaglio**: rimossi swipe e long-press
+  dalle liste turni/assistenze — ridondanti col cestino già nell'AppBar del
+  dettaglio, e più a rischio di cancellazione accidentale.
+- **Equipaggio 1ª/2ª parte affiancate nel dettaglio** (`_EquipaggioCard`,
+  duplicata in `turno_detail.dart`/`assistenza_detail.dart` perché `Turno`
+  e `Assistenza` sono classi diverse): riga per ruolo con i due nomi
+  affiancati quando c'è un 2° equipaggio, invece di due blocchi impilati.
+  Con un solo equipaggio resta l'elenco singolo. Solo la visualizzazione:
+  il form resta con le due sezioni sequenziali.
+- **Export JSON leggibile esteso alle assistenze**: `exportSemplificato()`
+  produce anche `{'assistenze': [...]}` (stessa risoluzione nomi dei turni,
+  senza tipologie/servizi che la tabella non ha).
+- **Nomi file con timestamp leggibile** (`_timestampFile()`): `AAAAMMGG_HH_MM`
+  al posto dei millisecondi epoch, illeggibili per l'utente.
+- **`StatisticheProvider`**: le statistiche non si aggiornavano dopo un import
+  perché `StatisticheScreen` caricava i dati una volta in stato locale, mai
+  invalidato — e `IndexedStack` in `AppNavigator` tiene tutte le tab montate,
+  quindi cambiare tab non la ricostruiva. Estratto un provider con lo stesso
+  pattern `carica`/`ricarica` degli altri; `ImpostazioniScreen._import()` lo ricarica.
+- **Note in markdown, editor a schermo intero**: renderizzate con
+  `flutter_markdown_plus` (l'ufficiale `flutter_markdown` è `discontinued` su
+  pub.dev). `NotaMarkdown` (in `widgets/`) definisce uno style sheet esplicito
+  perché i colori di default sono pensati per sfondo chiaro. Il vecchio
+  dialog piccolo è sostituito da `NoteEditorScreen` (`screens/shared/`,
+  condivisa turno/assistenza): scomodo scrivere/scorrere markdown multi-riga
+  in poche righe. Nessuna barra di formattazione né anteprima (minimale). Il
+  salvataggio passa da `toMap`/`fromMap`, non `copyWith`, che non può
+  riportare `note` a `null` quando il campo si svuota.
+- **Descrizione dei servizi in markdown**: stessa estensione a `Servizio.descrizione`
+  (`NotaMarkdown` con `fontSize`/`color` opzionali per lo stile compatto già
+  in `_ServizioCard`). Il campo nel form riempie lo spazio libero sotto gli
+  altri campi con `CustomScrollView` + `SliverFillRemaining` (non `Column` +
+  `Expanded`, che andava in overflow quando la tastiera riduce lo spazio e i
+  campi sopra non ci stanno più — con lo sliver l'intera schermata scrolla invece).
+- **`byId*` con try/catch**: evita `firstWhereOrNull` (richiederebbe il package `collection`).
+- **Combobox `RawAutocomplete`** (`PersonaPicker`/`OspedalePicker`): controller/focus
+  esterni, voce "Aggiungi..." per creazione inline; l'update dopo creazione
+  passa da `didUpdateWidget`+`addPostFrameCallback` per non toccare il
+  controller durante il build.
+- **`PRAGMA foreign_keys = OFF` fuori dalla transazione nell'import**: dentro
+  una transazione è un no-op silenzioso in SQLite. Le righe che falliscono
+  l'insert non sono più scartate in silenzio: contate e segnalate nel messaggio finale.
+- **`num_servizi` escluso dall'UPDATE in `saveTurno`**: è gestito solo da
+  `_aggiornaNumServizi()`; includerlo lo azzererebbe a ogni modifica del turno.
+- **`saveTurno`/`saveAssistenza` rinumerano anche l'associazione di provenienza**:
+  se si sposta un turno su un'altra associazione, quella vecchia va rinumerata
+  anche lei (altrimenti resta un buco); batch atomico invece di N update.
+- **`TurnoCard` estratta in `widgets/`**: da classe privata di `turni_list.dart`
+  a pubblica, condivisa anche da `turni_filtrati_screen.dart`.
+- **Turni/assistenze per persona via OR sui 10 campi equipaggio**: niente
+  tabella ponte persona↔turno (eredità dello schema RN).
+- **Turni per ospedale via INNER JOIN + DISTINCT** su `servizi.ospedale_id`
+  (DISTINCT evita duplicati con più servizi nello stesso ospedale).
+- **Ricerca testuale in `getTurni`**: JOIN+DISTINCT su `servizi` solo se
+  `ricerca` è valorizzata (altrimenti overhead/duplicati inutili). Debounce 300ms.
+- **`PRAGMA journal_mode = WAL` in `_onOpen`, con `rawQuery`**: in `_schema`
+  causava schermata nera su Android reale — SQLite rifiuta il passaggio a WAL
+  dentro la transazione implicita di `_onCreate`/`_onUpgrade`, e su Android
+  `execute()` mappa a `execSQL()` che rifiuta query coi risultati. Invisibile
+  su desktop (sqflite_common_ffi), solo su Android reale.
+- **Icona app con `flutter_launcher_icons`**: sorgenti in `assets/icon/`
+  (verde pieno per Windows/legacy Android, trasparente per l'adaptive
+  foreground). Rigenerare con `dart run flutter_launcher_icons` dopo aver
+  cambiato le sorgenti.
+- **CI Android in `ghcr.io/cirruslabs/flutter:3.44.0`**: elimina i ~10 min di
+  setup Flutter/SDK a ogni run su runner effimero (dettagli e motivazioni nei
+  commenti in testa a `build-android.yml`, per non duplicarli qui).
+- **`pubspec.lock` versionato**: raccomandazione Flutter per le app (non le
+  librerie) — build riproducibili in CI; cache pub in CI su hash del lockfile.
+- **Rinominata l'app "AmbuTurni"**: nome visibile e identificatori interni
+  (package Dart `ambu_turni`, `applicationId` Android, CMake/Windows).
+  **Eccezione deliberata**: il file SQLite resta `ambulanza_turni.db` — rinominarlo
+  avrebbe fatto perdere l'accesso al DB già esistente sui device in uso.
+  L'`applicationId` Android è cambiato: l'app installata con l'ID vecchio
+  resta orfana (accettato esplicitamente).
+- **`materiali_usati`: `quantita` INTEGER + `unita` TEXT** (non testo libero
+  unico): permette i pulsanti +/- di modifica rapida.
+- **Lezione v4→v5** (richiamata da regola 7): un edit in-place dello schema
+  v4 senza bump di versione ha causato un crash su device che avevano già
+  aperto l'app durante il test del branch (`onUpgrade` non scatta se
+  `oldVersion == newVersion`). Ogni modifica a uno schema già rilasciato,
+  anche solo aperto localmente, richiede bump + vera migrazione in `_onUpgrade`.
+- **`posizione` con CHECK fisso** (`AMBULANZA`/`BOMBOLINO`/`ZAINO`): valori
+  fissi, non un catalogo editabile (stesso pattern dei codici chiamata/uscita).
+- **Nessuno storico materiali ripristinati (v5→v6)**: eliminato il soft-delete
+  con flag `ripristinato`; ripristinare/eliminare ora è una DELETE vera.
+- **Migrazioni consolidate nel solo `_onUpgrade` (v7)**: rimosso il vecchio
+  `_runMigrations` idempotente (schema+ALTER a ogni apertura) — due sistemi
+  paralleli erano l'origine della lezione v4→v5.
+- **`CHECK (quantita >= 1)` (v7)**: prima solo un clamp in UI, non nel DB.
+- **`materiale_id` con `ON DELETE CASCADE` (v6)**: eliminare un materiale
+  elimina anche i suoi utilizzi, coerente con "nessuno storico".
+- **Delete anagrafiche con conferma + messaggio su vincolo FK**: eliminare
+  una voce ancora referenziata è bloccato dalle FK (voluto, a differenza dei
+  materiali) ma prima falliva in silenzio; ora `_confermaEdElimina` intercetta
+  l'errore FK e mostra un messaggio specifico.
+- **`MaterialeUsatoForm`: `createdAt` passato esplicitamente in modifica**:
+  altrimenti l'UPDATE lo sovrascriverebbe a NULL.
+- **`MaterialePicker` come catalogo con creazione inline**, non testo libero:
+  evita doppioni incoerenti ("Garze" vs "garze").
+- **`savePersona`/`saveOspedale`/`saveMateriale` restituiscono l'id**: i
+  picker lo usano per l'auto-selezione, evitando ambiguità con gli omonimi.
+- **Tools come 5° tab**, non sezione in Impostazioni: scala meglio per
+  ospitare più strumenti in futuro.
+- **Keystore di release**: PKCS12 in `%USERPROFILE%\keystores\`, letto da
+  `android/key.properties` (gitignorato) se presente, altrimenti fallback
+  debug. In CI arriva dai secret Gitea `KEYSTORE_B64`/`KEYSTORE_PASSWORD`. Le
+  release passate (v1.0.0, v1.1.0) sono state ri-firmate per uniformità: gli
+  update via Obtainium richiedono la stessa firma tra versioni.
 
 ---
 
 ## Funzionalità implementate
 
-- ✅ Turni: lista ordinata per data desc, filtro associazione, create/edit/delete, form
-  completo (assoc. obbligatoria, data, ore, tipologia + extra chip, equipaggio 1ª/2ª parte).
-- ✅ Equipaggio: form con UI a colonna singola per ciascuna parte, label del
-  ruolo sempre visibile a sinistra (redesign rispetto alla griglia 2-colonne
-  originale in cui le label sparivano dopo selezione). Nei dettagli turno e
-  assistenza le due parti sono invece affiancate riga per ruolo quando c'è
-  un 2° equipaggio (v. Decisioni tecniche).
-- ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
-  Descrizione in markdown (renderizzata con `NotaMarkdown`, stile compatto);
-  il campo nel form riempie tutto lo spazio verticale libero (v. Decisioni tecniche).
-- ✅ Note (turno e assistenza) in card dedicata nel dettaglio, sempre visibile
-  ("Nessuna nota" se vuote), in markdown (`NotaMarkdown`). Matita per la modifica
-  rapida che apre `NoteEditorScreen` a schermo intero, senza passare dal form
-  completo (v. Decisioni tecniche).
-- ✅ Assistenze: identico ai turni ma senza tipologia né servizi.
-- ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
-  con filtro per associazione (chip). Dati in `StatisticheProvider`: si aggiornano anche
-  dopo un import backup fatto da un'altra schermata (v. Decisioni tecniche).
-- ✅ Impostazioni: CRUD associazioni, persone (cognome+nome), ospedali (nome+città),
-  tipologie turno (rinominabili, riordinabili ↑↓, non eliminabili).
-  Ogni sezione è collassata di default, con badge contatore sempre visibile,
-  pulsante + accessibile senza espandere, e campo ricerca integrato nell'espanso.
-  Le tipologie assistenza non sono esposte in UI (tabella DB mantenuta per compatibilità backup).
-- ✅ Backup export/import JSON: export via share_plus, import via file_picker con conferma.
-  Desktop (Windows/Linux/macOS): usa `FilePicker.saveFile()` invece di share_plus.
-  Logica di salvataggio centralizzata in `_salvaFile()` in `backup.dart`.
-  Su mobile il file passato alla share sheet vive nella cache dir (non in
-  Documents, dove ogni export si accumulava per sempre con dentro dati
-  personali); gli export precedenti vengono eliminati a ogni nuovo export,
-  quello corrente resta fino alla volta successiva perché alcune app
-  destinatarie lo leggono in modo asincrono dopo la chiusura della share sheet.
-- ✅ Export JSON leggibile (turni e assistenze): `exportSemplificato()` produce un JSON
-  con nomi al posto degli UUID (associazione, persone, ospedali, tipologie) e servizi
-  annidati dentro ogni turno; le assistenze usano la stessa struttura senza tipologie
-  né servizi (la tabella non li ha). Pulsante dedicato nella sezione Backup di Impostazioni.
-- ✅ Combobox con ricerca per equipaggio e ospedale: `PersonaPicker` e `OspedalePicker`
-  in `widgets/anag_pickers.dart` permettono di filtrare la lista digitando e di creare
-  nuove voci al volo tramite "Aggiungi..." (auto-selezione dopo creazione inclusa).
-- ✅ Numerazione progressiva: ricalcolata automaticamente a ogni save/delete nel DB.
-- ✅ Supporto Windows desktop (per test rapido senza emulatore Android).
-- ✅ Tipologie multi-select nel form turno: FilterChip, ordine personalizzabile.
-  Dalla DB v8 sono un unico campo `tipologie` anche nello schema (niente più
-  primaria/extra); la card della lista le mostra tutte separate da `·`,
-  il dettaglio in un'unica riga "Tipologia".
-- ✅ Equipaggio: pulsante "Copia 1ª parte" nel titolo della sezione 2ª parte
-  copia tutti e 5 i ruoli da eq1 a eq2 con un tap.
-- ✅ Eliminazione turni/assistenze solo dal cestino nel dettaglio (v. Decisioni
-  tecniche): rimossi swipe e long-press dalle liste, prima presenti su entrambe.
-- ✅ Test unitari: 19 test in `test/db/helpers_test.dart` con DB SQLite in-memory.
-- ✅ Workflow CI: `build-android.yml` aggiornato per Flutter (Java 23, flutter build apk).
-- ✅ Release automatica su Gitea: sui push di tag `vX.Y.Z`, `build-android.yml`
-  pubblica l'APK come artifact (invariato) e in più crea/aggiorna una Release Gitea
-  allegando l'APK, con l'action `akkuman/gitea-release-action@v1` (dedicata a Gitea;
-  non esiste un'action ufficiale GitHub per questo scopo). Lo step ha
-  `continue-on-error: true` — un fallimento non rompe il job, l'APK/artifact sono
-  già pubblicati. Richiede lo scope `write:repository` sul secret `REGISTRY_TOKEN`,
-  oltre a `write:package`. Primo tentativo con chiamate curl dirette alla REST API
-  (stesso pattern del generic package nel workflow backend): funzionante ma più
-  codice da mantenere, sostituito dall'action dopo la prima run reale su v1.0.0.
-- ✅ Turni/assistenze per persona o ospedale: da Impostazioni, il pulsante "Vedi turni"
-  (icona calendario) su una persona o un ospedale apre `TurniPersonaScreen` /
-  `TurniOspedaleScreen` con l'elenco filtrato (per persona: turni + assistenze in cui
-  compare in uno dei 10 ruoli equipaggio; per ospedale: turni con un servizio in
-  quell'ospedale). Tap su una card apre il dettaglio del turno/assistenza.
-- ✅ Ricerca testuale nella lista turni: icona lente nell'AppBar di `TurniList` apre un
-  campo di ricerca che filtra su descrizione/note del turno e descrizione dei servizi
-  collegati (combinabile col filtro associazione). `getTurni(ricerca: ...)` in
-  `helpers.dart`.
-- ✅ Icona app personalizzata (branch `feature/app-icon`): ambulanza + orologio su
-  sfondo verde, generata per Android (icona legacy + adaptive icon) e Windows con
-  `flutter_launcher_icons`. Verificata sia sui file generati (`analyze`/`build apk`)
-  sia sul telefono reale via adb (icona corretta nel drawer app).
-- ✅ Tools -> Materiali usati (branch `feature/tools`, DB versione 6): 5° tab
-  "Tools" con l'elenco degli strumenti extra dell'app. "Materiali usati" permette
-  di segnare un materiale (dal catalogo `materiali`, con creazione inline), la
-  quantità (intera, con +/- sia nel form che direttamente in lista per il ritocco
-  rapido) + unità di misura opzionale (testo libero), la posizione
-  (Ambulanza/Bombolino/Zaino) e note, usati durante un turno da ripristinare.
-  Niente campo data (si ordina per `created_at`, non richiesto dal flusso reale) e
-  nessuno storico: check singolo o pulsante "Ripristina tutto" in AppBar, oppure
-  swipe per eliminare una riga per errore, cancellano la riga per sempre (nessuna
-  vista storico prevista). Icona matita su ogni riga apre `MaterialeUsatoForm` in
-  modalità modifica (stesso form della creazione, precompilato) per correggere
-  materiale/quantità/unità/posizione/note senza ricreare la riga da capo. Icona
-  "Gestisci materiali" in AppBar apre `MaterialiScreen` per rinominare/eliminare
-  voci del catalogo; eliminare un materiale elimina anche i suoi utilizzi collegati
-  (`ON DELETE CASCADE`, con avviso nel dialog di conferma).
+Dettagli/motivazioni dei punti più delicati sono in "Decisioni tecniche
+rilevanti"; qui solo l'inventario di cosa esiste.
+
+- ✅ **Turni**: lista con filtro/ricerca, form completo, dettaglio con servizi
+  (CRUD + riordino, descrizione markdown), tipologie multi-select, numerazione automatica.
+- ✅ **Equipaggio**: form 1ª/2ª parte con "Copia 1ª → 2ª"; affiancate per ruolo nel dettaglio.
+- ✅ **Note** (turno/assistenza): card dedicata in markdown, editor a schermo intero.
+- ✅ **Assistenze**: come i turni ma senza tipologia né servizi.
+- ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
+- ✅ **Impostazioni**: CRUD anagrafiche, "Vedi turni" per persona/ospedale.
+- ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.
+- ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
+- ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione), nessuno storico.
+- ✅ Windows desktop, icona app personalizzata, 29 test unitari.
+- ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO
 
-- [ ] 1. Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
-- [x] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
-- [x] 3. Affiancare l'equipaggio 1 e 2 
-- [x] 4. aggiungere al esportazione semplificata anche le assistenze
-- [x] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools
-      (già soddisfatto: `materiali`/`materiali_usati` sono in `_backupTables` da quando
-      sono state introdotte, v. sezione Schema DB — nessuna modifica necessaria)
-- [x] 6. quando viene fatto l'import non aggiorna subito le ore fatte
-- [x] 7. il campo note deve accettare il markdown, quindi voglio che quando modifico le note si apra un campo di modifica più adatto e facile da navigare
+Le voci completate sono già documentate in Funzionalità implementate/Decisioni
+tecniche e vengono rimosse da qui una volta chiuse, per non tenere in questo
+elenco un changelog duplicato.
+
+- [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
