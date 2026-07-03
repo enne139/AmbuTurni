@@ -44,14 +44,7 @@ class _AppNavigatorState extends State<AppNavigator> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) {
-          setState(() => _tab = i);
-          // Ricarica le statistiche ogni volta che si entra nel tab.
-          if (i == 2) {
-            // La StatisticheScreen si aggiorna da sola nel build,
-            // forziamo un reload se già era caricata.
-          }
-        },
+        onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.calendar_today_outlined), selectedIcon: Icon(Icons.calendar_today), label: 'Turni'),
           NavigationDestination(icon: Icon(Icons.local_hospital_outlined), selectedIcon: Icon(Icons.local_hospital), label: 'Assistenze'),

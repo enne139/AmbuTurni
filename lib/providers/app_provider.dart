@@ -93,6 +93,32 @@ class TurniProvider extends ChangeNotifier {
   }
 }
 
+/// Provider per le statistiche aggregate. Stesso pattern di TurniProvider
+/// (mantiene il filtro associazione tra un caricamento e l'altro). Introdotto
+/// per risolvere il mancato aggiornamento delle ore dopo un import backup:
+/// prima StatisticheScreen caricava i dati una sola volta in uno stato locale
+/// mai invalidato da altre schermate (l'IndexedStack di AppNavigator tiene
+/// tutte le tab montate, quindi cambiare tab non la ricostruiva).
+class StatisticheProvider extends ChangeNotifier {
+  StatisticheData? dati;
+  String? _filtroAssociazioneId;
+
+  String? get filtroAssociazioneId => _filtroAssociazioneId;
+  bool get caricato => dati != null;
+
+  Future<void> carica({String? associazioneId}) async {
+    _filtroAssociazioneId = associazioneId;
+    dati = await getStatistiche(associazioneId: associazioneId);
+    notifyListeners();
+  }
+
+  /// Ricarica con lo stesso filtro già impostato (usato dopo l'import backup).
+  Future<void> ricarica() async {
+    dati = await getStatistiche(associazioneId: _filtroAssociazioneId);
+    notifyListeners();
+  }
+}
+
 /// Provider per la lista assistenze. Stesso pattern di TurniProvider.
 class AssistezeProvider extends ChangeNotifier {
   List<Assistenza> assistenze = [];

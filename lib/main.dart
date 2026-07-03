@@ -18,13 +18,15 @@ class AmbuTurniApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Tre provider separati per scope diversi: Anagrafiche è globale e cambia
-    // poco; Turni e Assistenze hanno ciascuno il proprio filtro e ciclo di vita.
+    // Provider separati per scope diversi: Anagrafiche è globale e cambia
+    // poco; Turni, Assistenze e Statistiche hanno ciascuno il proprio filtro
+    // e ciclo di vita.
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AnagraficheProvider()),
         ChangeNotifierProvider(create: (_) => TurniProvider()),
         ChangeNotifierProvider(create: (_) => AssistezeProvider()),
+        ChangeNotifierProvider(create: (_) => StatisticheProvider()),
       ],
       child: MaterialApp(
         title: 'AmbuTurni',

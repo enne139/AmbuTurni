@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../db/helpers.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart' show kPrimary, colorFromHex;
 
 /// Schermata statistiche con filtro per associazione (chip).
+/// I dati vivono in StatisticheProvider (non più in uno stato locale): con
+/// IndexedStack che tiene tutte le tab montate, uno stato locale caricato solo
+/// in initState non si aggiornava mai dopo un import backup da un'altra tab.
 class StatisticheScreen extends StatefulWidget {
   const StatisticheScreen({super.key});
 
@@ -14,29 +16,22 @@ class StatisticheScreen extends StatefulWidget {
 }
 
 class _StatisticheScreenState extends State<StatisticheScreen> {
-  String? _filtroAssocId;
-  StatisticheData? _dati;
-  bool _loading = true;
-
   @override
   void initState() {
     super.initState();
-    _carica();
-  }
-
-  Future<void> _carica({String? assocId}) async {
-    setState(() { _loading = true; _filtroAssocId = assocId; });
-    final d = await getStatistiche(associazioneId: assocId);
-    if (mounted) setState(() { _dati = d; _loading = false; });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<StatisticheProvider>().carica();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final anag = context.watch<AnagraficheProvider>();
+    final stats = context.watch<StatisticheProvider>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Statistiche')),
-      body: _loading
+      body: !stats.caricato
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -46,11 +41,15 @@ class _StatisticheScreenState extends State<StatisticheScreen> {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(children: [
-                      _FiltroChip(label: 'Tutti', sel: _filtroAssocId == null, onTap: () => _carica()),
+                      _FiltroChip(
+                        label: 'Tutti',
+                        sel: stats.filtroAssociazioneId == null,
+                        onTap: () => context.read<StatisticheProvider>().carica(),
+                      ),
                       ...anag.associazioni.map((a) => _FiltroChip(
                             label: a.nome,
-                            sel: _filtroAssocId == a.id,
-                            onTap: () => _carica(assocId: a.id),
+                            sel: stats.filtroAssociazioneId == a.id,
+                            onTap: () => context.read<StatisticheProvider>().carica(associazioneId: a.id),
                             colore: colorFromHex(a.colore),
                           )),
                     ]),
@@ -59,21 +58,21 @@ class _StatisticheScreenState extends State<StatisticheScreen> {
                 ],
                 // Cards
                 Row(children: [
-                  Expanded(child: _StatCard(label: 'Turni', valore: '${_dati!.totTurni}', icon: Icons.calendar_today)),
+                  Expanded(child: _StatCard(label: 'Turni', valore: '${stats.dati!.totTurni}', icon: Icons.calendar_today)),
                   const SizedBox(width: 12),
-                  Expanded(child: _StatCard(label: 'Servizi', valore: '${_dati!.totServizi}', icon: Icons.medical_services_outlined)),
+                  Expanded(child: _StatCard(label: 'Servizi', valore: '${stats.dati!.totServizi}', icon: Icons.medical_services_outlined)),
                 ]),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: _StatCard(label: 'Ore turni', valore: formatOre(_dati!.oreTurni), icon: Icons.schedule)),
+                  Expanded(child: _StatCard(label: 'Ore turni', valore: formatOre(stats.dati!.oreTurni), icon: Icons.schedule)),
                   const SizedBox(width: 12),
-                  Expanded(child: _StatCard(label: 'Assistenze', valore: '${_dati!.totAssistenze}', icon: Icons.local_hospital_outlined)),
+                  Expanded(child: _StatCard(label: 'Assistenze', valore: '${stats.dati!.totAssistenze}', icon: Icons.local_hospital_outlined)),
                 ]),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: _StatCard(label: 'Ore assist.', valore: formatOre(_dati!.oreAssistenze), icon: Icons.schedule_outlined)),
+                  Expanded(child: _StatCard(label: 'Ore assist.', valore: formatOre(stats.dati!.oreAssistenze), icon: Icons.schedule_outlined)),
                   const SizedBox(width: 12),
-                  Expanded(child: _StatCard(label: 'Ore totali', valore: formatOre(_dati!.oreTotali), icon: Icons.timer, highlight: true)),
+                  Expanded(child: _StatCard(label: 'Ore totali', valore: formatOre(stats.dati!.oreTotali), icon: Icons.timer, highlight: true)),
                 ]),
               ],
             ),
