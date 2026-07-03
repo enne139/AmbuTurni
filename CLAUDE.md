@@ -58,6 +58,7 @@
 | File backup | `share_plus` (export) + `file_picker` (import) |
 | HTTP (sync) | `http` |
 | Preferenze | `shared_preferences` |
+| Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
 
@@ -83,10 +84,13 @@ lib/
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
 │   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
-│   └── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
+│   ├── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
+│   └── nota_markdown.dart         NotaMarkdown: rendering markdown delle note, stile coerente col tema scuro
 └── screens/
+    ├── shared/
+    │   └── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
     ├── turni/
-    │   ├── turni_list.dart         lista + FAB + long-press elimina + filtro assoc.
+    │   ├── turni_list.dart         lista + FAB + filtro assoc. (niente swipe/long-press, v. Decisioni tecniche)
     │   ├── turno_form.dart         form crea/modifica turno (assoc., data, ore, tipol., eq.)
     │   ├── turno_detail.dart       dettaglio + lista servizi con riordino frecce
     │   └── servizio_form.dart      form crea/modifica servizio (codici, ospedale, desc.)
@@ -235,6 +239,27 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   pattern `carica`/`ricarica` di `TurniProvider`/`AssistezeProvider`;
   `ImpostazioniScreen._import()` ora chiama anche `.ricarica()` su di esso,
   come già faceva per gli altri tre provider.
+- **Note in markdown con editor a schermo intero (`NotaMarkdown` in
+  `widgets/`, `NoteEditorScreen` in `screens/shared/`)**: su richiesta
+  esplicita, le note di turni e assistenze accettano markdown, renderizzato
+  con `flutter_markdown_plus` — non l'ufficiale `flutter_markdown`, che
+  risulta `discontinued` su pub.dev (il team Flutter ne ha smesso la
+  manutenzione a favore della community), mentre il fork si è risolto senza
+  alcun avviso e mantiene la stessa API (`MarkdownBody`, `MarkdownStyleSheet`).
+  Serve uno style sheet esplicito (`NotaMarkdown`) perché senza override i
+  colori di default di `flutter_markdown_plus` sono pensati per sfondo
+  chiaro e risultano poco leggibili sul tema scuro dell'app. Il vecchio
+  dialog di modifica rapida (`AlertDialog` con `TextField` a 3-5 righe) è
+  stato sostituito da `NoteEditorScreen`, una pagina a schermo intero: con
+  testo che può contenere sintassi markdown multi-riga, il dialog piccolo
+  era scomodo da scrivere e scorrere. Nessuna barra di formattazione né
+  anteprima (scelta esplicita per restare minimale): si scrive il markdown a
+  mano. `NoteEditorScreen` è condivisa tra `TurnoDetail` e `AssistenzaDetail`
+  (stesso contratto: testo iniziale in, nuovo testo fuori al pop, o `null` se
+  l'utente torna indietro senza salvare); il salvataggio in entrambi passa da
+  `toMap`/`fromMap` invece di `copyWith`, che non può riportare `note` a
+  `null` quando il campo viene svuotato (stessa scelta già fatta per la
+  prima versione del dialog).
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -458,11 +483,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   assistenza le due parti sono invece affiancate riga per ruolo quando c'è
   un 2° equipaggio (v. Decisioni tecniche).
 - ✅ Servizi nel dettaglio turno: aggiunta, modifica, eliminazione, riordino con frecce.
-- ✅ Note del turno in card dedicata nel dettaglio (tra equipaggio e servizi):
-  sempre visibile ("Nessuna nota" se vuote), con matita per la modifica rapida
-  in un dialog senza passare dal form completo. Il salvataggio ricostruisce il
-  `Turno` via `toMap`/`fromMap` invece di `copyWith`, perché `copyWith`
-  (pattern `??`) non può riportare `note` a `null` quando il campo viene svuotato.
+- ✅ Note (turno e assistenza) in card dedicata nel dettaglio, sempre visibile
+  ("Nessuna nota" se vuote), in markdown (`NotaMarkdown`). Matita per la modifica
+  rapida che apre `NoteEditorScreen` a schermo intero, senza passare dal form
+  completo (v. Decisioni tecniche).
 - ✅ Assistenze: identico ai turni ma senza tipologia né servizi.
 - ✅ Statistiche: 6 card (turni, servizi, ore turni, assistenze, ore assist., ore totali)
   con filtro per associazione (chip). Dati in `StatisticheProvider`: si aggiornano anche
@@ -547,4 +571,4 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
       (già soddisfatto: `materiali`/`materiali_usati` sono in `_backupTables` da quando
       sono state introdotte, v. sezione Schema DB — nessuna modifica necessaria)
 - [x] 6. quando viene fatto l'import non aggiorna subito le ore fatte
-- [ ] 7. il campo note deve accettare il markdown, quindi voglio che quando modifico le note si apra un campo di modifica più adatto e facile da navigare
+- [x] 7. il campo note deve accettare il markdown, quindi voglio che quando modifico le note si apra un campo di modifica più adatto e facile da navigare

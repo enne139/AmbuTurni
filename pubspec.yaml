@@ -39,6 +39,10 @@ dependencies:
   # Preferenze persistenti (es. URL server, ultimo sync)
   shared_preferences: ^2.3.2
 
+  # Rendering markdown nelle note (fork mantenuto: flutter_markdown ufficiale
+  # è discontinued dal team Flutter)
+  flutter_markdown_plus: ^1.0.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

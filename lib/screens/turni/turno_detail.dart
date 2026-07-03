@@ -6,6 +6,8 @@ import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
 import '../../widgets/codice_chip.dart';
+import '../../widgets/nota_markdown.dart';
+import '../shared/note_editor_screen.dart';
 import 'turno_form.dart';
 import 'servizio_form.dart';
 
@@ -64,38 +66,22 @@ class _TurnoDetailState extends State<TurnoDetail> {
     _carica();
   }
 
-  /// Modifica rapida delle sole note in un dialog, senza passare dal form
-  /// completo del turno. Il salvataggio passa da toMap/fromMap invece di
-  /// copyWith perché copyWith non può riportare il campo a null (note vuote).
+  /// Modifica rapida delle sole note in un editor a schermo intero (le note
+  /// accettano markdown: il dialog piccolo di prima era troppo stretto per
+  /// scrivere/scorrere testo lungo), senza passare dal form completo del
+  /// turno. Il salvataggio passa da toMap/fromMap invece di copyWith perché
+  /// copyWith non può riportare il campo a null (note vuote).
   Future<void> _modificaNote() async {
     final t = _turno!;
-    final ctrl = TextEditingController(text: t.note ?? '');
-    final salva = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Note'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLines: 5,
-          minLines: 3,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(hintText: 'Note del turno'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva', style: TextStyle(color: kPrimary))),
-        ],
-      ),
+    final nuovoTesto = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => NoteEditorScreen(notaIniziale: t.note)),
     );
-    if (salva == true) {
-      final testo = ctrl.text.trim();
-      final map = t.toMap();
-      map['note'] = testo.isEmpty ? null : testo;
-      await saveTurno(Turno.fromMap(map));
-      _carica();
-    }
-    ctrl.dispose();
+    if (nuovoTesto == null) return;
+    final map = t.toMap();
+    map['note'] = nuovoTesto.isEmpty ? null : nuovoTesto;
+    await saveTurno(Turno.fromMap(map));
+    _carica();
   }
 
   @override
@@ -240,8 +226,9 @@ class _Row extends StatelessWidget {
 }
 
 /// Card dedicata alle note del turno: separata dal riepilogo perché le note
-/// possono essere lunghe e schiacciate nella riga label/valore erano poco leggibili.
-/// La matita apre la modifica rapida delle sole note.
+/// possono essere lunghe e schiacciate nella riga label/valore erano poco
+/// leggibili. Le note accettano markdown, renderizzato con NotaMarkdown.
+/// La matita apre l'editor a schermo intero per la modifica rapida.
 class _NoteCard extends StatelessWidget {
   final String? note;
   final VoidCallback onModifica;
@@ -272,7 +259,7 @@ class _NoteCard extends StatelessWidget {
             const SizedBox(height: 8),
             vuote
                 ? const Text('Nessuna nota', style: TextStyle(fontSize: 13, color: Colors.white38, fontStyle: FontStyle.italic))
-                : Text(note!, style: const TextStyle(fontSize: 13)),
+                : NotaMarkdown(data: note!),
           ],
         ),
       ),
