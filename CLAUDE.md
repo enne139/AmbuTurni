@@ -528,6 +528,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - [x] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
 - [x] 3. Affiancare l'equipaggio 1 e 2 
 - [x] 4. aggiungere al esportazione semplificata anche le assistenze
-- [ ] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools
+- [x] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools
+      (già soddisfatto: `materiali`/`materiali_usati` sono in `_backupTables` da quando
+      sono state introdotte, v. sezione Schema DB — nessuna modifica necessaria)
 - [ ] 6. quando viene fatto l'import non aggiorna subito le ore fatte
 - [ ] 7. il campo note deve accettare il markdown
