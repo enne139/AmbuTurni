@@ -565,7 +565,7 @@ class _SezioneBackupState extends State<_SezioneBackup> {
     if (mounted) {
       context.read<AnagraficheProvider>().carica();
       context.read<TurniProvider>().ricarica();
-      context.read<AssistezeProvider>().ricarica();
+      context.read<AssistenzeProvider>().ricarica();
       context.read<StatisticheProvider>().ricarica();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }

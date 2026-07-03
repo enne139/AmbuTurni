@@ -57,12 +57,12 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
           _oreCtrl.text = a.ore != null ? formatOre(a.ore) : '';
           _descrizioneCtrl.text = a.descrizione ?? '';
           _noteCtrl.text = a.note ?? '';
-          _eq1Autista = a.eq1AutostaId;
+          _eq1Autista = a.eq1AutistaId;
           _eq1Cs = a.eq1CsId;
           _eq1Terzo = a.eq1TerzoId;
           _eq1Quarto = a.eq1QuartoId;
           _eq1Central = a.eq1CentralinistaId;
-          _eq2Autista = a.eq2AutostaId;
+          _eq2Autista = a.eq2AutistaId;
           _eq2Cs = a.eq2CsId;
           _eq2Terzo = a.eq2TerzoId;
           _eq2Quarto = a.eq2QuartoId;
@@ -109,12 +109,12 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
         ore: parseOre(_oreCtrl.text),
         descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-        eq1AutostaId: _eq1Autista,
+        eq1AutistaId: _eq1Autista,
         eq1CsId: _eq1Cs,
         eq1TerzoId: _eq1Terzo,
         eq1QuartoId: _eq1Quarto,
         eq1CentralinistaId: _eq1Central,
-        eq2AutostaId: _eq2Autista,
+        eq2AutistaId: _eq2Autista,
         eq2CsId: _eq2Cs,
         eq2TerzoId: _eq2Terzo,
         eq2QuartoId: _eq2Quarto,

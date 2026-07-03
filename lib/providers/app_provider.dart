@@ -120,7 +120,7 @@ class StatisticheProvider extends ChangeNotifier {
 }
 
 /// Provider per la lista assistenze. Stesso pattern di TurniProvider.
-class AssistezeProvider extends ChangeNotifier {
+class AssistenzeProvider extends ChangeNotifier {
   List<Assistenza> assistenze = [];
   String? _filtroAssociazioneId;
 

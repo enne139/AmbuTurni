@@ -174,9 +174,9 @@ class _TurnoDetailState extends State<TurnoDetail> {
   /// Nasconde la sezione equipaggio se nessuna persona è stata assegnata,
   /// per non mostrare una card vuota a chi non usa il campo.
   bool _hasEquipaggio(Turno t) =>
-      t.eq1AutostaId != null || t.eq1CsId != null || t.eq1TerzoId != null ||
+      t.eq1AutistaId != null || t.eq1CsId != null || t.eq1TerzoId != null ||
       t.eq1QuartoId != null || t.eq1CentralinistaId != null ||
-      t.eq2AutostaId != null || t.eq2CsId != null || t.eq2TerzoId != null ||
+      t.eq2AutistaId != null || t.eq2CsId != null || t.eq2TerzoId != null ||
       t.eq2QuartoId != null || t.eq2CentralinistaId != null;
 }
 
@@ -280,14 +280,14 @@ class _EquipaggioCard extends StatelessWidget {
   String _n(String? id) => anag.byIdPersona(id)?.nomeCompleto ?? '';
 
   bool get _ha2aParte =>
-      t.eq2AutostaId != null || t.eq2CsId != null || t.eq2TerzoId != null ||
+      t.eq2AutistaId != null || t.eq2CsId != null || t.eq2TerzoId != null ||
       t.eq2QuartoId != null || t.eq2CentralinistaId != null;
 
   /// Ruoli con almeno una persona assegnata in una delle due parti, in
   /// ordine fisso (Autista, CS, Terzo, Quarto, Centralinista).
   List<({String label, String? v1, String? v2})> get _ruoliCompilati {
     final ruoli = [
-      (label: 'Autista', v1: t.eq1AutostaId, v2: t.eq2AutostaId),
+      (label: 'Autista', v1: t.eq1AutistaId, v2: t.eq2AutistaId),
       (label: 'CS', v1: t.eq1CsId, v2: t.eq2CsId),
       (label: 'Terzo', v1: t.eq1TerzoId, v2: t.eq2TerzoId),
       (label: 'Quarto', v1: t.eq1QuartoId, v2: t.eq2QuartoId),

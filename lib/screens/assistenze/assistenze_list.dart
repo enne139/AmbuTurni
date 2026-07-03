@@ -11,28 +11,28 @@ import 'assistenza_detail.dart';
 /// per TurniList: l'unico modo per eliminare un'assistenza resta il
 /// cestino nell'AppBar del dettaglio, per evitare cancellazioni accidentali
 /// mentre si scorre o si tocca a lungo una card per sbaglio.
-class AssistezeList extends StatefulWidget {
-  const AssistezeList({super.key});
+class AssistenzeList extends StatefulWidget {
+  const AssistenzeList({super.key});
 
   @override
-  State<AssistezeList> createState() => _AssistezeListState();
+  State<AssistenzeList> createState() => _AssistenzeListState();
 }
 
-class _AssistezeListState extends State<AssistezeList> {
+class _AssistenzeListState extends State<AssistenzeList> {
   String? _filtroAssocId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AssistezeProvider>().carica();
+      context.read<AssistenzeProvider>().carica();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final anag = context.watch<AnagraficheProvider>();
-    final assistenze = context.watch<AssistezeProvider>().assistenze;
+    final assistenze = context.watch<AssistenzeProvider>().assistenze;
 
     return Scaffold(
       appBar: AppBar(
@@ -44,7 +44,7 @@ class _AssistezeListState extends State<AssistezeList> {
               tooltip: 'Filtra per associazione',
               onSelected: (val) {
                 setState(() => _filtroAssocId = val);
-                context.read<AssistezeProvider>().carica(associazioneId: val);
+                context.read<AssistenzeProvider>().carica(associazioneId: val);
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: null, child: Text('Tutti')),
@@ -76,7 +76,7 @@ class _AssistezeListState extends State<AssistezeList> {
                   child: InkWell(
                     onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => AssistenzaDetail(assistenzaId: a.id)));
-                      if (mounted) context.read<AssistezeProvider>().ricarica();
+                      if (mounted) context.read<AssistenzeProvider>().ricarica();
                     },
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
@@ -112,7 +112,7 @@ class _AssistezeListState extends State<AssistezeList> {
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await Navigator.push(context, MaterialPageRoute(builder: (_) => const AssistenzaForm()));
-          if (mounted) context.read<AssistezeProvider>().ricarica();
+          if (mounted) context.read<AssistenzeProvider>().ricarica();
         },
         child: const Icon(Icons.add),
       ),

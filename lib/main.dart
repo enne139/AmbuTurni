@@ -25,7 +25,7 @@ class AmbuTurniApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AnagraficheProvider()),
         ChangeNotifierProvider(create: (_) => TurniProvider()),
-        ChangeNotifierProvider(create: (_) => AssistezeProvider()),
+        ChangeNotifierProvider(create: (_) => AssistenzeProvider()),
         ChangeNotifierProvider(create: (_) => StatisticheProvider()),
       ],
       child: MaterialApp(

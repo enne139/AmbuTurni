@@ -62,12 +62,12 @@ class _TurnoFormState extends State<TurnoForm> {
           _oreCtrl.text = t.ore != null ? formatOre(t.ore) : '';
           _descrizioneCtrl.text = t.descrizione ?? '';
           _noteCtrl.text = t.note ?? '';
-          _eq1Autista = t.eq1AutostaId;
+          _eq1Autista = t.eq1AutistaId;
           _eq1Cs = t.eq1CsId;
           _eq1Terzo = t.eq1TerzoId;
           _eq1Quarto = t.eq1QuartoId;
           _eq1Central = t.eq1CentralinistaId;
-          _eq2Autista = t.eq2AutostaId;
+          _eq2Autista = t.eq2AutistaId;
           _eq2Cs = t.eq2CsId;
           _eq2Terzo = t.eq2TerzoId;
           _eq2Quarto = t.eq2QuartoId;
@@ -99,12 +99,12 @@ class _TurnoFormState extends State<TurnoForm> {
         tipologie: List.of(_tipologieSel),
         descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-        eq1AutostaId: _eq1Autista,
+        eq1AutistaId: _eq1Autista,
         eq1CsId: _eq1Cs,
         eq1TerzoId: _eq1Terzo,
         eq1QuartoId: _eq1Quarto,
         eq1CentralinistaId: _eq1Central,
-        eq2AutostaId: _eq2Autista,
+        eq2AutistaId: _eq2Autista,
         eq2CsId: _eq2Cs,
         eq2TerzoId: _eq2Terzo,
         eq2QuartoId: _eq2Quarto,

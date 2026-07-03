@@ -117,9 +117,9 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
   }
 
   bool _hasEquipaggio(Assistenza a) =>
-      a.eq1AutostaId != null || a.eq1CsId != null || a.eq1TerzoId != null ||
+      a.eq1AutistaId != null || a.eq1CsId != null || a.eq1TerzoId != null ||
       a.eq1QuartoId != null || a.eq1CentralinistaId != null ||
-      a.eq2AutostaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
+      a.eq2AutistaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
       a.eq2QuartoId != null || a.eq2CentralinistaId != null;
 }
 
@@ -150,12 +150,12 @@ class _EquipaggioCard extends StatelessWidget {
   String _n(String? id) => anag.byIdPersona(id)?.nomeCompleto ?? '';
 
   bool get _ha2aParte =>
-      a.eq2AutostaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
+      a.eq2AutistaId != null || a.eq2CsId != null || a.eq2TerzoId != null ||
       a.eq2QuartoId != null || a.eq2CentralinistaId != null;
 
   List<({String label, String? v1, String? v2})> get _ruoliCompilati {
     final ruoli = [
-      (label: 'Autista', v1: a.eq1AutostaId, v2: a.eq2AutostaId),
+      (label: 'Autista', v1: a.eq1AutistaId, v2: a.eq2AutistaId),
       (label: 'CS', v1: a.eq1CsId, v2: a.eq2CsId),
       (label: 'Terzo', v1: a.eq1TerzoId, v2: a.eq2TerzoId),
       (label: 'Quarto', v1: a.eq1QuartoId, v2: a.eq2QuartoId),

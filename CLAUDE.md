@@ -78,7 +78,7 @@ lib/
 │   ├── helpers.dart               TUTTE le funzioni CRUD + StatisticheData
 │   └── backup.dart                exportBackup() + importBackup() via share_plus/file_picker
 ├── providers/
-│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistezeProvider, StatisticheProvider
+│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider, StatisticheProvider
 ├── navigation/
 │   └── app_navigator.dart         Scaffold con NavigationBar a 5 tab (IndexedStack)
 ├── widgets/
@@ -168,6 +168,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 
 ## Decisioni tecniche rilevanti
 
+- **Corretti due refusi negli identificatori Dart**: `eq1AutostaId`/`eq2AutostaId`
+  → `eq1AutistaId`/`eq2AutistaId` (in `models.dart` e i file che li usano) e
+  `AssistezeProvider`/`AssistezeList` → `AssistenzeProvider`/`AssistenzeList`.
+  Solo nomi Dart: le colonne DB erano già corrette (`eq1_autista_id` ecc.),
+  quindi nessuna migrazione né impatto sul formato dei backup JSON.
 - **`android:allowBackup="false"`**: il default includerebbe il DB (dati
   personali di terzi) nel backup automatico Android/Drive. Trasferimento solo
   via export/import JSON esplicito.

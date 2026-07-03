@@ -205,13 +205,13 @@ class Turno {
   final String? descrizione;
   final String? note;
   // Equipaggio prima parte
-  final String? eq1AutostaId;
+  final String? eq1AutistaId;
   final String? eq1CsId;
   final String? eq1TerzoId;
   final String? eq1QuartoId;
   final String? eq1CentralinistaId;
   // Equipaggio seconda parte
-  final String? eq2AutostaId;
+  final String? eq2AutistaId;
   final String? eq2CsId;
   final String? eq2TerzoId;
   final String? eq2QuartoId;
@@ -236,12 +236,12 @@ class Turno {
     this.numServizi = 0,
     this.descrizione,
     this.note,
-    this.eq1AutostaId,
+    this.eq1AutistaId,
     this.eq1CsId,
     this.eq1TerzoId,
     this.eq1QuartoId,
     this.eq1CentralinistaId,
-    this.eq2AutostaId,
+    this.eq2AutistaId,
     this.eq2CsId,
     this.eq2TerzoId,
     this.eq2QuartoId,
@@ -278,12 +278,12 @@ class Turno {
       numServizi: (m['num_servizi'] as int?) ?? 0,
       descrizione: m['descrizione'] as String?,
       note: m['note'] as String?,
-      eq1AutostaId: m['eq1_autista_id'] as String?,
+      eq1AutistaId: m['eq1_autista_id'] as String?,
       eq1CsId: m['eq1_cs_id'] as String?,
       eq1TerzoId: m['eq1_terzo_id'] as String?,
       eq1QuartoId: m['eq1_quarto_id'] as String?,
       eq1CentralinistaId: m['eq1_centralinista_id'] as String?,
-      eq2AutostaId: m['eq2_autista_id'] as String?,
+      eq2AutistaId: m['eq2_autista_id'] as String?,
       eq2CsId: m['eq2_cs_id'] as String?,
       eq2TerzoId: m['eq2_terzo_id'] as String?,
       eq2QuartoId: m['eq2_quarto_id'] as String?,
@@ -307,12 +307,12 @@ class Turno {
         'num_servizi': numServizi,
         'descrizione': descrizione,
         'note': note,
-        'eq1_autista_id': eq1AutostaId,
+        'eq1_autista_id': eq1AutistaId,
         'eq1_cs_id': eq1CsId,
         'eq1_terzo_id': eq1TerzoId,
         'eq1_quarto_id': eq1QuartoId,
         'eq1_centralinista_id': eq1CentralinistaId,
-        'eq2_autista_id': eq2AutostaId,
+        'eq2_autista_id': eq2AutistaId,
         'eq2_cs_id': eq2CsId,
         'eq2_terzo_id': eq2TerzoId,
         'eq2_quarto_id': eq2QuartoId,
@@ -333,12 +333,12 @@ class Turno {
     int? numServizi,
     String? descrizione,
     String? note,
-    String? eq1AutostaId,
+    String? eq1AutistaId,
     String? eq1CsId,
     String? eq1TerzoId,
     String? eq1QuartoId,
     String? eq1CentralinistaId,
-    String? eq2AutostaId,
+    String? eq2AutistaId,
     String? eq2CsId,
     String? eq2TerzoId,
     String? eq2QuartoId,
@@ -357,12 +357,12 @@ class Turno {
         numServizi: numServizi ?? this.numServizi,
         descrizione: descrizione ?? this.descrizione,
         note: note ?? this.note,
-        eq1AutostaId: eq1AutostaId ?? this.eq1AutostaId,
+        eq1AutistaId: eq1AutistaId ?? this.eq1AutistaId,
         eq1CsId: eq1CsId ?? this.eq1CsId,
         eq1TerzoId: eq1TerzoId ?? this.eq1TerzoId,
         eq1QuartoId: eq1QuartoId ?? this.eq1QuartoId,
         eq1CentralinistaId: eq1CentralinistaId ?? this.eq1CentralinistaId,
-        eq2AutostaId: eq2AutostaId ?? this.eq2AutostaId,
+        eq2AutistaId: eq2AutistaId ?? this.eq2AutistaId,
         eq2CsId: eq2CsId ?? this.eq2CsId,
         eq2TerzoId: eq2TerzoId ?? this.eq2TerzoId,
         eq2QuartoId: eq2QuartoId ?? this.eq2QuartoId,
@@ -559,12 +559,12 @@ class Assistenza {
   final double? ore;
   final String? descrizione;
   final String? note;
-  final String? eq1AutostaId;
+  final String? eq1AutistaId;
   final String? eq1CsId;
   final String? eq1TerzoId;
   final String? eq1QuartoId;
   final String? eq1CentralinistaId;
-  final String? eq2AutostaId;
+  final String? eq2AutistaId;
   final String? eq2CsId;
   final String? eq2TerzoId;
   final String? eq2QuartoId;
@@ -583,12 +583,12 @@ class Assistenza {
     this.ore,
     this.descrizione,
     this.note,
-    this.eq1AutostaId,
+    this.eq1AutistaId,
     this.eq1CsId,
     this.eq1TerzoId,
     this.eq1QuartoId,
     this.eq1CentralinistaId,
-    this.eq2AutostaId,
+    this.eq2AutistaId,
     this.eq2CsId,
     this.eq2TerzoId,
     this.eq2QuartoId,
@@ -607,12 +607,12 @@ class Assistenza {
         ore: (m['ore'] as num?)?.toDouble(),
         descrizione: m['descrizione'] as String?,
         note: m['note'] as String?,
-        eq1AutostaId: m['eq1_autista_id'] as String?,
+        eq1AutistaId: m['eq1_autista_id'] as String?,
         eq1CsId: m['eq1_cs_id'] as String?,
         eq1TerzoId: m['eq1_terzo_id'] as String?,
         eq1QuartoId: m['eq1_quarto_id'] as String?,
         eq1CentralinistaId: m['eq1_centralinista_id'] as String?,
-        eq2AutostaId: m['eq2_autista_id'] as String?,
+        eq2AutistaId: m['eq2_autista_id'] as String?,
         eq2CsId: m['eq2_cs_id'] as String?,
         eq2TerzoId: m['eq2_terzo_id'] as String?,
         eq2QuartoId: m['eq2_quarto_id'] as String?,
@@ -631,12 +631,12 @@ class Assistenza {
         'ore': ore,
         'descrizione': descrizione,
         'note': note,
-        'eq1_autista_id': eq1AutostaId,
+        'eq1_autista_id': eq1AutistaId,
         'eq1_cs_id': eq1CsId,
         'eq1_terzo_id': eq1TerzoId,
         'eq1_quarto_id': eq1QuartoId,
         'eq1_centralinista_id': eq1CentralinistaId,
-        'eq2_autista_id': eq2AutostaId,
+        'eq2_autista_id': eq2AutistaId,
         'eq2_cs_id': eq2CsId,
         'eq2_terzo_id': eq2TerzoId,
         'eq2_quarto_id': eq2QuartoId,

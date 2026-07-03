@@ -36,7 +36,7 @@ class _AppNavigatorState extends State<AppNavigator> {
         index: _tab,
         children: const [
           TurniList(),
-          AssistezeList(),
+          AssistenzeList(),
           StatisticheScreen(),
           ToolsScreen(),
           ImpostazioniScreen(),
