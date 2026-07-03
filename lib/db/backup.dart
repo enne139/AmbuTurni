@@ -46,6 +46,17 @@ const _backupTables = [
   'materiali_usati',
 ];
 
+/// Timestamp leggibile per i nomi dei file esportati (AAAAMMGG_HH_MM),
+/// al posto dei millisecondi da epoch: un utente che guarda i file salvati
+/// non deve decifrare un numero per capire quando è stato fatto l'export.
+String _timestampFile() {
+  final now = DateTime.now();
+  final data = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+  final ora = now.hour.toString().padLeft(2, '0');
+  final minuti = now.minute.toString().padLeft(2, '0');
+  return '${data}_${ora}_$minuti';
+}
+
 /// Esporta tutti i dati in un file JSON.
 /// Su desktop (Windows/Linux/macOS) mostra un dialog "Salva come" nativo;
 /// su Android/iOS apre la share sheet (consente di salvare su Drive, Files, ecc.).
@@ -62,12 +73,11 @@ Future<String?> exportBackup() async {
   }
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
-  final ts = DateTime.now().millisecondsSinceEpoch;
-  return _salvaFile(json, 'ambuturni_backup_$ts.json', 'Backup AmbuTurni');
+  return _salvaFile(json, 'ambuturni_backup_${_timestampFile()}.json', 'Backup AmbuTurni');
 }
 
-/// Esporta i turni in formato leggibile: ID sostituiti con nomi, servizi
-/// annidati dentro ogni turno, tipologie come lista di stringhe.
+/// Esporta turni e assistenze in formato leggibile: ID sostituiti con nomi,
+/// servizi annidati dentro ogni turno, tipologie come lista di stringhe.
 /// Utile per consultare i dati fuori dall'app senza interpretare UUID.
 Future<String?> exportSemplificato() async {
   final db = await getDb();
@@ -141,9 +151,33 @@ Future<String?> exportSemplificato() async {
     });
   }
 
-  final json = const JsonEncoder.withIndent('  ').convert({'turni': risultato});
-  final ts = DateTime.now().millisecondsSinceEpoch;
-  return _salvaFile(json, 'ambuturni_export_turni_$ts.json', 'Export Turni AmbuTurni');
+  // Assistenze: stessa idea dei turni ma senza tipologie né servizi (la
+  // tabella non li ha).
+  final assistenzeRows = await db.query('assistenze', orderBy: 'data DESC, created_at DESC');
+  final risultatoAssistenze = assistenzeRows.map((a) => {
+        'associazione': assocMap[a['associazione_id'] as String? ?? ''],
+        'numero_progressivo': a['numero_progressivo'],
+        'data': a['data'],
+        'ore': a['ore'],
+        'descrizione': a['descrizione'],
+        'note': a['note'],
+        'eq1_autista': p(a['eq1_autista_id']),
+        'eq1_cs': p(a['eq1_cs_id']),
+        'eq1_terzo': p(a['eq1_terzo_id']),
+        'eq1_quarto': p(a['eq1_quarto_id']),
+        'eq1_centralinista': p(a['eq1_centralinista_id']),
+        'eq2_autista': p(a['eq2_autista_id']),
+        'eq2_cs': p(a['eq2_cs_id']),
+        'eq2_terzo': p(a['eq2_terzo_id']),
+        'eq2_quarto': p(a['eq2_quarto_id']),
+        'eq2_centralinista': p(a['eq2_centralinista_id']),
+      }).toList();
+
+  final json = const JsonEncoder.withIndent('  ').convert({
+    'turni': risultato,
+    'assistenze': risultatoAssistenze,
+  });
+  return _salvaFile(json, 'ambuturni_export_${_timestampFile()}.json', 'Export AmbuTurni');
 }
 
 /// Helper condiviso: salva il testo [contenuto] su filesystem.

@@ -622,7 +622,7 @@ class _SezioneBackupState extends State<_SezioneBackup> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.table_rows_outlined, size: 18),
-                  label: const Text('Esporta JSON leggibile (solo turni)'),
+                  label: const Text('Esporta JSON leggibile (turni e assistenze)'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white54,
                     side: const BorderSide(color: Colors.white12),

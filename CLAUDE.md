@@ -206,6 +206,20 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   parte" piena di trattini non avrebbe aggiunto informazione. Riguarda solo
   la visualizzazione: il form (`TurnoForm`/`AssistenzaForm`) resta con le due
   sezioni sequenziali, non toccato da questa richiesta.
+- **Export JSON leggibile esteso alle assistenze**: `exportSemplificato()` in
+  `backup.dart` produceva solo `{'turni': [...]}`; ora produce anche
+  `{'assistenze': [...]}` nello stesso file, con la stessa risoluzione
+  ID → nome (associazione, persone) ma senza tipologie né servizi annidati,
+  perché la tabella `assistenze` non li ha. File e testo di condivisione
+  rinominati di conseguenza (`ambuturni_export_$ts.json`, non più
+  `_export_turni_`) e il pulsante in Impostazioni non dice più "solo turni".
+- **Nomi dei file esportati con timestamp leggibile (`_timestampFile()` in
+  `backup.dart`)**: backup ed export usavano i millisecondi da epoch
+  (`ambuturni_backup_1751500000000.json`), un numero che l'utente non può
+  interpretare guardando i file salvati. Sostituito con `AAAAMMGG_HH_MM`
+  (es. `ambuturni_backup_20260703_14_32.json`), costruito a mano con
+  `padLeft` come `todayIso()` invece di introdurre `intl` in un file che non
+  lo usava già.
 - **byId\* con try/catch**: `firstWhere` lancia `StateError` se non trova nulla;
   usiamo try/catch invece di `firstWhereOrNull` per evitare il package `collection`.
 - **Combobox con ricerca (`PersonaPicker` / `OspedalePicker`)**: nei campi equipaggio e
@@ -450,9 +464,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   personali); gli export precedenti vengono eliminati a ogni nuovo export,
   quello corrente resta fino alla volta successiva perché alcune app
   destinatarie lo leggono in modo asincrono dopo la chiusura della share sheet.
-- ✅ Export JSON leggibile (solo turni): `exportSemplificato()` produce un JSON con nomi
-  al posto degli UUID (associazione, persone, ospedali, tipologie) e servizi annidati
-  dentro ogni turno. Pulsante dedicato nella sezione Backup di Impostazioni.
+- ✅ Export JSON leggibile (turni e assistenze): `exportSemplificato()` produce un JSON
+  con nomi al posto degli UUID (associazione, persone, ospedali, tipologie) e servizi
+  annidati dentro ogni turno; le assistenze usano la stessa struttura senza tipologie
+  né servizi (la tabella non li ha). Pulsante dedicato nella sezione Backup di Impostazioni.
 - ✅ Combobox con ricerca per equipaggio e ospedale: `PersonaPicker` e `OspedalePicker`
   in `widgets/anag_pickers.dart` permettono di filtrare la lista digitando e di creare
   nuove voci al volo tramite "Aggiungi..." (auto-selezione dopo creazione inclusa).
@@ -512,6 +527,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - [ ] 1. Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
 - [x] 2. rimuovere rimozione dei turni scorrendo verso destra e tenendo premuto
 - [x] 3. Affiancare l'equipaggio 1 e 2 
-- [ ] 4. aggiungere al esportazione semplificata anche le assistenze
+- [x] 4. aggiungere al esportazione semplificata anche le assistenze
 - [ ] 5. nel esportazione completa deve esservi anche la lista dei materiali del tools
 - [ ] 6. quando viene fatto l'import non aggiorna subito le ore fatte
+- [ ] 7. il campo note deve accettare il markdown
