@@ -5,16 +5,6 @@ import '../../utils/format.dart';
 import '../../utils/theme.dart';
 import '../../widgets/turno_card.dart';
 
-// Nomi di mesi e giorni hardcoded in italiano: l'app non usa
-// flutter_localizations (tutte le stringhe sono già italiane fisse) e
-// DateFormat con locale 'it' richiederebbe initializeDateFormatting all'avvio
-// — una dipendenza di setup in più per due liste di costanti.
-const _mesi = [
-  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
-];
-const _giorniSettimana = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
-
 /// Vista calendario mensile dei turni, alternativa alla lista (toggle in
 /// AppBar di TurniList). Griglia del mese con un pallino per turno (colore
 /// dell'associazione) e, sotto, i turni del giorno selezionato.
@@ -138,7 +128,7 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
         children: [
           Expanded(
             child: Text(
-              '${_mesi[_mese.month - 1]} ${_mese.year}',
+              '${kMesiItaliani[_mese.month - 1]} ${_mese.year}',
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
           ),
@@ -166,7 +156,7 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
-          for (final g in _giorniSettimana)
+          for (final g in kGiorniSettimanaIt)
             Expanded(
               child: Center(
                 child: Text(

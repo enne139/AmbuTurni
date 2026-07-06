@@ -1,5 +1,16 @@
 import 'package:intl/intl.dart';
 
+// Nomi di mesi e giorni hardcoded in italiano: l'app non usa
+// flutter_localizations (tutte le stringhe sono già italiane fisse) e
+// DateFormat con locale 'it' richiederebbe initializeDateFormatting
+// all'avvio — una dipendenza di setup in più per due liste di costanti.
+// Condivisi da vista calendario turni e tool Piano turni.
+const kMesiItaliani = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
+];
+const kGiorniSettimanaIt = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
 // Formato date italiano visualizzato in lista e nei dettagli.
 final _dateFormatter = DateFormat('dd/MM/yyyy');
 

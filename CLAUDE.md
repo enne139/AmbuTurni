@@ -59,6 +59,7 @@
 | HTTP (sync) | `http` |
 | Preferenze | `shared_preferences` |
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
+| Lettura XLSX (Piano turni) | `excel` |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
 
@@ -71,7 +72,8 @@ lib/
 ├── main.dart                      entry: init DB + MultiProvider + MaterialApp
 ├── utils/
 │   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
-│   └── format.dart                formatDate/Ore/parseOre/todayIso
+│   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
+│   └── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
 ├── db/
 │   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
 │   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
@@ -102,7 +104,8 @@ lib/
     ├── statistiche/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
-    │   ├── tools_screen.dart          elenco strumenti extra (per ora solo Materiali usati)
+    │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni)
+    │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
@@ -187,6 +190,27 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   durante `_onUpgrade`. Nomi risolti via `AnagraficheProvider.byIdTipologia`
   (anche in `TurnoCard`, concatenati con `·`); `importBackup` fonde i campi
   vecchi per i backup pre-v8, che restano importabili.
+- **Tool "Piano turni"** (`piano_turni_screen.dart` + `utils/piano_mensile.dart`):
+  porta nell'app il tool HTML/SheetJS che l'utente usava per analizzare il
+  foglio Google mensile dei turni dell'associazione. Il foglio si scarica
+  dall'endpoint `export?format=xlsx` (nessuna API key, basta la condivisione
+  con link) e si legge col package `excel` — unico package aggiunto, il
+  parsing a mano dello zip+XML non era realistico. Il parser è Dart puro
+  (niente import Flutter) così è unit-testato (`test/utils/`, workbook
+  costruiti in memoria col package stesso, nessuna fixture binaria) e gira
+  in un isolate via `compute()` (il decode di ~30 schede bloccherebbe la UI).
+  Struttura riconosciuta: schede "LUN 1"/"GIO DIURNO 5", blocchi H12/H24/
+  ASSISTENZA/GETTONE (4 ruoli)/CENTRALINO (1-2 slot)/USCITA MEZZI (saltato);
+  colonna C = titolare di turno, colonna D = possibili sostituti (mostrate
+  affiancate nel dettaglio), entrambe vuote = buco. UI: calendario col
+  pallino per fascia sui giorni con buchi, dettaglio equipaggi per blocco al
+  tap (card in sequenza operativa fissa richiesta dall'utente: H24 m/p,
+  centralino giorno, H12 m/p, H24 s/n, centralino sera, assistenze, gettoni),
+  filtri ruolo persistiti (il Quarto è spesso scoperto per scelta: senza
+  filtro i pallini sarebbero ovunque), ultimo URL in shared_preferences e
+  ricaricato all'apertura, più archivio multi-mese ("aaaa-mm" → URL, come lo
+  storico del tool HTML: ogni mese ha un suo foglio) con lista nel form e
+  bottom sheet dall'AppBar.
 - **Vista calendario custom, nessun package** (`turni_calendario.dart`): serve
   solo una griglia mese con marker colorati (pallini per associazione) e
   l'elenco del giorno selezionato — table_calendar & co. non giustificano la
@@ -331,6 +355,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.
 - ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
 - ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione), nessuno storico.
+- ✅ **Tools → Piano turni**: calendario equipaggi/buchi dal foglio Google
+  mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri ruolo).
 - ✅ Windows desktop, icona app personalizzata, 29 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../utils/theme.dart';
 import 'materiali_usati_screen.dart';
+import 'piano_turni_screen.dart';
 
 /// Elenco degli strumenti extra dell'app (fuori dal flusso turni/assistenze).
-/// Per ora contiene solo "Materiali usati"; pensata per ospitarne altri in
-/// futuro senza dover ridisegnare la navigazione principale.
+/// Pensata per ospitare più strumenti senza ridisegnare la navigazione principale.
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
 
@@ -24,6 +24,18 @@ class ToolsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MaterialiUsatiScreen()),
+              ),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.event_busy_outlined, color: kPrimary),
+              title: const Text('Piano turni'),
+              subtitle: const Text('Equipaggi e buchi dal foglio Google dei turni'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PianoTurniScreen()),
               ),
             ),
           ),
