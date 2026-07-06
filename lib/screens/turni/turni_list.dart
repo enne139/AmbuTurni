@@ -1,13 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/app_provider.dart';
+import '../../utils/format.dart';
 import '../../utils/theme.dart';
 import '../../widgets/turno_card.dart';
+import 'turni_calendario.dart';
 import 'turno_form.dart';
 import 'turno_detail.dart';
 
+// Preferenza persistente della vista scelta (lista/calendario): senza,
+// l'utente che usa sempre il calendario dovrebbe riattivarlo a ogni avvio.
+const _kVistaCalendarioKey = 'turni_vista_calendario';
+
 /// Lista turni ordinata per data decrescente, con filtro per associazione.
+/// Toggle in AppBar per la vista calendario mensile (CalendarioTurni).
 /// L'eliminazione (swipe e long-press) è stata rimossa dalla lista su
 /// richiesta esplicita: l'unico modo per eliminare un turno resta il
 /// cestino nell'AppBar del dettaglio, per evitare cancellazioni accidentali
@@ -22,6 +30,10 @@ class TurniList extends StatefulWidget {
 class _TurniListState extends State<TurniList> {
   String? _filtroAssocId;
   bool _searching = false;
+  bool _vistaCalendario = false;
+  // Giorno selezionato nel calendario. Vive qui (non in CalendarioTurni)
+  // perché serve anche al FAB per precompilare la data di un nuovo turno.
+  DateTime _giornoSelezionato = DateTime.now();
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
 
@@ -31,6 +43,12 @@ class _TurniListState extends State<TurniList> {
     // Carica i turni al primo avvio usando il provider.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TurniProvider>().carica();
+    });
+    // Ripristina la vista usata l'ultima volta.
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted && (prefs.getBool(_kVistaCalendarioKey) ?? false)) {
+        setState(() => _vistaCalendario = true);
+      }
     });
   }
 
@@ -58,6 +76,38 @@ class _TurniListState extends State<TurniList> {
     context.read<TurniProvider>().carica(associazioneId: _filtroAssocId);
   }
 
+  void _toggleVista() {
+    // La ricerca testuale ha senso solo in lista: passando al calendario
+    // viene chiusa (e il provider ricaricato senza filtro di testo), così i
+    // pallini riflettono tutti i turni e non un sottoinsieme cercato.
+    if (!_vistaCalendario && _searching) _chiudiRicerca();
+    setState(() => _vistaCalendario = !_vistaCalendario);
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setBool(_kVistaCalendarioKey, _vistaCalendario));
+  }
+
+  Future<void> _apriDettaglio(String turnoId) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turnoId)),
+    );
+    if (mounted) context.read<TurniProvider>().ricarica();
+  }
+
+  Future<void> _nuovoTurno() async {
+    // Dal calendario il nuovo turno parte già dal giorno selezionato:
+    // è quasi sempre il motivo per cui si sta guardando quel giorno.
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TurnoForm(
+          dataIniziale: _vistaCalendario ? dateToIso(_giornoSelezionato) : null,
+        ),
+      ),
+    );
+    if (mounted) context.read<TurniProvider>().ricarica();
+  }
+
   @override
   Widget build(BuildContext context) {
     final anag = context.watch<AnagraficheProvider>();
@@ -83,10 +133,19 @@ class _TurniListState extends State<TurniList> {
           if (_searching)
             IconButton(icon: const Icon(Icons.close), tooltip: 'Chiudi ricerca', onPressed: _chiudiRicerca)
           else ...[
+            // La ricerca testuale è disponibile solo in vista lista: in
+            // calendario un risultato di ricerca sparso su più mesi non
+            // avrebbe una rappresentazione utile.
+            if (!_vistaCalendario)
+              IconButton(
+                icon: const Icon(Icons.search),
+                tooltip: 'Cerca',
+                onPressed: () => setState(() => _searching = true),
+              ),
             IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: 'Cerca',
-              onPressed: () => setState(() => _searching = true),
+              icon: Icon(_vistaCalendario ? Icons.view_list : Icons.calendar_month),
+              tooltip: _vistaCalendario ? 'Vista elenco' : 'Vista calendario',
+              onPressed: _toggleVista,
             ),
             // Filtro per associazione
             if (anag.associazioni.isNotEmpty)
@@ -110,50 +169,49 @@ class _TurniListState extends State<TurniList> {
           ],
         ],
       ),
-      body: turni.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.calendar_today_outlined, size: 64, color: Colors.white24),
-                  const SizedBox(height: 16),
-                  Text(
-                    (turniProvider.ricerca?.isNotEmpty ?? false) ? 'Nessun risultato' : 'Nessun turno',
-                    style: const TextStyle(color: Colors.white54),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    (turniProvider.ricerca?.isNotEmpty ?? false)
-                        ? 'Prova con un altro termine di ricerca'
-                        : 'Tocca + per aggiungerne uno',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
-                  ),
-                ],
-              ),
+      body: _vistaCalendario
+          ? CalendarioTurni(
+              turni: turni,
+              anag: anag,
+              giornoSelezionato: _giornoSelezionato,
+              onSelezionaGiorno: (g) => setState(() => _giornoSelezionato = g),
+              onTapTurno: (t) => _apriDettaglio(t.id),
             )
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-              itemCount: turni.length,
-              itemBuilder: (ctx, i) {
-                final turno = turni[i];
-                return TurnoCard(
-                  turno: turno,
-                  anag: anag,
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turno.id)),
+          : turni.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_today_outlined, size: 64, color: Colors.white24),
+                      const SizedBox(height: 16),
+                      Text(
+                        (turniProvider.ricerca?.isNotEmpty ?? false) ? 'Nessun risultato' : 'Nessun turno',
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        (turniProvider.ricerca?.isNotEmpty ?? false)
+                            ? 'Prova con un altro termine di ricerca'
+                            : 'Tocca + per aggiungerne uno',
+                        style: const TextStyle(color: Colors.white38, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                  itemCount: turni.length,
+                  itemBuilder: (ctx, i) {
+                    final turno = turni[i];
+                    return TurnoCard(
+                      turno: turno,
+                      anag: anag,
+                      onTap: () => _apriDettaglio(turno.id),
                     );
-                    if (mounted) context.read<TurniProvider>().ricarica();
                   },
-                );
-              },
-            ),
+                ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => const TurnoForm()));
-          if (mounted) context.read<TurniProvider>().ricarica();
-        },
+        onPressed: _nuovoTurno,
         child: const Icon(Icons.add),
       ),
     );

@@ -9,9 +9,13 @@ import '../../widgets/anag_pickers.dart';
 
 /// Form per creare o modificare un turno.
 /// Se [turnoId] è non-null, è in modalità modifica.
+/// [dataIniziale] (ISO YYYY-MM-DD) precompila la data in creazione: la vista
+/// calendario la passa così un turno creato da lì parte dal giorno
+/// selezionato invece che da oggi. Ignorata in modifica.
 class TurnoForm extends StatefulWidget {
   final String? turnoId;
-  const TurnoForm({super.key, this.turnoId});
+  final String? dataIniziale;
+  const TurnoForm({super.key, this.turnoId, this.dataIniziale});
 
   @override
   State<TurnoForm> createState() => _TurnoFormState();
@@ -42,7 +46,12 @@ class _TurnoFormState extends State<TurnoForm> {
     _oreCtrl = TextEditingController();
     _descrizioneCtrl = TextEditingController();
     _noteCtrl = TextEditingController();
-    _dataCtrl = TextEditingController(text: todayIso());
+    _dataCtrl = TextEditingController(text: widget.dataIniziale ?? todayIso());
+    // _data alimenta initialDate del date picker: va allineato al campo,
+    // altrimenti il picker si aprirebbe su oggi anche con data precompilata.
+    if (widget.dataIniziale != null) {
+      _data = DateTime.tryParse(widget.dataIniziale!) ?? DateTime.now();
+    }
     _caricaDati();
   }
 

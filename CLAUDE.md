@@ -91,6 +91,7 @@ lib/
     │   └── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
     ├── turni/
     │   ├── turni_list.dart         lista + FAB + filtro assoc. (niente swipe/long-press, v. Decisioni tecniche)
+    │   ├── turni_calendario.dart   CalendarioTurni: vista calendario mensile (toggle in AppBar della lista)
     │   ├── turno_form.dart         form crea/modifica turno (assoc., data, ore, tipol., eq.)
     │   ├── turno_detail.dart       dettaglio + lista servizi con riordino frecce
     │   └── servizio_form.dart      form crea/modifica servizio (codici, ospedale, desc.)
@@ -186,6 +187,16 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   durante `_onUpgrade`. Nomi risolti via `AnagraficheProvider.byIdTipologia`
   (anche in `TurnoCard`, concatenati con `·`); `importBackup` fonde i campi
   vecchi per i backup pre-v8, che restano importabili.
+- **Vista calendario custom, nessun package** (`turni_calendario.dart`): serve
+  solo una griglia mese con marker colorati (pallini per associazione) e
+  l'elenco del giorno selezionato — table_calendar & co. non giustificano la
+  dipendenza (stessa politica di byId* vs package collection). Nomi di mesi e
+  giorni hardcoded in italiano: l'app non usa flutter_localizations e tutte le
+  stringhe sono già fisse in italiano. Il giorno selezionato è stato di
+  `TurniList` (non del calendario) perché il FAB lo usa per precompilare
+  `TurnoForm.dataIniziale`; la vista scelta (lista/calendario) persiste in
+  shared_preferences. La ricerca testuale resta solo in vista lista: un
+  risultato sparso su più mesi non ha una rappresentazione utile a calendario.
 - **Eliminazione solo dal cestino nel dettaglio**: rimossi swipe e long-press
   dalle liste turni/assistenze — ridondanti col cestino già nell'AppBar del
   dettaglio, e più a rischio di cancellazione accidentale.
@@ -305,6 +316,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 
 - ✅ **Turni**: lista con filtro/ricerca, form completo, dettaglio con servizi
   (CRUD + riordino, descrizione markdown), tipologie multi-select, numerazione automatica.
+- ✅ **Vista calendario turni**: griglia mensile con pallini colorati per
+  associazione, turni del giorno selezionato, FAB con data precompilata;
+  toggle lista/calendario in AppBar, persistito tra i riavvii.
 - ✅ **Equipaggio**: form 1ª/2ª parte con "Copia 1ª → 2ª"; affiancate per ruolo nel dettaglio.
 - ✅ **Note** (turno/assistenza): card dedicata in markdown, editor a schermo intero.
 - ✅ **Assistenze**: come i turni ma senza tipologia né servizi.

@@ -40,8 +40,11 @@ double? parseOre(String? input) {
   return double.tryParse(s);
 }
 
+/// Converte una DateTime nella sola data ISO (YYYY-MM-DD), ignorando l'orario.
+/// Formato identico alla colonna `data` di turni/assistenze: usato per
+/// confrontare e raggruppare per giorno (es. vista calendario).
+String dateToIso(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
 /// Restituisce la data ISO di oggi (YYYY-MM-DD).
-String todayIso() {
-  final now = DateTime.now();
-  return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-}
+String todayIso() => dateToIso(DateTime.now());
