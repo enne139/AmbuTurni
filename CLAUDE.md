@@ -212,6 +212,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   storico del tool HTML: ogni mese ha un suo foglio) con lista nel form e
   bottom sheet dall'AppBar, e ricerca volontario per nome
   (`PianoMensile.cercaNome`, tap sul risultato → il calendario salta al giorno).
+- **Permesso INTERNET nel manifest Android (v1.3.1)**: le build debug lo
+  includono automaticamente, le release no — il Piano turni (prima feature di
+  rete su main) falliva con "Failed host lookup" solo sull'APK release.
+  Stessa lezione del PRAGMA WAL: i bug di piattaforma vanno verificati con
+  una build release su Android reale, non solo in debug/desktop.
 - **Vista calendario custom, nessun package** (`turni_calendario.dart`): serve
   solo una griglia mese con marker colorati (pallini per associazione) e
   l'elenco del giorno selezionato — table_calendar & co. non giustificano la

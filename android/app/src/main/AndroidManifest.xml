@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET serve al tool Piano turni (download del foglio Google) e in
+         futuro alla sync. Le build DEBUG lo includono da sole (per l'hot
+         reload), quindi la sua mancanza si manifesta solo negli APK release:
+         "Failed host lookup" alla prima richiesta HTTP. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- allowBackup=false: senza, Android carica il DB SQLite (nomi di persone,
          turni) nel backup automatico Google del device. I dati restano solo
          sul telefono; per il trasferimento si usa l'export JSON dell'app. -->
