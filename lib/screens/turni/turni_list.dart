@@ -147,12 +147,17 @@ class _TurniListState extends State<TurniList> {
               tooltip: _vistaCalendario ? 'Vista elenco' : 'Vista calendario',
               onPressed: _toggleVista,
             ),
-            // Filtro per associazione
+            // Filtro per associazione. L'icona prende il colore
+            // dell'associazione filtrata: mostra a colpo d'occhio *quale*
+            // filtro è attivo, non solo che ce n'è uno (kPrimary come
+            // fallback per associazioni senza colore assegnato).
             if (anag.associazioni.isNotEmpty)
               PopupMenuButton<String?>(
                 icon: Icon(
                   Icons.filter_list,
-                  color: _filtroAssocId != null ? kPrimary : Colors.white70,
+                  color: _filtroAssocId == null
+                      ? Colors.white70
+                      : colorFromHex(anag.byIdAssociazione(_filtroAssocId)?.colore) ?? kPrimary,
                 ),
                 tooltip: 'Filtra per associazione',
                 onSelected: (val) {

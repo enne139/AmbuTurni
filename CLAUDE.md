@@ -197,6 +197,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `TurnoForm.dataIniziale`; la vista scelta (lista/calendario) persiste in
   shared_preferences. La ricerca testuale resta solo in vista lista: un
   risultato sparso su più mesi non ha una rappresentazione utile a calendario.
+- **Icona filtro col colore dell'associazione filtrata** (liste turni e
+  assistenze, quindi anche vista calendario che ne condivide l'AppBar):
+  mostra *quale* filtro è attivo riusando il colore già assegnato
+  all'associazione, con kPrimary come fallback se non ne ha uno.
 - **Eliminazione solo dal cestino nel dettaglio**: rimossi swipe e long-press
   dalle liste turni/assistenze — ridondanti col cestino già nell'AppBar del
   dettaglio, e più a rischio di cancellazione accidentale.

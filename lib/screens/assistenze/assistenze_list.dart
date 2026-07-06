@@ -38,9 +38,16 @@ class _AssistenzeListState extends State<AssistenzeList> {
       appBar: AppBar(
         title: const Text('Assistenze'),
         actions: [
+          // Icona col colore dell'associazione filtrata (v. TurniList):
+          // mostra *quale* filtro è attivo, non solo che ce n'è uno.
           if (anag.associazioni.isNotEmpty)
             PopupMenuButton<String?>(
-              icon: Icon(Icons.filter_list, color: _filtroAssocId != null ? kPrimary : Colors.white70),
+              icon: Icon(
+                Icons.filter_list,
+                color: _filtroAssocId == null
+                    ? Colors.white70
+                    : colorFromHex(anag.byIdAssociazione(_filtroAssocId)?.colore) ?? kPrimary,
+              ),
               tooltip: 'Filtra per associazione',
               onSelected: (val) {
                 setState(() => _filtroAssocId = val);
