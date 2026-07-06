@@ -16,6 +16,7 @@ import '../../utils/theme.dart';
 const _kUrlKey = 'piano_turni_url';
 const _kFogliKey = 'piano_turni_fogli'; // JSON: {"aaaa-mm": url}
 const _kRuoliEsclusiKey = 'piano_turni_ruoli_esclusi';
+const _kUltimaRicercaKey = 'piano_turni_ultima_ricerca';
 
 // Colori delle fasce, ripresi dalla legenda del tool HTML originale
 // (mattina giallo, pomeriggio arancio, sera verde, notte blu) ma saturati
@@ -30,6 +31,15 @@ const _coloreAssistenza = Color(0xFFBA68C8);
 
 Color _colorePerSlot(SlotPiano s) =>
     s.assistenza ? _coloreAssistenza : _coloriFascia[s.fascia]!;
+
+/// Descrizione compatta di uno slot (usata nei risultati di ricerca):
+/// stessa forma dei titoli delle card del dettaglio giorno.
+String _titoloSlot(SlotPiano s) {
+  if (s.ruolo == RuoloPiano.centralino) return 'Centralino · ${s.fascia.etichetta}';
+  if (s.macro == 'ASSISTENZA') return 'Assistenza';
+  if (s.macro == 'GETTONE') return 'Gettone';
+  return '${s.macro} · ${s.fascia.etichetta}';
+}
 
 /// Tool "Piano turni": carica il foglio Google mensile dei turni
 /// dell'associazione (stesso foglio del tool HTML preesistente) e lo mostra
@@ -165,6 +175,18 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     }
   }
 
+  /// Apre la ricerca per nome; se l'utente tocca un risultato, il calendario
+  /// salta a quel giorno (la ricerca restituisce il giorno via pop).
+  Future<void> _cercaVolontario() async {
+    final giorno = await Navigator.push<int>(
+      context,
+      MaterialPageRoute(builder: (_) => _RicercaVolontarioScreen(piano: _piano!)),
+    );
+    if (giorno != null && mounted) {
+      setState(() => _giornoSelezionato = giorno);
+    }
+  }
+
   void _toggleRuolo(RuoloPiano ruolo) {
     setState(() {
       if (!_ruoliEsclusi.remove(ruolo)) _ruoliEsclusi.add(ruolo);
@@ -180,6 +202,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
         title: const Text('Piano turni'),
         actions: [
           if (_piano != null && !_loading) ...[
+            IconButton(
+              icon: const Icon(Icons.person_search),
+              tooltip: 'Cerca volontario',
+              onPressed: _cercaVolontario,
+            ),
             if (_fogliSalvati.length > 1)
               IconButton(
                 icon: const Icon(Icons.history),
@@ -738,6 +765,152 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Ricerca di un volontario nei turni del mese (equivalente della "Ricerca
+/// Volontario" del tool HTML): cerca in titolari e sostituti, risultati in
+/// ordine cronologico. Il tap su un risultato torna al calendario facendolo
+/// saltare a quel giorno (pop col giorno come risultato della route).
+class _RicercaVolontarioScreen extends StatefulWidget {
+  final PianoMensile piano;
+  const _RicercaVolontarioScreen({required this.piano});
+
+  @override
+  State<_RicercaVolontarioScreen> createState() => _RicercaVolontarioScreenState();
+}
+
+class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
+  final _ctrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Ripropone l'ultima ricerca (tipicamente si cerca sempre il proprio
+    // nome), preselezionata: digitare un nome nuovo la sostituisce senza
+    // doverla cancellare. Il check su text.isEmpty evita di sovrascrivere
+    // quello che l'utente ha già digitato mentre le prefs caricavano.
+    SharedPreferences.getInstance().then((prefs) {
+      final ultima = prefs.getString(_kUltimaRicercaKey);
+      if (ultima != null && ultima.isNotEmpty && mounted && _ctrl.text.isEmpty) {
+        _ctrl.text = ultima;
+        _ctrl.selection =
+            TextSelection(baseOffset: 0, extentOffset: ultima.length);
+        setState(() => _query = ultima);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Salva all'uscita (qualunque essa sia: tap su un risultato o back);
+    // svuotare il campo di proposito dimentica anche la memoria.
+    final q = _query.trim();
+    SharedPreferences.getInstance().then((prefs) =>
+        q.isEmpty ? prefs.remove(_kUltimaRicercaKey) : prefs.setString(_kUltimaRicercaKey, q));
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final risultati = widget.piano.cercaNome(_query);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: TextField(
+          controller: _ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Cerca nome o cognome...',
+            hintStyle: TextStyle(color: Colors.white38),
+            border: InputBorder.none,
+          ),
+          // Niente debounce: la ricerca è su una lista già in memoria.
+          onChanged: (v) => setState(() => _query = v),
+        ),
+      ),
+      body: _query.trim().isEmpty
+          ? const Center(
+              child: Text(
+                'Scrivi parte del nome per cercarlo nei turni del mese',
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            )
+          : risultati.isEmpty
+              ? Center(
+                  child: Text(
+                    'Nessun turno trovato per "${_query.trim()}"',
+                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  itemCount: risultati.length + 1,
+                  itemBuilder: (ctx, i) {
+                    if (i == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          risultati.length == 1
+                              ? '1 turno trovato'
+                              : '${risultati.length} turni trovati',
+                          style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        ),
+                      );
+                    }
+                    return _rigaRisultato(risultati[i - 1]);
+                  },
+                ),
+    );
+  }
+
+  Widget _rigaRisultato(SlotPiano slot) {
+    final piano = widget.piano;
+    final settimana =
+        kGiorniSettimanaIt[DateTime(piano.anno, piano.mese, slot.giorno).weekday - 1];
+    final colore = _colorePerSlot(slot);
+    // Nel titolo del centralino la fascia c'è già; per gli altri il ruolo.
+    final ruolo =
+        slot.ruolo == RuoloPiano.centralino ? '' : ' · ${slot.ruolo.etichetta}';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        dense: true,
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: colore.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colore.withValues(alpha: 0.4)),
+          ),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(settimana,
+                  style: TextStyle(color: colore, fontSize: 9, fontWeight: FontWeight.w600)),
+              Text('${slot.giorno}',
+                  style: TextStyle(color: colore, fontSize: 13, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+        title: Text('${_titoloSlot(slot)}$ruolo',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          [
+            if (slot.titolare.isNotEmpty) 'Di turno: ${slot.titolare}',
+            if (slot.sostituti.isNotEmpty) 'Sost.: ${slot.sostituti}',
+          ].join(' · '),
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        onTap: () => Navigator.pop(context, slot.giorno),
       ),
     );
   }

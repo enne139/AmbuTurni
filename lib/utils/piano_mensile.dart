@@ -108,6 +108,21 @@ class PianoMensile {
       delGiorno(giorno)
           .where((s) => s.buco && !ruoliEsclusi.contains(s.ruolo))
           .toList();
+
+  /// Slot in cui compare [nome] (ricerca parziale, case-insensitive) come
+  /// titolare o sostituto, in ordine cronologico. Query vuota = nessun
+  /// risultato: cercare "" elencherebbe l'intero mese.
+  List<SlotPiano> cercaNome(String nome) {
+    final q = nome.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final giorni = _perGiorno.keys.toList()..sort();
+    return [
+      for (final g in giorni)
+        ...(_perGiorno[g]!.where((s) =>
+            s.titolare.toLowerCase().contains(q) ||
+            s.sostituti.toLowerCase().contains(q))),
+    ];
+  }
 }
 
 const _prefissiGiorno = {'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'};

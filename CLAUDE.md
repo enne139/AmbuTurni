@@ -210,7 +210,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   filtro i pallini sarebbero ovunque), ultimo URL in shared_preferences e
   ricaricato all'apertura, più archivio multi-mese ("aaaa-mm" → URL, come lo
   storico del tool HTML: ogni mese ha un suo foglio) con lista nel form e
-  bottom sheet dall'AppBar.
+  bottom sheet dall'AppBar, e ricerca volontario per nome
+  (`PianoMensile.cercaNome`, tap sul risultato → il calendario salta al giorno).
 - **Vista calendario custom, nessun package** (`turni_calendario.dart`): serve
   solo una griglia mese con marker colorati (pallini per associazione) e
   l'elenco del giorno selezionato — table_calendar & co. non giustificano la

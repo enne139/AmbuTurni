@@ -242,6 +242,44 @@ void main() {
     });
   });
 
+  group('cercaNome', () {
+    Excel fixture() {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi Mario');
+      scrivi(excel, 'LUN 1', 'D7', 'De Rossi');
+      scrivi(excel, 'MAR 2', 'A6', 'H12');
+      scrivi(excel, 'MAR 2', 'C7', 'Bianchi');
+      return excel;
+    }
+
+    test('trova per sottostringa case-insensitive in titolari e sostituti', () {
+      final piano = parsa(fixture());
+      // "rossi" compare come titolare (giorno 1) e come sostituto (giorno 1).
+      final rossi = piano.cercaNome('rossi');
+      expect(rossi, hasLength(2));
+      expect(rossi.every((s) => s.giorno == 1), isTrue);
+
+      final bianchi = piano.cercaNome('BIANCHI');
+      expect(bianchi, hasLength(1));
+      expect(bianchi.single.giorno, 2);
+      expect(bianchi.single.ruolo, RuoloPiano.cs);
+    });
+
+    test('risultati in ordine cronologico e query vuota senza risultati', () {
+      final excel = fixture();
+      scrivi(excel, 'MER 3', 'A6', 'H24');
+      scrivi(excel, 'MER 3', 'C6', 'Rossi');
+      final piano = parsa(excel);
+
+      final giorni = piano.cercaNome('rossi').map((s) => s.giorno).toList();
+      expect(giorni, [1, 1, 3]);
+
+      expect(piano.cercaNome(''), isEmpty);
+      expect(piano.cercaNome('   '), isEmpty);
+    });
+  });
+
   group('buchiDelGiorno con filtri ruolo', () {
     test('esclude i ruoli filtrati dal conteggio', () {
       final excel = base('LUN 1');
