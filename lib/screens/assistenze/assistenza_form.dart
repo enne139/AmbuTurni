@@ -10,7 +10,10 @@ import '../../widgets/anag_pickers.dart';
 /// Form per creare o modificare un'assistenza.
 class AssistenzaForm extends StatefulWidget {
   final String? assistenzaId;
-  const AssistenzaForm({super.key, this.assistenzaId});
+  /// Data ISO precompilata per una nuova assistenza (come in TurnoForm:
+  /// creazione dal giorno selezionato della vista calendario).
+  final String? dataIniziale;
+  const AssistenzaForm({super.key, this.assistenzaId, this.dataIniziale});
 
   @override
   State<AssistenzaForm> createState() => _AssistenzaFormState();
@@ -38,7 +41,11 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
     _oreCtrl = TextEditingController();
     _descrizioneCtrl = TextEditingController();
     _noteCtrl = TextEditingController();
-    _dataCtrl = TextEditingController(text: todayIso());
+    // dataIniziale vince su oggi solo in creazione; in modifica _caricaDati
+    // sovrascrive comunque con la data dell'assistenza.
+    final dataIso = widget.dataIniziale ?? todayIso();
+    _data = DateTime.tryParse(dataIso) ?? DateTime.now();
+    _dataCtrl = TextEditingController(text: dataIso);
     _caricaDati();
   }
 

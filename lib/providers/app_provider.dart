@@ -119,22 +119,27 @@ class StatisticheProvider extends ChangeNotifier {
   }
 }
 
-/// Provider per la lista assistenze. Stesso pattern di TurniProvider.
+/// Provider per la lista assistenze. Stesso pattern di TurniProvider
+/// (filtro associazione + ricerca testuale mantenuti tra le navigazioni).
 class AssistenzeProvider extends ChangeNotifier {
   List<Assistenza> assistenze = [];
   String? _filtroAssociazioneId;
+  String? _ricerca;
 
   String? get filtroAssociazioneId => _filtroAssociazioneId;
+  String? get ricerca => _ricerca;
 
-  Future<void> carica({String? associazioneId}) async {
+  Future<void> carica({String? associazioneId, String? ricerca}) async {
     _filtroAssociazioneId = associazioneId;
-    assistenze = await getAssistenze(associazioneId: associazioneId);
+    _ricerca = ricerca;
+    assistenze = await getAssistenze(associazioneId: associazioneId, ricerca: ricerca);
     notifyListeners();
   }
 
-  /// Ricarica con lo stesso filtro già impostato.
+  /// Ricarica con lo stesso filtro/ricerca già impostati.
   Future<void> ricarica() async {
-    assistenze = await getAssistenze(associazioneId: _filtroAssociazioneId);
+    assistenze = await getAssistenze(
+        associazioneId: _filtroAssociazioneId, ricerca: _ricerca);
     notifyListeners();
   }
 }

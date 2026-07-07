@@ -433,14 +433,27 @@ Future<void> spostaServizio(
 
 /// Come getTurni ma per le assistenze; LEFT JOIN solo su associazioni
 /// perché le assistenze non hanno tipologia né servizi.
-Future<List<Assistenza>> getAssistenze({String? associazioneId}) async {
+/// Lista assistenze con filtro associazione e ricerca testuale su
+/// descrizione/note (stessa forma di getTurni, ma senza il JOIN sui servizi
+/// che le assistenze non hanno).
+Future<List<Assistenza>> getAssistenze({String? associazioneId, String? ricerca}) async {
   final db = await getDb();
-  final where =
-      associazioneId != null ? 'WHERE a.associazione_id = ?' : '';
-  final args = associazioneId != null ? [associazioneId] : [];
+  final conditions = <String>[];
+  final args = <dynamic>[];
+  if (associazioneId != null) {
+    conditions.add('a.associazione_id = ?');
+    args.add(associazioneId);
+  }
+  final q = ricerca?.trim();
+  if (q != null && q.isNotEmpty) {
+    conditions.add('(a.descrizione LIKE ? OR a.note LIKE ?)');
+    args.addAll(['%$q%', '%$q%']);
+  }
+  final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
   final rows = await db.rawQuery('''
     SELECT a.*,
-           ass.nome AS associazione_nome
+           ass.nome AS associazione_nome,
+           ass.colore AS associazione_colore
     FROM assistenze a
     LEFT JOIN associazioni ass ON ass.id = a.associazione_id
     $where

@@ -91,14 +91,15 @@ lib/
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
 │   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
+│   ├── calendario_mensile.dart    CalendarioMensile<T>: vista calendario generica (turni e assistenze)
 │   ├── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
 │   └── nota_markdown.dart         NotaMarkdown: rendering markdown delle note, stile coerente col tema scuro
 └── screens/
     ├── shared/
     │   └── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
     ├── turni/
-    │   ├── turni_list.dart         lista + FAB + filtro assoc. (niente swipe/long-press, v. Decisioni tecniche)
-    │   ├── turni_calendario.dart   CalendarioTurni: vista calendario mensile (toggle in AppBar della lista)
+    │   ├── turni_list.dart         lista + FAB + filtro assoc. + vista calendario (niente swipe/long-press,
+    │   │                            v. Decisioni tecniche)
     │   ├── turno_form.dart         form crea/modifica turno (assoc., data, ore, tipol., eq.)
     │   ├── turno_detail.dart       dettaglio + lista servizi con riordino frecce
     │   └── servizio_form.dart      form crea/modifica servizio (codici, ospedale, desc.)
@@ -298,16 +299,23 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   rete su main) falliva con "Failed host lookup" solo sull'APK release.
   Stessa lezione del PRAGMA WAL: i bug di piattaforma vanno verificati con
   una build release su Android reale, non solo in debug/desktop.
-- **Vista calendario custom, nessun package** (`turni_calendario.dart`): serve
-  solo una griglia mese con marker colorati (pallini per associazione) e
+- **Vista calendario custom, nessun package** (`widgets/calendario_mensile.dart`):
+  serve solo una griglia mese con marker colorati (pallini per associazione) e
   l'elenco del giorno selezionato — table_calendar & co. non giustificano la
   dipendenza (stessa politica di byId* vs package collection). Nomi di mesi e
   giorni hardcoded in italiano: l'app non usa flutter_localizations e tutte le
-  stringhe sono già fisse in italiano. Il giorno selezionato è stato di
-  `TurniList` (non del calendario) perché il FAB lo usa per precompilare
-  `TurnoForm.dataIniziale`; la vista scelta (lista/calendario) persiste in
-  shared_preferences. La ricerca testuale resta solo in vista lista: un
-  risultato sparso su più mesi non ha una rappresentazione utile a calendario.
+  stringhe sono già fisse in italiano. Il giorno selezionato è stato della
+  lista (non del calendario) perché il FAB lo usa per precompilare
+  `dataIniziale` del form; la vista scelta (lista/calendario) persiste in
+  shared_preferences, con chiave separata per turni e assistenze. La ricerca
+  testuale resta solo in vista lista: un risultato sparso su più mesi non ha
+  una rappresentazione utile a calendario. Nato come `CalendarioTurni`, reso
+  generico (`CalendarioMensile<T>` con callback dataIso/colore/itemBuilder)
+  quando calendario e ricerca sono stati estesi alle assistenze: `Turno` e
+  `Assistenza` sono classi diverse e duplicare la griglia era peggio di tre
+  callback. Per i pallini `getAssistenze` ora denormalizza anche
+  `associazione_colore` (nuovo campo `Assistenza.associazioneColore`, escluso
+  da toMap come `associazioneNome`) e supporta `ricerca` su descrizione/note.
 - **Icona filtro col colore dell'associazione filtrata** (liste turni e
   assistenze, quindi anche vista calendario che ne condivide l'AppBar):
   mostra *quale* filtro è attivo riusando il colore già assegnato
@@ -431,12 +439,14 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 
 - ✅ **Turni**: lista con filtro/ricerca, form completo, dettaglio con servizi
   (CRUD + riordino, descrizione markdown), tipologie multi-select, numerazione automatica.
-- ✅ **Vista calendario turni**: griglia mensile con pallini colorati per
-  associazione, turni del giorno selezionato, FAB con data precompilata;
-  toggle lista/calendario in AppBar, persistito tra i riavvii.
+- ✅ **Vista calendario turni e assistenze**: griglia mensile con pallini
+  colorati per associazione, elementi del giorno selezionato, FAB con data
+  precompilata; toggle lista/calendario in AppBar, persistito tra i riavvii
+  (preferenza separata per turni e assistenze).
 - ✅ **Equipaggio**: form 1ª/2ª parte con "Copia 1ª → 2ª"; affiancate per ruolo nel dettaglio.
 - ✅ **Note** (turno/assistenza): card dedicata in markdown, editor a schermo intero.
-- ✅ **Assistenze**: come i turni ma senza tipologia né servizi.
+- ✅ **Assistenze**: come i turni ma senza tipologia né servizi; ricerca
+  testuale (descrizione/note) e vista calendario come i turni.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Impostazioni**: CRUD anagrafiche, "Vedi turni" per persona/ospedale.
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.

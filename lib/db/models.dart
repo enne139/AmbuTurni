@@ -574,6 +574,9 @@ class Assistenza {
   final int isSynced;
 
   final String? associazioneNome;
+  // Denormalizzato dal JOIN con associazioni (come in Turno): serve ai
+  // pallini della vista calendario. Non entra in toMap.
+  final String? associazioneColore;
 
   const Assistenza({
     required this.id,
@@ -597,6 +600,7 @@ class Assistenza {
     this.updatedAt,
     this.isSynced = 0,
     this.associazioneNome,
+    this.associazioneColore,
   });
 
   factory Assistenza.fromMap(Map<String, dynamic> m) => Assistenza(
@@ -621,6 +625,7 @@ class Assistenza {
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
         associazioneNome: m['associazione_nome'] as String?,
+        associazioneColore: m['associazione_colore'] as String?,
       );
 
   Map<String, dynamic> toMap() => {

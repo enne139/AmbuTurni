@@ -2,11 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
+import '../../widgets/calendario_mensile.dart';
 import '../../widgets/turno_card.dart';
-import 'turni_calendario.dart';
 import 'turno_form.dart';
 import 'turno_detail.dart';
 
@@ -180,12 +181,19 @@ class _TurniListState extends State<TurniList> {
         bottom: widget.selettore,
       ),
       body: _vistaCalendario
-          ? CalendarioTurni(
-              turni: turni,
-              anag: anag,
+          ? CalendarioMensile<Turno>(
+              elementi: turni,
+              dataIso: (t) => t.data,
+              colore: (t) => colorFromHex(t.associazioneColore),
+              etichettaConteggio: (n) => n == 1 ? '1 turno' : '$n turni',
+              testoVuoto: 'Nessun turno in questo giorno',
               giornoSelezionato: _giornoSelezionato,
               onSelezionaGiorno: (g) => setState(() => _giornoSelezionato = g),
-              onTapTurno: (t) => _apriDettaglio(t.id),
+              itemBuilder: (ctx, t) => TurnoCard(
+                turno: t,
+                anag: anag,
+                onTap: () => _apriDettaglio(t.id),
+              ),
             )
           : turni.isEmpty
               ? Center(

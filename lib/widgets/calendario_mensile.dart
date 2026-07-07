@@ -1,42 +1,54 @@
 import 'package:flutter/material.dart';
-import '../../db/models.dart';
-import '../../providers/app_provider.dart';
-import '../../utils/format.dart';
-import '../../utils/theme.dart';
-import '../../widgets/turno_card.dart';
+import '../utils/format.dart';
+import '../utils/theme.dart';
 
-/// Vista calendario mensile dei turni, alternativa alla lista (toggle in
-/// AppBar di TurniList). Griglia del mese con un pallino per turno (colore
-/// dell'associazione) e, sotto, i turni del giorno selezionato.
+/// Vista calendario mensile generica, alternativa alla lista (toggle in
+/// AppBar): griglia del mese con un pallino per elemento (colore a scelta
+/// del chiamante, tipicamente quello dell'associazione) e, sotto, gli
+/// elementi del giorno selezionato. Nata come CalendarioTurni e resa
+/// generica quando la vista è stata estesa alle assistenze: `Turno` e
+/// `Assistenza` sono classi diverse e duplicare ~250 righe di griglia era
+/// peggio di tre callback.
 ///
 /// Griglia custom invece di un package (es. table_calendar): serve solo una
 /// vista mese con marker, e il progetto tiene deliberatamente il pubspec
 /// minimo (stessa ragione per cui byId* evita il package collection).
 ///
-/// Il giorno selezionato è stato del padre (TurniList), non locale: serve
-/// anche al FAB per precompilare la data quando si crea un turno dal
+/// Il giorno selezionato è stato del padre (la lista), non locale: serve
+/// anche al FAB per precompilare la data quando si crea un elemento dal
 /// calendario. Il mese visualizzato invece è solo di questa vista.
-class CalendarioTurni extends StatefulWidget {
-  final List<Turno> turni;
-  final AnagraficheProvider anag;
+class CalendarioMensile<T> extends StatefulWidget {
+  final List<T> elementi;
+  /// Data ISO (YYYY-MM-DD) dell'elemento, per il raggruppamento nei giorni.
+  final String Function(T) dataIso;
+  /// Colore del pallino dell'elemento (null → kPrimary).
+  final Color? Function(T) colore;
+  /// Card dell'elemento nella lista del giorno selezionato (incluso onTap).
+  final Widget Function(BuildContext, T) itemBuilder;
+  /// Etichetta del conteggio del giorno (es. "1 turno" / "3 turni").
+  final String Function(int) etichettaConteggio;
+  /// Testo mostrato quando il giorno selezionato non ha elementi.
+  final String testoVuoto;
   final DateTime giornoSelezionato;
   final ValueChanged<DateTime> onSelezionaGiorno;
-  final void Function(Turno) onTapTurno;
 
-  const CalendarioTurni({
+  const CalendarioMensile({
     super.key,
-    required this.turni,
-    required this.anag,
+    required this.elementi,
+    required this.dataIso,
+    required this.colore,
+    required this.itemBuilder,
+    required this.etichettaConteggio,
+    required this.testoVuoto,
     required this.giornoSelezionato,
     required this.onSelezionaGiorno,
-    required this.onTapTurno,
   });
 
   @override
-  State<CalendarioTurni> createState() => _CalendarioTurniState();
+  State<CalendarioMensile<T>> createState() => _CalendarioMensileState<T>();
 }
 
-class _CalendarioTurniState extends State<CalendarioTurni> {
+class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
   // Primo giorno del mese visualizzato (giorno sempre 1: il resto della
   // griglia si ricava da qui).
   late DateTime _mese;
@@ -61,23 +73,24 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
 
   @override
   Widget build(BuildContext context) {
-    // Turni raggruppati per data ISO. substring difensivo: i dati normali
+    // Elementi raggruppati per data ISO. substring difensivo: i dati normali
     // sono già YYYY-MM-DD, ma un backup legacy importato male potrebbe avere
     // un datetime completo — meglio un raggruppamento corretto che un buco.
-    final turniPerGiorno = <String, List<Turno>>{};
-    for (final t in widget.turni) {
-      final chiave = t.data.length > 10 ? t.data.substring(0, 10) : t.data;
-      turniPerGiorno.putIfAbsent(chiave, () => []).add(t);
+    final perGiorno = <String, List<T>>{};
+    for (final e in widget.elementi) {
+      final data = widget.dataIso(e);
+      final chiave = data.length > 10 ? data.substring(0, 10) : data;
+      perGiorno.putIfAbsent(chiave, () => []).add(e);
     }
 
     final selIso = dateToIso(widget.giornoSelezionato);
-    final turniDelGiorno = turniPerGiorno[selIso] ?? const <Turno>[];
+    final delGiorno = perGiorno[selIso] ?? const [];
 
     return Column(
       children: [
         _intestazioneMese(),
         _rigaGiorniSettimana(),
-        _griglia(turniPerGiorno, selIso),
+        _griglia(perGiorno, selIso),
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -89,32 +102,25 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
               ),
               const SizedBox(width: 8),
               Text(
-                turniDelGiorno.length == 1 ? '1 turno' : '${turniDelGiorno.length} turni',
+                widget.etichettaConteggio(delGiorno.length),
                 style: const TextStyle(color: Colors.white54, fontSize: 13),
               ),
             ],
           ),
         ),
         Expanded(
-          child: turniDelGiorno.isEmpty
-              ? const Center(
+          child: delGiorno.isEmpty
+              ? Center(
                   child: Text(
-                    'Nessun turno in questo giorno',
-                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                    widget.testoVuoto,
+                    style: const TextStyle(color: Colors.white38, fontSize: 13),
                   ),
                 )
               : ListView.builder(
                   // Padding basso abbondante per non finire sotto il FAB.
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                  itemCount: turniDelGiorno.length,
-                  itemBuilder: (ctx, i) {
-                    final turno = turniDelGiorno[i];
-                    return TurnoCard(
-                      turno: turno,
-                      anag: widget.anag,
-                      onTap: () => widget.onTapTurno(turno),
-                    );
-                  },
+                  itemCount: delGiorno.length,
+                  itemBuilder: (ctx, i) => widget.itemBuilder(ctx, delGiorno[i]),
                 ),
         ),
       ],
@@ -170,7 +176,7 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
     );
   }
 
-  Widget _griglia(Map<String, List<Turno>> turniPerGiorno, String selIso) {
+  Widget _griglia(Map<String, List<T>> perGiorno, String selIso) {
     // La griglia parte dal lunedì (weekday 1): offset = celle vuote prima
     // del giorno 1. DateTime(anno, mese+1, 0) = ultimo giorno del mese.
     final offset = _mese.weekday - 1;
@@ -185,7 +191,7 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
             Row(
               children: [
                 for (int g = 0; g < 7; g++)
-                  _cella(s * 7 + g - offset + 1, giorniNelMese, turniPerGiorno, selIso),
+                  _cella(s * 7 + g - offset + 1, giorniNelMese, perGiorno, selIso),
               ],
             ),
         ],
@@ -196,11 +202,11 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
   /// Cella di un giorno. [numero] può uscire da [1..giorniNelMese]: in quel
   /// caso è un giorno del mese adiacente, mostrato attenuato e non tappabile
   /// (il costruttore DateTime lo normalizza alla data reale per il numero).
-  Widget _cella(int numero, int giorniNelMese, Map<String, List<Turno>> turniPerGiorno, String selIso) {
+  Widget _cella(int numero, int giorniNelMese, Map<String, List<T>> perGiorno, String selIso) {
     final giorno = DateTime(_mese.year, _mese.month, numero);
     final nelMese = numero >= 1 && numero <= giorniNelMese;
     final iso = dateToIso(giorno);
-    final turniGiorno = nelMese ? (turniPerGiorno[iso] ?? const <Turno>[]) : const <Turno>[];
+    final List<T> delGiorno = nelMese ? (perGiorno[iso] ?? const []) : const [];
     final selezionato = nelMese && iso == selIso;
     final oggi = iso == todayIso();
 
@@ -234,20 +240,20 @@ class _CalendarioTurniState extends State<CalendarioTurni> {
                 ),
               ),
               // Altezza fissa anche senza pallini: evita che i numeri dei
-              // giorni "ballino" tra celle con e senza turni.
+              // giorni "ballino" tra celle con e senza elementi.
               SizedBox(
                 height: 8,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    for (final t in turniGiorno.take(4))
+                    for (final e in delGiorno.take(4))
                       Container(
                         width: 5,
                         height: 5,
                         margin: const EdgeInsets.symmetric(horizontal: 1),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: colorFromHex(t.associazioneColore) ?? kPrimary,
+                          color: widget.colore(e) ?? kPrimary,
                         ),
                       ),
                   ],

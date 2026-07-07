@@ -257,6 +257,44 @@ void main() {
     });
   });
 
+  group('CRUD assistenze', () {
+    late String assocId;
+
+    setUpAll(() async {
+      await saveAssociazione('Assoc Assistenze Test', colore: '#43A047');
+      final list = await getAssociazioni();
+      assocId = list.firstWhere((a) => a.nome == 'Assoc Assistenze Test').id;
+    });
+
+    test('getAssistenze con ricerca trova per descrizione o note', () async {
+      final aDescr = newId();
+      final aNota = newId();
+      final aAltra = newId();
+      await saveAssistenza(Assistenza(
+          id: aDescr, data: '2024-09-01', associazioneId: assocId,
+          descrizione: 'Partita allo stadio'));
+      await saveAssistenza(Assistenza(
+          id: aNota, data: '2024-09-02', associazioneId: assocId,
+          note: 'Ritrovo stadio ore 14'));
+      await saveAssistenza(Assistenza(
+          id: aAltra, data: '2024-09-03', associazioneId: assocId,
+          descrizione: 'Concerto in piazza'));
+
+      final risultati = await getAssistenze(associazioneId: assocId, ricerca: 'stadio');
+      expect(risultati.map((a) => a.id).toSet(), {aDescr, aNota});
+
+      // Ricerca di soli spazi = nessun filtro: restano tutte.
+      final tutte = await getAssistenze(associazioneId: assocId, ricerca: '  ');
+      expect(tutte.map((a) => a.id).toSet(), {aDescr, aNota, aAltra});
+    });
+
+    test('getAssistenze espone il colore dell\'associazione (pallini calendario)', () async {
+      final assistenze = await getAssistenze(associazioneId: assocId);
+      expect(assistenze, isNotEmpty);
+      expect(assistenze.first.associazioneColore, '#43A047');
+    });
+  });
+
   group('CRUD tipologie turno', () {
     test('saveTipologiaTurno crea e ordina', () async {
       await saveTipologiaTurno('Alfa');
