@@ -21,9 +21,9 @@
 # il tempo di build nativo rispetto al fat APK multi-ABI, ma non installa
 # su emulatori x86 o device 32-bit/molto vecchi.
 #
-# Le actions/cache su Gradle e pub restano utili SOLO se l'istanza Gitea ha
-# un cache backend configurato; se assente fanno cache-miss silenzioso
-# senza rompere la build.
+# Niente actions/cache su Gradle/pub: senza un cache backend configurato
+# sull'istanza Gitea facevano solo cache-miss silenziosi (step rimossi;
+# recuperabili dalla storia git se un giorno il backend arriva).
 #
 # Output: APK caricato come artifact della run. Sui push di tag, l'APK viene
 # ANCHE pubblicato come Release su Gitea (allegato al tag), con l'action
@@ -73,27 +73,6 @@ jobs:
         # spostato su codice diverso, lo SHA no. Aggiornare SHA e commento
         # insieme quando si fa il bump di versione.
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Cache Gradle
-        # ~/.gradle/caches contiene i .jar di Gradle/AGP/Kotlin scaricati a
-        # ogni build (decine di MB) che su un pod effimero altrimenti si
-        # riscaricano ogni volta. Chiave sul lockfile del wrapper cosi' un
-        # bump di versione Gradle invalida la cache automaticamente.
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
-
-      - name: Cache pub
-        # Cache dei package Dart scaricati da `flutter pub get`. Chiave su
-        # pubspec.lock (ora versionato): si invalida solo quando cambiano
-        # davvero le versioni risolte, non a ogni ritocco del pubspec.yaml.
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.pub-cache
-          key: pub-${{ hashFiles('pubspec.lock') }}
 
       - name: Installa dipendenze Dart
         run: flutter pub get

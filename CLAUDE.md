@@ -388,7 +388,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   setup Flutter/SDK a ogni run su runner effimero (dettagli e motivazioni nei
   commenti in testa a `build-android.yml`, per non duplicarli qui).
 - **`pubspec.lock` versionato**: raccomandazione Flutter per le app (non le
-  librerie) — build riproducibili in CI; cache pub in CI su hash del lockfile.
+  librerie) — build riproducibili in CI. Gli step actions/cache (Gradle/pub)
+  sono stati rimossi dal workflow: senza cache backend sull'istanza Gitea
+  facevano solo cache-miss silenziosi.
 - **Rinominata l'app "AmbuTurni"**: nome visibile e identificatori interni
   (package Dart `ambu_turni`, `applicationId` Android, CMake/Windows).
   **Eccezione deliberata**: il file SQLite resta `ambulanza_turni.db` — rinominarlo
