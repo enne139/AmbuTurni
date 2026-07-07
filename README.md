@@ -42,6 +42,39 @@ flutter run -d windows    # Windows desktop (richiede Visual Studio)
 flutter build apk         # APK release
 ```
 
+## Firma di release (keystore)
+
+L'APK di release è firmato con un keystore PKCS12 dedicato. Senza keystore la
+build ricade sulla firma debug: funziona in locale, ma l'APK **non va
+distribuito** — gli aggiornamenti via Obtainium richiedono la stessa firma tra
+una versione e l'altra.
+
+### In locale
+
+Il keystore vive fuori dal repository, in `%USERPROFILE%\keystores\`.
+`android/app/build.gradle` lo cerca tramite `android/key.properties`
+(gitignorato insieme ai file `*.keystore`):
+
+```properties
+storeFile=C:\\Users\\<utente>\\keystores\\ambuturni-release.jks
+storePassword=<password>
+keyAlias=ambuturni
+keyPassword=<password>
+```
+
+Se `key.properties` non esiste, `flutter build apk` firma con la chiave debug
+senza errori: comodo per provare la build, ma vedi l'avvertenza sopra.
+
+### In CI (Gitea)
+
+Il workflow `build-android.yml` ricostruisce il keystore da due secret del
+repository e genera `android/key.properties` prima della build:
+
+| Secret | Contenuto |
+|---|---|
+| `KEYSTORE_B64` | il file `.jks` codificato in base64 |
+| `KEYSTORE_PASSWORD` | password di store e chiave (alias fisso `ambuturni`) |
+
 ## Struttura
 
 ```
