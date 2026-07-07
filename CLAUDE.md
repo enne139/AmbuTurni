@@ -235,7 +235,19 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   mezzanotte (fine <= inizio → giorno dopo, via costruttore `DateTime` e non
   `add(Duration)` per non sbagliare di un'ora nelle notti di cambio ora
   legale). Blocchi senza orario riconoscibile: niente pulsante, non si
-  inventano orari. Su desktop il plugin non esiste: snackbar "solo su Android". Il nome attivo è
+  inventano orari. Su desktop il plugin non esiste: snackbar "solo su Android".
+- **Piano turni → segnalino "nome cercato" sul calendario** (branch `dev`):
+  i giorni in cui il nome dell'ultima ricerca volontario è **in servizio**
+  hanno un'icona persona ciano nell'angolo della cella (ciano perché non
+  collide né coi pallini fascia né col kPrimary di selezione/oggi;
+  nell'angolo perché i pallini in basso significano "ruoli scoperti").
+  "In servizio" = `PianoMensile.giorniInServizio`: sostituto (colonna D), o
+  titolare (C) senza sostituto segnato — un titolare con la D compilata è
+  stato sostituito e quel giorno non lavora, quindi niente segnalino
+  (richiesta esplicita dell'utente). La ricerca volontario invece continua
+  a usare `cercaNome`, che elenca ogni comparsa. La stessa icona compare
+  anche accanto al nome nelle card del dettaglio giorno (`_nomeConSegnalino`
+  in `_rigaSlot`), con la stessa regola: sostituto sì, titolare sostituito no. Il nome attivo è
   mostrato in legenda e persiste tra i riavvii (`piano_turni_ultima_ricerca`,
   la stessa pref della ricerca): tipicamente si cerca il proprio nome una
   volta e da lì i propri turni si vedono a colpo d'occhio. Per questo il

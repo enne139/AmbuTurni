@@ -30,6 +30,9 @@ const _coloriFascia = {
   FasciaPiano.notte: Color(0xFF2196F3),
 };
 const _coloreAssistenza = Color(0xFFBA68C8);
+// Segnalino "nome cercato" sul calendario: ciano, l'unico colore che non
+// collide né coi pallini delle fasce né col kPrimary di selezione/oggi.
+const _coloreNomeCercato = Color(0xFF26C6DA);
 
 Color _colorePerSlot(SlotPiano s) =>
     s.assistenza ? _coloreAssistenza : _coloriFascia[s.fascia]!;
@@ -63,6 +66,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   Set<RuoloPiano> _ruoliEsclusi = {};
   // Archivio dei fogli salvati: chiave "aaaa-mm" (ordinabile), valore URL.
   Map<String, String> _fogliSalvati = {};
+  // Nome dell'ultima ricerca volontario: i giorni in cui compare hanno un
+  // segnalino sul calendario. Persiste tra i riavvii (tipicamente si cerca
+  // sempre il proprio nome: i segnalini mostrano i propri turni a colpo
+  // d'occhio senza rifare la ricerca).
+  String _nomeCercato = '';
 
   @override
   void initState() {
@@ -96,6 +104,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     if (!mounted) return;
     setState(() {
       _fogliSalvati = fogli;
+      _nomeCercato = prefs.getString(_kUltimaRicercaKey) ?? '';
       _ruoliEsclusi = esclusi
           .map((n) => RuoloPiano.values.where((r) => r.name == n).firstOrNull)
           .whereType<RuoloPiano>()
@@ -178,15 +187,21 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   }
 
   /// Apre la ricerca per nome; se l'utente tocca un risultato, il calendario
-  /// salta a quel giorno (la ricerca restituisce il giorno via pop).
+  /// salta a quel giorno (la ricerca restituisce il giorno via pop). Al
+  /// ritorno si rilegge comunque l'ultima ricerca persistita, così i
+  /// segnalini sul calendario seguono il nome appena cercato (o spariscono
+  /// se il campo è stato svuotato di proposito).
   Future<void> _cercaVolontario() async {
     final giorno = await Navigator.push<int>(
       context,
       MaterialPageRoute(builder: (_) => _RicercaVolontarioScreen(piano: _piano!)),
     );
-    if (giorno != null && mounted) {
-      setState(() => _giornoSelezionato = giorno);
-    }
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _nomeCercato = prefs.getString(_kUltimaRicercaKey) ?? '';
+      if (giorno != null) _giornoSelezionato = giorno;
+    });
   }
 
   void _toggleRuolo(RuoloPiano ruolo) {
@@ -367,6 +382,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     final slotsGiorno = piano.delGiorno(_giornoSelezionato);
     final buchiGiorno =
         piano.buchiDelGiorno(_giornoSelezionato, ruoliEsclusi: _ruoliEsclusi);
+    // Giorni in cui il nome dell'ultima ricerca è in servizio: segnalino in
+    // cella. giorniInServizio (non cercaNome): un titolare sostituito quel
+    // giorno non lavora e non va segnato. Ricalcolato a ogni build: scandisce
+    // una lista già in memoria, non vale una cache.
+    final giorniConNome = piano.giorniInServizio(_nomeCercato);
 
     return Column(
       children: [
@@ -388,7 +408,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
         _filtriRuoli(),
         _legenda(),
         _rigaGiorniSettimana(),
-        _griglia(piano),
+        _griglia(piano, giorniConNome),
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -471,6 +491,18 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
           voce(_coloriFascia[FasciaPiano.sera]!, 'Sera'),
           voce(_coloriFascia[FasciaPiano.notte]!, 'Notte'),
           voce(_coloreAssistenza, 'Assist./Gettone'),
+          // Voce col nome cercato: dice a colpo d'occhio di chi sono i
+          // segnalini persona (che possono restare da una sessione passata).
+          if (_nomeCercato.trim().isNotEmpty)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.person, size: 10, color: _coloreNomeCercato),
+                const SizedBox(width: 2),
+                Text(_nomeCercato.trim(),
+                    style: const TextStyle(color: _coloreNomeCercato, fontSize: 10)),
+              ],
+            ),
         ],
       ),
     );
@@ -496,7 +528,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     );
   }
 
-  Widget _griglia(PianoMensile piano) {
+  Widget _griglia(PianoMensile piano, Set<int> giorniConNome) {
     // Stessa geometria di CalendarioTurni: settimana dal lunedì, offset =
     // celle vuote prima del giorno 1.
     final offset = DateTime(piano.anno, piano.mese, 1).weekday - 1;
@@ -511,7 +543,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             Row(
               children: [
                 for (int g = 0; g < 7; g++)
-                  _cella(piano, s * 7 + g - offset + 1),
+                  _cella(piano, s * 7 + g - offset + 1, giorniConNome),
               ],
             ),
         ],
@@ -519,7 +551,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     );
   }
 
-  Widget _cella(PianoMensile piano, int giorno) {
+  Widget _cella(PianoMensile piano, int giorno, Set<int> giorniConNome) {
     if (giorno < 1 || giorno > piano.giorniNelMese) {
       // Fuori mese: cella vuota (qui non esistono dati dei mesi adiacenti).
       return const Expanded(child: SizedBox(height: 44));
@@ -545,40 +577,55 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 ? Border.all(color: kPrimary)
                 : (isOggi ? Border.all(color: Colors.white24) : null),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              Text(
-                '$giorno',
-                style: TextStyle(
-                  fontSize: 13,
-                  // Giorno senza scheda nel foglio: numero attenuato, così i
-                  // giorni "senza dati" non sembrano giorni senza buchi.
-                  color: slots.isEmpty
-                      ? Colors.white24
-                      : (isOggi ? kPrimary : Colors.white),
-                  fontWeight:
-                      selezionato || isOggi ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-              SizedBox(
-                height: 8,
-                child: Row(
+              Positioned.fill(
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    for (final b in buchi.take(4))
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _colorePerSlot(b),
-                        ),
+                    Text(
+                      '$giorno',
+                      style: TextStyle(
+                        fontSize: 13,
+                        // Giorno senza scheda nel foglio: numero attenuato, così i
+                        // giorni "senza dati" non sembrano giorni senza buchi.
+                        color: slots.isEmpty
+                            ? Colors.white24
+                            : (isOggi ? kPrimary : Colors.white),
+                        fontWeight:
+                            selezionato || isOggi ? FontWeight.bold : FontWeight.normal,
                       ),
+                    ),
+                    SizedBox(
+                      height: 8,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final b in buchi.take(4))
+                            Container(
+                              width: 5,
+                              height: 5,
+                              margin: const EdgeInsets.symmetric(horizontal: 1),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _colorePerSlot(b),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
+              // Segnalino persona nell'angolo: il nome cercato è di turno
+              // questo giorno. Nell'angolo e non tra i pallini dei buchi,
+              // che hanno un altro significato (ruoli scoperti).
+              if (giorniConNome.contains(giorno))
+                const Positioned(
+                  top: 2,
+                  right: 3,
+                  child: Icon(Icons.person, size: 9, color: _coloreNomeCercato),
+                ),
             ],
           ),
         ),
@@ -782,6 +829,28 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     );
   }
 
+  /// True se [testo] contiene il nome dell'ultima ricerca (stesso match
+  /// parziale case-insensitive di cercaNome).
+  bool _matchNomeCercato(String testo) {
+    final q = _nomeCercato.trim().toLowerCase();
+    return q.isNotEmpty && testo.toLowerCase().contains(q);
+  }
+
+  /// Nome con l'eventuale icona persona accanto (lo stesso segnalino del
+  /// calendario): individua a colpo d'occhio il nome cercato dentro le card
+  /// del giorno.
+  Widget _nomeConSegnalino(String testo, TextStyle stile, bool segnalino) {
+    if (!segnalino) return Text(testo, style: stile);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: Text(testo, style: stile)),
+        const SizedBox(width: 3),
+        const Icon(Icons.person, size: 11, color: _coloreNomeCercato),
+      ],
+    );
+  }
+
   Widget _rigaSlot(SlotPiano slot, {bool calendarioInRiga = false}) {
     // Etichetta: per il centralino la fascia distingue gli slot del blocco
     // (mattina/pomeriggio), per gli altri blocchi la fascia è nel titolo.
@@ -816,23 +885,27 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             )
           else ...[
             // Le due colonne del foglio affiancate: titolare e sostituti.
+            // L'icona persona segue la regola del calendario: il titolare
+            // sostituito quel giorno non lavora, quindi niente icona.
             Expanded(
-              child: Text(
+              child: _nomeConSegnalino(
                 slot.titolare.isEmpty ? '—' : slot.titolare,
-                style: TextStyle(
+                TextStyle(
                   color: slot.titolare.isEmpty ? Colors.white30 : Colors.white,
                   fontSize: 13,
                 ),
+                _matchNomeCercato(slot.titolare) && slot.sostituti.isEmpty,
               ),
             ),
             Expanded(
-              child: Text(
+              child: _nomeConSegnalino(
                 slot.sostituti.isEmpty ? '—' : slot.sostituti,
-                style: TextStyle(
+                TextStyle(
                   color: slot.sostituti.isEmpty ? Colors.white30 : Colors.white70,
                   fontSize: 13,
                   fontStyle: slot.sostituti.isEmpty ? FontStyle.normal : FontStyle.italic,
                 ),
+                _matchNomeCercato(slot.sostituti),
               ),
             ),
           ],
@@ -893,13 +966,18 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
 
   @override
   void dispose() {
-    // Salva all'uscita (qualunque essa sia: tap su un risultato o back);
-    // svuotare il campo di proposito dimentica anche la memoria.
-    final q = _query.trim();
-    SharedPreferences.getInstance().then((prefs) =>
-        q.isEmpty ? prefs.remove(_kUltimaRicercaKey) : prefs.setString(_kUltimaRicercaKey, q));
     _ctrl.dispose();
     super.dispose();
+  }
+
+  /// Persiste la ricerca a ogni modifica, NON in dispose: il chiamante la
+  /// rilegge subito dopo il pop per i segnalini sul calendario, e il dispose
+  /// della route arriva solo a transizione finita — troppo tardi. Svuotare
+  /// il campo di proposito dimentica anche la memoria.
+  void _salvaUltimaRicerca(String testo) {
+    final q = testo.trim();
+    SharedPreferences.getInstance().then((prefs) =>
+        q.isEmpty ? prefs.remove(_kUltimaRicercaKey) : prefs.setString(_kUltimaRicercaKey, q));
   }
 
   @override
@@ -918,7 +996,10 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
             border: InputBorder.none,
           ),
           // Niente debounce: la ricerca è su una lista già in memoria.
-          onChanged: (v) => setState(() => _query = v),
+          onChanged: (v) {
+            setState(() => _query = v);
+            _salvaUltimaRicerca(v);
+          },
         ),
       ),
       body: _query.trim().isEmpty

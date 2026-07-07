@@ -394,6 +394,50 @@ void main() {
     });
   });
 
+  group('giorniInServizio', () {
+    test('titolare senza sostituto sì, titolare sostituito no, sostituto sì', () {
+      final excel = base('LUN 1');
+      // Giorno 1: Rossi titolare senza sostituto -> in servizio.
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      // Giorno 2: Rossi titolare ma sostituito da Verdi -> NON in servizio;
+      // Verdi (sostituto) sì.
+      scrivi(excel, 'MAR 2', 'A6', 'H24');
+      scrivi(excel, 'MAR 2', 'C6', 'Rossi');
+      scrivi(excel, 'MAR 2', 'D6', 'Verdi');
+
+      final piano = parsa(excel);
+      expect(piano.giorniInServizio('rossi'), {1});
+      expect(piano.giorniInServizio('verdi'), {2});
+      // cercaNome invece elenca ogni comparsa: Rossi appare entrambi i giorni.
+      expect(piano.cercaNome('rossi').map((s) => s.giorno).toSet(), {1, 2});
+    });
+
+    test('sostituito in uno slot ma sostituto in un altro dello stesso giorno', () {
+      final excel = base('LUN 1');
+      // Rossi cede il posto di autista a Verdi ma copre il Cs per Bianchi:
+      // il giorno resta segnato (lavora comunque).
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      scrivi(excel, 'LUN 1', 'D6', 'Verdi');
+      scrivi(excel, 'LUN 1', 'C7', 'Bianchi');
+      scrivi(excel, 'LUN 1', 'D7', 'Rossi');
+
+      final piano = parsa(excel);
+      expect(piano.giorniInServizio('rossi'), {1});
+      expect(piano.giorniInServizio('bianchi'), isEmpty);
+    });
+
+    test('query vuota: nessun giorno', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      final piano = parsa(excel);
+      expect(piano.giorniInServizio(''), isEmpty);
+      expect(piano.giorniInServizio('   '), isEmpty);
+    });
+  });
+
   group('buchiDelGiorno con filtri ruolo', () {
     test('esclude i ruoli filtrati dal conteggio', () {
       final excel = base('LUN 1');

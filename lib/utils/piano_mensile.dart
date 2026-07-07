@@ -170,6 +170,30 @@ class PianoMensile {
             s.sostituti.toLowerCase().contains(q))),
     ];
   }
+
+  /// Giorni in cui [nome] è effettivamente in servizio: quando sostituisce
+  /// qualcuno (colonna D), o quando è titolare senza nessun sostituto
+  /// segnato. Un titolare con la colonna sostituti compilata è stato
+  /// sostituito e quel giorno non lavora — diverso da [cercaNome], che
+  /// elenca ogni comparsa del nome (utile in ricerca, fuorviante come
+  /// segnalino "sei di turno" sul calendario).
+  Set<int> giorniInServizio(String nome) {
+    final q = nome.trim().toLowerCase();
+    if (q.isEmpty) return const {};
+    final giorni = <int>{};
+    _perGiorno.forEach((giorno, slots) {
+      for (final s in slots) {
+        final sostituisce = s.sostituti.toLowerCase().contains(q);
+        final titolareNonSostituito =
+            s.titolare.toLowerCase().contains(q) && s.sostituti.isEmpty;
+        if (sostituisce || titolareNonSostituito) {
+          giorni.add(giorno);
+          break;
+        }
+      }
+    });
+    return giorni;
+  }
 }
 
 const _prefissiGiorno = {'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'};
