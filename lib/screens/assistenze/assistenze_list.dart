@@ -12,7 +12,10 @@ import 'assistenza_detail.dart';
 /// cestino nell'AppBar del dettaglio, per evitare cancellazioni accidentali
 /// mentre si scorre o si tocca a lungo una card per sbaglio.
 class AssistenzeList extends StatefulWidget {
-  const AssistenzeList({super.key});
+  /// Barra opzionale sotto l'AppBar: il selettore Turni/Assistenze della
+  /// tab unificata (v. app_navigator.dart), come in TurniList.
+  final PreferredSizeWidget? selettore;
+  const AssistenzeList({super.key, this.selettore});
 
   @override
   State<AssistenzeList> createState() => _AssistenzeListState();
@@ -59,6 +62,7 @@ class _AssistenzeListState extends State<AssistenzeList> {
               ],
             ),
         ],
+        bottom: widget.selettore,
       ),
       body: assistenze.isEmpty
           ? const Center(

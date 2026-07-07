@@ -85,7 +85,9 @@ lib/
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider, StatisticheProvider
 ├── navigation/
-│   └── app_navigator.dart         Scaffold con NavigationBar a 5 tab (IndexedStack)
+│   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack);
+│                                   la tab Attività unisce Turni e Assistenze con un
+│                                   SegmentedButton sotto l'AppBar
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
 │   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
@@ -274,7 +276,16 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   errore di rete accende l'icona di avviso già esistente accanto al mese.
   Cache illeggibile/valori sconosciuti = cache assente (si riscarica);
   rimuovere un foglio dai salvati elimina anche il suo file. Il pulsante
-  ricarica resta non-silenzioso: feedback esplicito con lo spinner. Il nome attivo è
+  ricarica resta non-silenzioso: feedback esplicito con lo spinner.
+- **Tab unificata "Attività"** (Turni + Assistenze): scelta dell'utente tra
+  le due alternative proposte (selettore vs lista unica mescolata) — vince
+  il selettore `SegmentedButton` sotto l'AppBar perché lascia intatte le due
+  liste (ricerca, filtri, calendario, FAB propri) toccando solo la
+  navigazione. `_AttivitaTab` in `app_navigator.dart` tiene le liste in un
+  IndexedStack (stato preservato nel passaggio) e inietta il selettore
+  nelle loro AppBar col nuovo parametro opzionale `selettore` — unico punto
+  di contatto; le liste restano usabili anche da sole. NavigationBar da 5 a
+  4 tab. Il nome attivo è
   mostrato in legenda e persiste tra i riavvii (`piano_turni_ultima_ricerca`,
   la stessa pref della ricerca): tipicamente si cerca il proprio nome una
   volta e da lì i propri turni si vedono a colpo d'occhio. Per questo il

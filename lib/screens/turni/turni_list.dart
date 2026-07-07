@@ -21,7 +21,11 @@ const _kVistaCalendarioKey = 'turni_vista_calendario';
 /// cestino nell'AppBar del dettaglio, per evitare cancellazioni accidentali
 /// mentre si scorre o si tocca a lungo una card per sbaglio.
 class TurniList extends StatefulWidget {
-  const TurniList({super.key});
+  /// Barra opzionale sotto l'AppBar: la tab unificata "Attività" ci mette il
+  /// selettore Turni/Assistenze (v. app_navigator.dart), la lista non deve
+  /// sapere altro.
+  final PreferredSizeWidget? selettore;
+  const TurniList({super.key, this.selettore});
 
   @override
   State<TurniList> createState() => _TurniListState();
@@ -173,6 +177,7 @@ class _TurniListState extends State<TurniList> {
               ),
           ],
         ],
+        bottom: widget.selettore,
       ),
       body: _vistaCalendario
           ? CalendarioTurni(
