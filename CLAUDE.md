@@ -218,7 +218,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   il campo URL, perché lì si arriva per incollare un mese nuovo) e
   bottom sheet dall'AppBar, e ricerca volontario per nome
   (`PianoMensile.cercaNome`, tap sul risultato → il calendario salta al giorno).
-- **Piano turni → "Aggiungi al calendario"** (branch `dev`): pulsante sulle
+- **Piano turni → "Aggiungi al calendario"** (v1.4.0): pulsante sulle
   card dei blocchi che apre l'editor eventi del calendario di sistema
   precompilato via `add_2_calendar` — intent `ACTION_INSERT`, nessun permesso
   runtime, ma serve la `<queries>` nel manifest (package visibility Android
@@ -241,7 +241,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   `add(Duration)` per non sbagliare di un'ora nelle notti di cambio ora
   legale). Blocchi senza orario riconoscibile: niente pulsante, non si
   inventano orari. Su desktop il plugin non esiste: snackbar "solo su Android".
-- **Piano turni → segnalino "nome cercato" sul calendario** (branch `dev`):
+- **Piano turni → segnalino "nome cercato" sul calendario** (v1.4.0):
   i giorni in cui il nome dell'ultima ricerca volontario è **in servizio**
   hanno un'icona persona ciano nell'angolo della cella (ciano perché non
   collide né coi pallini fascia né col kPrimary di selezione/oggi;
@@ -253,7 +253,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   a usare `cercaNome`, che elenca ogni comparsa. La stessa icona compare
   anche accanto al nome nelle card del dettaglio giorno (`_nomeConSegnalino`
   in `_rigaSlot`), con la stessa regola: sostituto sì, titolare sostituito no.
-- **Backup v2: sezione `preferenze`** (branch `dev`): il backup completo
+- **Backup v2: sezione `preferenze`** (v1.4.0): il backup completo
   include anche le preferenze del Piano turni (URL corrente, archivio
   "aaaa-mm" → URL dei fogli — come mappa decodificata, leggibile — e ultima
   ricerca volontario), che vivono in SharedPreferences e prima andavano
@@ -263,7 +263,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   device restano com'erano); la versione del formato è salita a 2 ma
   l'import continua ad accettare `>= 1`. I materiali NON c'entrano: erano
   già in `_backupTables` fin dalla loro introduzione.
-- **Cache locale del Piano turni** (branch `dev`, `utils/piano_cache.dart`):
+- **Cache locale del Piano turni** (v1.4.0, `utils/piano_cache.dart`):
   l'endpoint export di Google genera l'XLSX al momento e `excel` decodifica
   l'intero workbook — secondi di attesa a ogni apertura per dati quasi
   immutati. Ogni piano decodificato viene salvato come JSON per mese
