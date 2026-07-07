@@ -4,10 +4,15 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/prefs_keys.dart';
 import 'database.dart';
 import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
 
-const int _backupVersion = 1;
+// Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni).
+// L'import accetta qualunque versione >= 1: i backup v1 semplicemente non
+// hanno la sezione e le preferenze del device restano com'erano.
+const int _backupVersion = 2;
 
 // Ordine di eliminazione rispettoso dei vincoli FK: prima le righe figlie,
 // poi le righe padre. Con le FK disattivate durante l'import (vedi
@@ -71,6 +76,25 @@ Future<String?> exportBackup() async {
   for (final table in _backupTables) {
     payload[table] = await db.query(table);
   }
+
+  // Preferenze del Piano turni: vivono in SharedPreferences, non nel DB, ma
+  // senza di loro un restore su un device nuovo perderebbe l'archivio degli
+  // URL dei fogli mensili e il nome cercato (segnalini sul calendario).
+  // L'archivio va nel JSON come mappa decodificata, non come stringa JSON
+  // annidata: il backup resta leggibile a occhio.
+  final prefs = await SharedPreferences.getInstance();
+  Map<String, dynamic> fogli = {};
+  try {
+    final decoded = jsonDecode(prefs.getString(kPrefPianoTurniFogli) ?? '{}');
+    if (decoded is Map) fogli = Map<String, dynamic>.from(decoded);
+  } catch (_) {
+    // Archivio corrotto: il backup si esporta senza, non è un errore.
+  }
+  payload['preferenze'] = {
+    kPrefPianoTurniUrl: prefs.getString(kPrefPianoTurniUrl),
+    kPrefPianoTurniFogli: fogli,
+    kPrefPianoTurniUltimaRicerca: prefs.getString(kPrefPianoTurniUltimaRicerca),
+  };
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
   return _salvaFile(json, 'ambuturni_backup_${_timestampFile()}.json', 'Backup AmbuTurni');
@@ -329,6 +353,27 @@ Future<String> importBackup() async {
   // del backup non passano per saveTurno, quindi i numeri potrebbero essere
   // sbagliati o assenti se il backup non li aveva aggiornati.
   await ricalcolaTutteLeNumerazioni();
+
+  // Ripristina le preferenze del Piano turni, se il backup le contiene
+  // (v1 e formati RN non le hanno: le preferenze del device restano
+  // com'erano). Ogni valore viene scritto solo se presente e valido:
+  // niente cancellazioni, coerente con l'assenza della sezione.
+  final preferenze = payload['preferenze'];
+  if (preferenze is Map) {
+    final prefs = await SharedPreferences.getInstance();
+    final url = preferenze[kPrefPianoTurniUrl];
+    if (url is String && url.isNotEmpty) {
+      await prefs.setString(kPrefPianoTurniUrl, url);
+    }
+    final fogli = preferenze[kPrefPianoTurniFogli];
+    if (fogli is Map && fogli.isNotEmpty) {
+      await prefs.setString(kPrefPianoTurniFogli, jsonEncode(fogli));
+    }
+    final ricerca = preferenze[kPrefPianoTurniUltimaRicerca];
+    if (ricerca is String && ricerca.isNotEmpty) {
+      await prefs.setString(kPrefPianoTurniUltimaRicerca, ricerca);
+    }
+  }
 
   final ts = payload['exportedAt'] as String? ?? '?';
   final avviso = scartate == 0

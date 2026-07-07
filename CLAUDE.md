@@ -247,7 +247,17 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   (richiesta esplicita dell'utente). La ricerca volontario invece continua
   a usare `cercaNome`, che elenca ogni comparsa. La stessa icona compare
   anche accanto al nome nelle card del dettaglio giorno (`_nomeConSegnalino`
-  in `_rigaSlot`), con la stessa regola: sostituto sì, titolare sostituito no. Il nome attivo è
+  in `_rigaSlot`), con la stessa regola: sostituto sì, titolare sostituito no.
+- **Backup v2: sezione `preferenze`** (branch `dev`): il backup completo
+  include anche le preferenze del Piano turni (URL corrente, archivio
+  "aaaa-mm" → URL dei fogli — come mappa decodificata, leggibile — e ultima
+  ricerca volontario), che vivono in SharedPreferences e prima andavano
+  perse nel restore su un device nuovo. Chiavi centralizzate in
+  `utils/prefs_keys.dart` (condivise tra schermata e backup). L'import le
+  ripristina solo se presenti e valide (backup v1/RN: le preferenze del
+  device restano com'erano); la versione del formato è salita a 2 ma
+  l'import continua ad accettare `>= 1`. I materiali NON c'entrano: erano
+  già in `_backupTables` fin dalla loro introduzione. Il nome attivo è
   mostrato in legenda e persiste tra i riavvii (`piano_turni_ultima_ricerca`,
   la stessa pref della ricerca): tipicamente si cerca il proprio nome una
   volta e da lì i propri turni si vedono a colpo d'occhio. Per questo il

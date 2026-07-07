@@ -7,18 +7,16 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/format.dart';
 import '../../utils/piano_mensile.dart';
+import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
 
-// Preferenze persistenti: link dell'ultimo foglio (ricaricato all'apertura),
-// archivio dei fogli per mese (come lo "storico" del tool HTML: ogni mese ha
-// un suo foglio Google, senza archivio si dovrebbe re-incollare il link a
-// ogni cambio mese) e ruoli esclusi dal conteggio buchi (es. il Quarto,
-// spesso scoperto per scelta: senza filtro ogni giorno avrebbe un pallino e
-// i pallini non direbbero nulla).
-const _kUrlKey = 'piano_turni_url';
-const _kFogliKey = 'piano_turni_fogli'; // JSON: {"aaaa-mm": url}
-const _kRuoliEsclusiKey = 'piano_turni_ruoli_esclusi';
-const _kUltimaRicercaKey = 'piano_turni_ultima_ricerca';
+// Preferenze persistenti (chiavi in utils/prefs_keys.dart, condivise col
+// backup): link dell'ultimo foglio (ricaricato all'apertura), archivio dei
+// fogli per mese (come lo "storico" del tool HTML: ogni mese ha un suo
+// foglio Google, senza archivio si dovrebbe re-incollare il link a ogni
+// cambio mese), ruoli esclusi dal conteggio buchi (es. il Quarto, spesso
+// scoperto per scelta: senza filtro ogni giorno avrebbe un pallino e i
+// pallini non direbbero nulla) e ultima ricerca volontario (segnalini).
 
 // Colori delle fasce, ripresi dalla legenda del tool HTML originale
 // (mattina giallo, pomeriggio arancio, sera verde, notte blu) ma saturati
@@ -89,12 +87,12 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   /// corrente, non incollare un link nuovo).
   Future<void> _ripristinaPreferenze() async {
     final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString(_kUrlKey);
-    final esclusi = prefs.getStringList(_kRuoliEsclusiKey) ?? const [];
+    final url = prefs.getString(kPrefPianoTurniUrl);
+    final esclusi = prefs.getStringList(kPrefPianoTurniRuoliEsclusi) ?? const [];
     final fogli = <String, String>{};
     // Archivio corrotto/assente: si riparte vuoto, non è un errore.
     try {
-      final decoded = jsonDecode(prefs.getString(_kFogliKey) ?? '{}');
+      final decoded = jsonDecode(prefs.getString(kPrefPianoTurniFogli) ?? '{}');
       if (decoded is Map) {
         decoded.forEach((k, v) {
           if (k is String && v is String) fogli[k] = v;
@@ -104,7 +102,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     if (!mounted) return;
     setState(() {
       _fogliSalvati = fogli;
-      _nomeCercato = prefs.getString(_kUltimaRicercaKey) ?? '';
+      _nomeCercato = prefs.getString(kPrefPianoTurniUltimaRicerca) ?? '';
       _ruoliEsclusi = esclusi
           .map((n) => RuoloPiano.values.where((r) => r.name == n).firstOrNull)
           .whereType<RuoloPiano>()
@@ -116,7 +114,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
 
   Future<void> _salvaFogli() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kFogliKey, jsonEncode(_fogliSalvati));
+    await prefs.setString(kPrefPianoTurniFogli, jsonEncode(_fogliSalvati));
   }
 
   /// Chiave archivio del piano caricato: "2026-07" (ordinabile come testo).
@@ -163,7 +161,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       // compute(): il decode dell'XLSX (~30 schede) bloccherebbe la UI.
       final piano = await compute(parsePianoMensile, resp.bodyBytes);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kUrlKey, input);
+      await prefs.setString(kPrefPianoTurniUrl, input);
       if (!mounted) return;
       final oggi = DateTime.now();
       setState(() {
@@ -199,7 +197,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _nomeCercato = prefs.getString(_kUltimaRicercaKey) ?? '';
+      _nomeCercato = prefs.getString(kPrefPianoTurniUltimaRicerca) ?? '';
       if (giorno != null) _giornoSelezionato = giorno;
     });
   }
@@ -209,7 +207,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       if (!_ruoliEsclusi.remove(ruolo)) _ruoliEsclusi.add(ruolo);
     });
     SharedPreferences.getInstance().then((prefs) => prefs.setStringList(
-        _kRuoliEsclusiKey, _ruoliEsclusi.map((r) => r.name).toList()));
+        kPrefPianoTurniRuoliEsclusi, _ruoliEsclusi.map((r) => r.name).toList()));
   }
 
   @override
@@ -954,7 +952,7 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
     // doverla cancellare. Il check su text.isEmpty evita di sovrascrivere
     // quello che l'utente ha già digitato mentre le prefs caricavano.
     SharedPreferences.getInstance().then((prefs) {
-      final ultima = prefs.getString(_kUltimaRicercaKey);
+      final ultima = prefs.getString(kPrefPianoTurniUltimaRicerca);
       if (ultima != null && ultima.isNotEmpty && mounted && _ctrl.text.isEmpty) {
         _ctrl.text = ultima;
         _ctrl.selection =
@@ -977,7 +975,7 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
   void _salvaUltimaRicerca(String testo) {
     final q = testo.trim();
     SharedPreferences.getInstance().then((prefs) =>
-        q.isEmpty ? prefs.remove(_kUltimaRicercaKey) : prefs.setString(_kUltimaRicercaKey, q));
+        q.isEmpty ? prefs.remove(kPrefPianoTurniUltimaRicerca) : prefs.setString(kPrefPianoTurniUltimaRicerca, q));
   }
 
   @override
