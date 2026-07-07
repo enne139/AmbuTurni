@@ -74,7 +74,9 @@ lib/
 ├── utils/
 │   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
 │   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
-│   └── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
+│   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
+│   ├── piano_cache.dart           cache su file (JSON per mese) dei piani decodificati
+│   └── prefs_keys.dart            chiavi SharedPreferences condivise (Piano turni + backup)
 ├── db/
 │   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
 │   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
@@ -260,7 +262,19 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   ripristina solo se presenti e valide (backup v1/RN: le preferenze del
   device restano com'erano); la versione del formato è salita a 2 ma
   l'import continua ad accettare `>= 1`. I materiali NON c'entrano: erano
-  già in `_backupTables` fin dalla loro introduzione. Il nome attivo è
+  già in `_backupTables` fin dalla loro introduzione.
+- **Cache locale del Piano turni** (branch `dev`, `utils/piano_cache.dart`):
+  l'endpoint export di Google genera l'XLSX al momento e `excel` decodifica
+  l'intero workbook — secondi di attesa a ogni apertura per dati quasi
+  immutati. Ogni piano decodificato viene salvato come JSON per mese
+  (`SlotPiano.toMap`/`PianoMensile.fromMap`, roundtrip unit-testato) nella
+  support dir; all'apertura (e sul tap di un foglio salvato) la cache
+  compare subito e `_carica(silenzioso: true)` aggiorna in sottofondo senza
+  spinner, preservando il giorno selezionato se il mese è lo stesso; un
+  errore di rete accende l'icona di avviso già esistente accanto al mese.
+  Cache illeggibile/valori sconosciuti = cache assente (si riscarica);
+  rimuovere un foglio dai salvati elimina anche il suo file. Il pulsante
+  ricarica resta non-silenzioso: feedback esplicito con lo spinner. Il nome attivo è
   mostrato in legenda e persiste tra i riavvii (`piano_turni_ultima_ricerca`,
   la stessa pref della ricerca): tipicamente si cerca il proprio nome una
   volta e da lì i propri turni si vedono a colpo d'occhio. Per questo il

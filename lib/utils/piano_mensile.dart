@@ -85,6 +85,34 @@ class SlotPiano {
   bool get buco => titolare.isEmpty && sostituti.isEmpty;
   bool get assistenza => macro == 'ASSISTENZA' || macro == 'GETTONE';
 
+  /// Serializzazione per la cache locale del Piano turni (JSON su file):
+  /// riaprire un mese già scaricato non deve costare un nuovo download e
+  /// una nuova decodifica dell'XLSX.
+  Map<String, dynamic> toMap() => {
+        'giorno': giorno,
+        'blocco': blocco,
+        'macro': macro,
+        'ruolo': ruolo.name,
+        'fascia': fascia.name,
+        'titolare': titolare,
+        'sostituti': sostituti,
+        'orario': orario,
+      };
+
+  /// Inverso di [toMap]. Un valore inatteso (es. ruolo di una versione
+  /// futura) fa lanciare: chi legge la cache tratta l'errore come cache
+  /// assente e riscarica.
+  factory SlotPiano.fromMap(Map<String, dynamic> map) => SlotPiano(
+        giorno: map['giorno'] as int,
+        blocco: map['blocco'] as int,
+        macro: map['macro'] as String,
+        ruolo: RuoloPiano.values.byName(map['ruolo'] as String),
+        fascia: FasciaPiano.values.byName(map['fascia'] as String),
+        titolare: map['titolare'] as String? ?? '',
+        sostituti: map['sostituti'] as String? ?? '',
+        orario: map['orario'] as String? ?? '',
+      );
+
   /// Ore/minuti di inizio e fine estratti da [orario], null se il testo non
   /// contiene un intervallo riconoscibile. Accetta ":" o "." come separatore
   /// (nei fogli compaiono entrambi) e il trattino lungo di Google Sheets.
@@ -123,6 +151,30 @@ class PianoMensile {
   }
 
   int get giorniNelMese => DateTime(anno, mese + 1, 0).day;
+
+  /// Serializzazione per la cache locale (vedi SlotPiano.toMap). Gli slot
+  /// escono raggruppati per giorno nell'ordine originale: il roundtrip
+  /// preserva blocchi e sequenze del foglio.
+  Map<String, dynamic> toMap() {
+    final giorni = _perGiorno.keys.toList()..sort();
+    return {
+      'anno': anno,
+      'mese': mese,
+      'slots': [
+        for (final g in giorni)
+          for (final s in _perGiorno[g]!) s.toMap(),
+      ],
+    };
+  }
+
+  factory PianoMensile.fromMap(Map<String, dynamic> map) => PianoMensile(
+        anno: map['anno'] as int,
+        mese: map['mese'] as int,
+        slots: [
+          for (final s in map['slots'] as List)
+            SlotPiano.fromMap(Map<String, dynamic>.from(s as Map)),
+        ],
+      );
 
   /// Slot del giorno nell'ordine del foglio, lista vuota se il giorno non ha
   /// una scheda (o non ha blocchi riconosciuti).

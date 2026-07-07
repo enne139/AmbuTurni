@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/format.dart';
+import '../../utils/piano_cache.dart';
 import '../../utils/piano_mensile.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
@@ -110,7 +111,29 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
           .toSet();
       if (url != null) _urlCtrl.text = url;
     });
-    if (url != null && url.isNotEmpty) await _carica();
+    if (url != null && url.isNotEmpty) {
+      // Cache-first: l'ultimo piano decodificato compare subito (anche
+      // offline), il download da Google lo aggiorna poi in sottofondo.
+      final ultimoMese = prefs.getString(kPrefPianoTurniUltimoMese);
+      final inCache =
+          ultimoMese == null ? null : await leggiPianoDaCache(ultimoMese);
+      if (inCache != null && mounted) {
+        setState(() {
+          _piano = inCache;
+          _giornoSelezionato = _giornoIniziale(inCache);
+        });
+        await _carica(silenzioso: true);
+      } else {
+        await _carica();
+      }
+    }
+  }
+
+  /// Giorno selezionato all'apertura di un piano: oggi se è il mese
+  /// corrente, altrimenti il 1°.
+  static int _giornoIniziale(PianoMensile piano) {
+    final oggi = DateTime.now();
+    return (oggi.year == piano.anno && oggi.month == piano.mese) ? oggi.day : 1;
   }
 
   Future<void> _salvaFogli() async {
@@ -138,7 +161,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     return null;
   }
 
-  Future<void> _carica() async {
+  /// Scarica e decodifica il foglio. Con [silenzioso] niente spinner: il
+  /// piano già a schermo (dalla cache) resta visibile finché non arrivano i
+  /// dati freschi, e un errore accende solo l'icona di avviso accanto al
+  /// mese invece di svuotare la schermata.
+  Future<void> _carica({bool silenzioso = false}) async {
     final input = _urlCtrl.text.trim();
     final sheetId = _estraiSheetId(input);
     if (sheetId == null) {
@@ -146,7 +173,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       return;
     }
     setState(() {
-      _loading = true;
+      if (!silenzioso) _loading = true;
       _errore = null;
     });
     try {
@@ -161,19 +188,27 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       }
       // compute(): il decode dell'XLSX (~30 schede) bloccherebbe la UI.
       final piano = await compute(parsePianoMensile, resp.bodyBytes);
+      final chiave = _chiaveMese(piano);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(kPrefPianoTurniUrl, input);
+      await prefs.setString(kPrefPianoTurniUltimoMese, chiave);
+      // Cache su file: alla prossima apertura questo piano compare subito.
+      await salvaPianoInCache(chiave, piano);
       if (!mounted) return;
-      final oggi = DateTime.now();
       setState(() {
+        // Aggiornamento in sottofondo dello stesso mese: il giorno che
+        // l'utente sta guardando non va resettato sotto le sue dita.
+        final stessoMese = _piano != null &&
+            _piano!.anno == piano.anno &&
+            _piano!.mese == piano.mese;
         _piano = piano;
         // Il foglio viene archiviato sotto il suo mese (letto da B2, non
         // dall'input dell'utente): ricaricare lo stesso mese aggiorna la
         // voce invece di duplicarla, come lo storico del tool HTML.
-        _fogliSalvati[_chiaveMese(piano)] = input;
-        // Parte da oggi se il piano è del mese corrente, altrimenti dal 1°.
-        _giornoSelezionato =
-            (oggi.year == piano.anno && oggi.month == piano.mese) ? oggi.day : 1;
+        _fogliSalvati[chiave] = input;
+        if (!(silenzioso && stessoMese)) {
+          _giornoSelezionato = _giornoIniziale(piano);
+        }
       });
       await _salvaFogli();
     } on FormatException catch (e) {
@@ -182,6 +217,23 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       if (mounted) setState(() => _errore = 'Caricamento fallito: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Apre un foglio salvato: se il suo piano è già in cache compare subito
+  /// e il download aggiorna in sottofondo, altrimenti caricamento normale.
+  Future<void> _apriFoglioSalvato(String chiave) async {
+    _urlCtrl.text = _fogliSalvati[chiave]!;
+    final inCache = await leggiPianoDaCache(chiave);
+    if (inCache != null && mounted) {
+      setState(() {
+        _piano = inCache;
+        _errore = null;
+        _giornoSelezionato = _giornoIniziale(inCache);
+      });
+      await _carica(silenzioso: true);
+    } else {
+      await _carica();
     }
   }
 
@@ -349,10 +401,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             ),
           ],
         ),
-        onTap: () {
-          _urlCtrl.text = _fogliSalvati[chiave]!;
-          _carica();
-        },
+        onTap: () => _apriFoglioSalvato(chiave),
       ),
     );
   }
@@ -361,6 +410,8 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     // Si elimina solo il link salvato, non il foglio Google: niente conferma.
     setState(() => _fogliSalvati.remove(chiave));
     _salvaFogli();
+    // Senza il link il piano non è più raggiungibile: la sua cache è inutile.
+    eliminaPianoDaCache(chiave);
   }
 
   /// Bottom sheet coi mesi salvati, per cambiare foglio senza passare dal form.
@@ -388,8 +439,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 title: Text(_etichettaMese(chiave)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _urlCtrl.text = _fogliSalvati[chiave]!;
-                  _carica();
+                  _apriFoglioSalvato(chiave);
                 },
               ),
           ],

@@ -2,6 +2,7 @@
 // I file XLSX di prova vengono costruiti in memoria col package excel stesso:
 // niente fixture binarie nel repo, e ogni test dichiara esattamente la
 // struttura del foglio che sta verificando.
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:excel/excel.dart';
 import 'package:ambu_turni/utils/piano_mensile.dart';
@@ -435,6 +436,50 @@ void main() {
       final piano = parsa(excel);
       expect(piano.giorniInServizio(''), isEmpty);
       expect(piano.giorniInServizio('   '), isEmpty);
+    });
+  });
+
+  group('Serializzazione cache (toMap/fromMap)', () {
+    test('roundtrip JSON preserva slot, orari, blocchi e metodi derivati', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'A7', 'NOTTE');
+      scrivi(excel, 'LUN 1', 'A8', '23:30 - 7:00');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      scrivi(excel, 'LUN 1', 'D7', 'Verdi');
+      scrivi(excel, 'LUN 1', 'A10', 'CENTRALINO');
+      scrivi(excel, 'LUN 1', 'A11', '18:30 - 23:30');
+      scrivi(excel, 'LUN 1', 'C10', 'Neri');
+
+      final piano = parsa(excel);
+      // Passa da una stringa JSON vera, come farà il file di cache.
+      final copia = PianoMensile.fromMap(
+          jsonDecode(jsonEncode(piano.toMap())) as Map<String, dynamic>);
+
+      expect(copia.anno, piano.anno);
+      expect(copia.mese, piano.mese);
+      final originali = piano.delGiorno(1);
+      final ricostruiti = copia.delGiorno(1);
+      expect(ricostruiti, hasLength(originali.length));
+      for (var i = 0; i < originali.length; i++) {
+        expect(ricostruiti[i].toMap(), originali[i].toMap());
+      }
+      // I metodi derivati devono funzionare identici sul piano ricostruito.
+      expect(copia.buchiDelGiorno(1).length, piano.buchiDelGiorno(1).length);
+      expect(copia.giorniInServizio('verdi'), piano.giorniInServizio('verdi'));
+      expect(copia.intervalloEvento(ricostruiti.first),
+          piano.intervalloEvento(originali.first));
+    });
+
+    test('fromMap con valori sconosciuti lancia (cache trattata come assente)', () {
+      expect(
+        () => SlotPiano.fromMap({
+          'giorno': 1, 'blocco': 1, 'macro': 'H24',
+          'ruolo': 'inventato', 'fascia': 'sera',
+          'titolare': '', 'sostituti': '', 'orario': '',
+        }),
+        throwsArgumentError,
+      );
     });
   });
 

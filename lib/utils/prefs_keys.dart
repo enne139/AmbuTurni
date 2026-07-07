@@ -6,3 +6,7 @@ const kPrefPianoTurniUrl = 'piano_turni_url';
 const kPrefPianoTurniFogli = 'piano_turni_fogli'; // JSON: {"aaaa-mm": url}
 const kPrefPianoTurniRuoliEsclusi = 'piano_turni_ruoli_esclusi';
 const kPrefPianoTurniUltimaRicerca = 'piano_turni_ultima_ricerca';
+// Mese dell'ultimo piano caricato ("aaaa-mm"): dice quale file di cache
+// mostrare subito all'apertura, prima che il download aggiorni i dati.
+// Non va nel backup: le cache sono locali al device e non vengono esportate.
+const kPrefPianoTurniUltimoMese = 'piano_turni_ultimo_mese';
