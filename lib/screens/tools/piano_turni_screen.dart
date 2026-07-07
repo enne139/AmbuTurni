@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/format.dart';
@@ -231,8 +232,13 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Cambia foglio',
-              // Torna al form col link corrente ancora nel campo.
-              onPressed: () => setState(() => _piano = null),
+              // Campo URL svuotato: qui si arriva per incollare il foglio di
+              // un mese nuovo, e il link vecchio andrebbe comunque cancellato
+              // a mano (i mesi già caricati restano nei Fogli salvati).
+              onPressed: () => setState(() {
+                _urlCtrl.clear();
+                _piano = null;
+              }),
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -305,6 +311,16 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   List<String> _chiaviOrdinate() =>
       _fogliSalvati.keys.toList()..sort((a, b) => b.compareTo(a));
 
+  /// Copia il link di un foglio negli appunti: serve per condividerlo o
+  /// riaprirlo nel browser senza doverlo recuperare dal foglio Google.
+  Future<void> _copiaLink(String url) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Link copiato negli appunti')));
+    }
+  }
+
   Widget _tileFoglioSalvato(String chiave) {
     final caricato =
         _piano != null && chiave == _chiaveMese(_piano!);
@@ -318,10 +334,20 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
         subtitle: caricato
             ? const Text('Caricato', style: TextStyle(color: kPrimary, fontSize: 11))
             : null,
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 20),
-          tooltip: 'Rimuovi dai salvati',
-          onPressed: () => _eliminaFoglio(chiave),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.copy_outlined, color: Colors.white38, size: 20),
+              tooltip: 'Copia link',
+              onPressed: () => _copiaLink(_fogliSalvati[chiave]!),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 20),
+              tooltip: 'Rimuovi dai salvati',
+              onPressed: () => _eliminaFoglio(chiave),
+            ),
+          ],
         ),
         onTap: () {
           _urlCtrl.text = _fogliSalvati[chiave]!;

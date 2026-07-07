@@ -211,7 +211,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   filtri ruolo persistiti (il Quarto è spesso scoperto per scelta: senza
   filtro i pallini sarebbero ovunque), ultimo URL in shared_preferences e
   ricaricato all'apertura, più archivio multi-mese ("aaaa-mm" → URL, come lo
-  storico del tool HTML: ogni mese ha un suo foglio) con lista nel form e
+  storico del tool HTML: ogni mese ha un suo foglio) con lista nel form
+  (ogni voce ha copia-link negli appunti e rimozione; "Cambia foglio" svuota
+  il campo URL, perché lì si arriva per incollare un mese nuovo) e
   bottom sheet dall'AppBar, e ricerca volontario per nome
   (`PianoMensile.cercaNome`, tap sul risultato → il calendario salta al giorno).
 - **Piano turni → "Aggiungi al calendario"** (branch `dev`): pulsante sulle
