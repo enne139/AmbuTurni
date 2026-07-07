@@ -110,7 +110,8 @@ lib/
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
-    │   └── materiali_screen.dart      gestione catalogo materiali: rinomina/elimina
+    │   └── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
+    │                                   (doppioni case-insensitive bloccati: niente UNIQUE sul nome)
     └── impostazioni/
         ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
         └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e

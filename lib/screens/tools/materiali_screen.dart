@@ -3,10 +3,10 @@ import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../utils/theme.dart';
 
-/// Gestione del catalogo materiali (rinomina/elimina). La creazione avviene
-/// anche al volo dal MaterialePicker ("Aggiungi...") nel form di utilizzo;
-/// questa schermata serve a correggere un nome sbagliato o eliminare un
-/// materiale non più usato.
+/// Gestione del catalogo materiali (aggiungi/rinomina/elimina). La creazione
+/// avviene anche al volo dal MaterialePicker ("Aggiungi...") nel form di
+/// utilizzo; il FAB qui permette di popolare il catalogo in anticipo senza
+/// passare dalla registrazione di un utilizzo.
 class MaterialiScreen extends StatefulWidget {
   const MaterialiScreen({super.key});
 
@@ -29,17 +29,20 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
     if (mounted) setState(() { _materiali = materiali; _loading = false; });
   }
 
-  Future<void> _rinomina(Materiale m) async {
-    final ctrl = TextEditingController(text: m.nome);
+  /// Dialog condiviso da aggiungi/rinomina: chiede un nome e lo restituisce
+  /// già ripulito, null se l'utente annulla o lascia vuoto.
+  Future<String?> _chiediNome(String titolo, {String iniziale = ''}) async {
+    final ctrl = TextEditingController(text: iniziale);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rinomina materiale'),
+        title: Text(titolo),
         content: TextField(
           controller: ctrl,
           decoration: const InputDecoration(labelText: 'Nome'),
           textCapitalization: TextCapitalization.sentences,
           autofocus: true,
+          onSubmitted: (_) => Navigator.pop(ctx, true),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
@@ -47,9 +50,40 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
         ],
       ),
     );
-    if (ok != true || !mounted) return;
     final nome = ctrl.text.trim();
-    if (nome.isEmpty) return;
+    return (ok == true && nome.isNotEmpty) ? nome : null;
+  }
+
+  /// True se [nome] esiste già nel catalogo (case-insensitive, come il
+  /// MaterialePicker: la tabella non ha UNIQUE sul nome e "Garze"/"garze"
+  /// diventerebbero due voci). [eccettoId] esclude il materiale che si sta
+  /// rinominando, altrimenti risulterebbe doppione di sé stesso.
+  bool _nomeDoppio(String nome, {String? eccettoId}) => _materiali.any(
+      (m) => m.id != eccettoId && m.nome.toLowerCase() == nome.toLowerCase());
+
+  void _avvisaDoppione(String nome) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"$nome" è già nel catalogo')));
+  }
+
+  Future<void> _aggiungi() async {
+    final nome = await _chiediNome('Nuovo materiale');
+    if (nome == null || !mounted) return;
+    if (_nomeDoppio(nome)) {
+      _avvisaDoppione(nome);
+      return;
+    }
+    await saveMateriale(nome);
+    if (mounted) _carica();
+  }
+
+  Future<void> _rinomina(Materiale m) async {
+    final nome = await _chiediNome('Rinomina materiale', iniziale: m.nome);
+    if (nome == null || !mounted) return;
+    if (_nomeDoppio(nome, eccettoId: m.id)) {
+      _avvisaDoppione(nome);
+      return;
+    }
     await saveMateriale(nome, id: m.id);
     if (mounted) _carica();
   }
@@ -75,6 +109,11 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Catalogo materiali')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _aggiungi,
+        tooltip: 'Nuovo materiale',
+        child: const Icon(Icons.add),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _materiali.isEmpty
@@ -82,7 +121,8 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
                   child: Text('Nessun materiale nel catalogo', style: TextStyle(color: Colors.white54)),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  // Padding in fondo per non lasciare l'ultima card coperta dal FAB.
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
                   itemCount: _materiali.length,
                   itemBuilder: (ctx, i) {
                     final m = _materiali[i];
