@@ -46,6 +46,11 @@ dependencies:
   # Lettura XLSX (tool Piano turni: foglio Google dei turni dell'associazione)
   excel: ^4.0.6
 
+  # Aggiunta eventi al calendario di sistema (tool Piano turni: pulsante
+  # "Aggiungi al calendario" sulle card dei blocchi). Su Android apre l'editor
+  # evento del calendario via intent, senza permessi runtime.
+  add_2_calendar: ^3.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

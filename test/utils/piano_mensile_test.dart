@@ -280,6 +280,120 @@ void main() {
     });
   });
 
+  group('Orario del blocco e intervalloEvento', () {
+    test('orario letto dalla terza riga del blocco (colonna info)', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'A7', 'SERA');
+      scrivi(excel, 'LUN 1', 'A8', '18:30 - 23:30');
+      scrivi(excel, 'LUN 1', 'A9', '5,0'); // monte ore: ignorato
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+
+      final piano = parsa(excel);
+      final slots = piano.delGiorno(1);
+      // Tutti gli slot del blocco condividono lo stesso orario.
+      expect(slots.map((s) => s.orario).toSet(), {'18:30 - 23:30'});
+
+      final orario = slots.first.orarioParsed;
+      expect(orario, isNotNull);
+      expect((orario!.oraInizio, orario.minInizio), (18, 30));
+      expect((orario.oraFine, orario.minFine), (23, 30));
+
+      final (inizio, fine) = piano.intervalloEvento(slots.first)!;
+      expect(inizio, DateTime(2026, 7, 1, 18, 30));
+      expect(fine, DateTime(2026, 7, 1, 23, 30));
+    });
+
+    test('orario con punto come separatore e trattino lungo', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H12');
+      scrivi(excel, 'LUN 1', 'A8', '7.30 – 13.30');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+
+      final orario = parsa(excel).delGiorno(1).first.orarioParsed;
+      expect(orario, isNotNull);
+      expect((orario!.oraInizio, orario.minInizio), (7, 30));
+      expect((orario.oraFine, orario.minFine), (13, 30));
+    });
+
+    test('turno a cavallo di mezzanotte: fine il giorno dopo, anche a fine mese', () {
+      final excel = base('VEN 31');
+      scrivi(excel, 'VEN 31', 'A6', 'H24');
+      scrivi(excel, 'VEN 31', 'A7', 'NOTTE');
+      scrivi(excel, 'VEN 31', 'A8', '23:30 - 7:00');
+      scrivi(excel, 'VEN 31', 'C6', 'Rossi');
+
+      final piano = parsa(excel);
+      final (inizio, fine) = piano.intervalloEvento(piano.delGiorno(31).first)!;
+      expect(inizio, DateTime(2026, 7, 31, 23, 30));
+      expect(fine, DateTime(2026, 8, 1, 7, 0)); // rollover di mese
+    });
+
+    test('centralino diurno: i due intervalli separati da "/" divisi tra gli slot', () {
+      final excel = base('LUN DIURNO 1');
+      scrivi(excel, 'LUN DIURNO 1', 'A6', 'CENTRALINO');
+      scrivi(excel, 'LUN DIURNO 1', 'A7', '8:30 - 13:30/13:30 - 18:30');
+      scrivi(excel, 'LUN DIURNO 1', 'A8', '5,0'); // monte ore: ignorato
+      scrivi(excel, 'LUN DIURNO 1', 'C6', 'Neri');
+
+      final piano = parsa(excel);
+      final slots = piano.delGiorno(1);
+      final mattina = slots.firstWhere((s) => s.fascia == FasciaPiano.mattina);
+      final pomeriggio = slots.firstWhere((s) => s.fascia == FasciaPiano.pomeriggio);
+      expect(mattina.orario, '8:30 - 13:30');
+      expect(pomeriggio.orario, '13:30 - 18:30');
+
+      final (inizioM, fineM) = piano.intervalloEvento(mattina)!;
+      expect(inizioM, DateTime(2026, 7, 1, 8, 30));
+      expect(fineM, DateTime(2026, 7, 1, 13, 30));
+      final (inizioP, fineP) = piano.intervalloEvento(pomeriggio)!;
+      expect(inizioP, DateTime(2026, 7, 1, 13, 30));
+      expect(fineP, DateTime(2026, 7, 1, 18, 30));
+    });
+
+    test('centralino serale: orario singolo sulla riga sotto il titolo', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'CENTRALINO');
+      scrivi(excel, 'LUN 1', 'A7', '18:30 - 23:30');
+      scrivi(excel, 'LUN 1', 'C6', 'Neri');
+
+      final piano = parsa(excel);
+      final slot = piano.delGiorno(1).single;
+      expect(slot.orario, '18:30 - 23:30');
+      final (inizio, fine) = piano.intervalloEvento(slot)!;
+      expect(inizio, DateTime(2026, 7, 1, 18, 30));
+      expect(fine, DateTime(2026, 7, 1, 23, 30));
+    });
+
+    test('senza orario (o testo non riconoscibile) niente intervallo', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'A8', 'orario da definire');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      // Centralino: blocco senza riga orario.
+      scrivi(excel, 'LUN 1', 'A10', 'CENTRALINO');
+      scrivi(excel, 'LUN 1', 'C10', 'Neri');
+
+      final piano = parsa(excel);
+      final slots = piano.delGiorno(1);
+      final h24 = slots.firstWhere((s) => s.macro == 'H24' && s.ruolo != RuoloPiano.centralino);
+      expect(h24.orarioParsed, isNull);
+      expect(piano.intervalloEvento(h24), isNull);
+
+      final centralino = slots.firstWhere((s) => s.ruolo == RuoloPiano.centralino);
+      expect(centralino.orario, isEmpty);
+      expect(piano.intervalloEvento(centralino), isNull);
+    });
+
+    test('orario con valori fuori scala non riconosciuto', () {
+      const slot = SlotPiano(
+          giorno: 1, blocco: 1, macro: 'H24', ruolo: RuoloPiano.autista,
+          fascia: FasciaPiano.sera, titolare: 'Rossi', sostituti: '',
+          orario: '25:00 - 99:99');
+      expect(slot.orarioParsed, isNull);
+    });
+  });
+
   group('buchiDelGiorno con filtri ruolo', () {
     test('esclude i ruoli filtrati dal conteggio', () {
       final excel = base('LUN 1');

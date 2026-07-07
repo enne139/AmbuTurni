@@ -14,7 +14,9 @@
 //     di A/B della seconda riga (MATT/POM/SER/NOT), default mattina se scheda
 //     diurna altrimenti sera. Un blocco ASSISTENZA/GETTONE senza descrizione
 //     né nomi è un template inutilizzato e viene ignorato.
-//   * CENTRALINO: 2 slot (mattina+pomeriggio) se diurno, 1 (sera) altrimenti.
+//   * CENTRALINO: 2 slot (mattina+pomeriggio) se diurno, 1 (sera) altrimenti;
+//     l'orario è nella riga sotto il titolo (diurno: i due intervalli
+//     mattina/pomeriggio separati da "/", es. "8:30 - 13:30/13:30 - 18:30").
 //   * USCITA MEZZI: blocco fisso da saltare (6 righe).
 // - Colonna C: chi è di turno (titolare); colonna D: possibili sostituti.
 //   Entrambe vuote = buco.
@@ -64,6 +66,10 @@ class SlotPiano {
   final FasciaPiano fascia;
   final String titolare;
   final String sostituti;
+  /// Orario del blocco come compare nella colonna info del foglio (terza riga,
+  /// es. "18:30 - 23:30"); vuoto se assente. Testo grezzo, non interpretato:
+  /// serve per la visualizzazione e per [orarioParsed].
+  final String orario;
 
   const SlotPiano({
     required this.giorno,
@@ -73,10 +79,30 @@ class SlotPiano {
     required this.fascia,
     required this.titolare,
     required this.sostituti,
+    this.orario = '',
   });
 
   bool get buco => titolare.isEmpty && sostituti.isEmpty;
   bool get assistenza => macro == 'ASSISTENZA' || macro == 'GETTONE';
+
+  /// Ore/minuti di inizio e fine estratti da [orario], null se il testo non
+  /// contiene un intervallo riconoscibile. Accetta ":" o "." come separatore
+  /// (nei fogli compaiono entrambi) e il trattino lungo di Google Sheets.
+  ({int oraInizio, int minInizio, int oraFine, int minFine})? get orarioParsed {
+    final m = RegExp(r'(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})')
+        .firstMatch(orario);
+    if (m == null) return null;
+    final valori = [for (var i = 1; i <= 4; i++) int.parse(m.group(i)!)];
+    if (valori[0] > 23 || valori[2] > 23 || valori[1] > 59 || valori[3] > 59) {
+      return null;
+    }
+    return (
+      oraInizio: valori[0],
+      minInizio: valori[1],
+      oraFine: valori[2],
+      minFine: valori[3],
+    );
+  }
 }
 
 /// Piano turni di un mese: slot raggruppati per giorno.
@@ -108,6 +134,27 @@ class PianoMensile {
       delGiorno(giorno)
           .where((s) => s.buco && !ruoliEsclusi.contains(s.ruolo))
           .toList();
+
+  /// Inizio e fine assoluti di uno slot, combinando il giorno del piano con
+  /// l'orario del blocco; null se lo slot non ha un orario riconoscibile.
+  /// Un turno a cavallo di mezzanotte (fine <= inizio, es. "23:30 - 7:00")
+  /// termina il giorno dopo — DateTime gestisce da sé il cambio di mese/anno.
+  (DateTime, DateTime)? intervalloEvento(SlotPiano slot) {
+    final orario = slot.orarioParsed;
+    if (orario == null) return null;
+    final inizio =
+        DateTime(anno, mese, slot.giorno, orario.oraInizio, orario.minInizio);
+    var fine =
+        DateTime(anno, mese, slot.giorno, orario.oraFine, orario.minFine);
+    // Giorno+1 via costruttore (non add(Duration)): DateTime normalizza il
+    // fine mese da sé e l'orario resta quello "da orologio" anche nelle
+    // notti di cambio ora legale, dove 24h esatte lo sposterebbero di un'ora.
+    if (!fine.isAfter(inizio)) {
+      fine = DateTime(
+          anno, mese, slot.giorno + 1, orario.oraFine, orario.minFine);
+    }
+    return (inizio, fine);
+  }
 
   /// Slot in cui compare [nome] (ricerca parziale, case-insensitive) come
   /// titolare o sostituto, in ordine cronologico. Query vuota = nessun
@@ -246,16 +293,24 @@ int _parseFoglio(
       // centralino basta a distinguerlo, ma la macro resta uguale per
       // coerenza con l'output a cui l'utente è abituato.
       blocco++;
+      // L'orario del centralino è sulla riga sotto il titolo (r+1), non
+      // sulla terza come nei blocchi a 4 ruoli; nella scheda diurna la cella
+      // contiene i due intervalli mattina/pomeriggio separati da "/", che
+      // vanno divisi tra i due slot ("/" non compare mai negli orari).
+      final orari = '${testo(r + 1, 0)} ${testo(r + 1, 1)}'.trim().split('/');
       if (diurno) {
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.mattina,
+            orario: orari.first.trim(),
             titolare: titolare(r), sostituti: sostituti(r)));
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.pomeriggio,
+            orario: orari.length > 1 ? orari[1].trim() : '',
             titolare: titolare(r + 1), sostituti: sostituti(r + 1)));
       } else {
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.sera,
+            orario: orari.first.trim(),
             titolare: titolare(r), sostituti: sostituti(r)));
       }
       r += 3;
@@ -263,8 +318,11 @@ int _parseFoglio(
     }
 
     // Blocco equipaggio a 4 ruoli (H12/H24/ASSISTENZA/GETTONE).
-    // La descrizione della fascia condivide la riga del Cs (r+1), colonne A/B.
+    // La descrizione della fascia condivide la riga del Cs (r+1), colonne A/B;
+    // la riga sotto (r+2) ha l'orario del blocco ("18:30 - 23:30") e l'ultima
+    // il monte ore, che non serve (l'orario basta a ricavare la durata).
     final descrizione = '${testo(r + 1, 0)} ${testo(r + 1, 1)}'.toUpperCase();
+    final orario = '${testo(r + 2, 0)} ${testo(r + 2, 1)}'.trim();
 
     if (valA == 'ASSISTENZA' || valA == 'GETTONE') {
       // Blocco template mai compilato (né descrizione né nomi): non è un
@@ -293,7 +351,7 @@ int _parseFoglio(
     const ruoli = [RuoloPiano.autista, RuoloPiano.cs, RuoloPiano.terzo, RuoloPiano.quarto];
     for (var i = 0; i < ruoli.length; i++) {
       slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: valA,
-          ruolo: ruoli[i], fascia: fascia,
+          ruolo: ruoli[i], fascia: fascia, orario: orario,
           titolare: titolare(r + i), sostituti: sostituti(r + i)));
     }
     r += 4;

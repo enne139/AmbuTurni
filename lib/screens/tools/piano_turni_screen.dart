@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -658,9 +660,60 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     return '${primo.macro} · ${primo.fascia.etichetta}';
   }
 
+  /// Etichetta tra parentesi nel titolo dell'evento: la fascia per i turni
+  /// ordinari (H12/H24), "centralino"/"gettone"/"assistenza" per i rispettivi
+  /// blocchi, "altro" come fallback — formato richiesto dall'utente:
+  /// "CVS (sera)". Il centralino va controllato prima della macro: il parser
+  /// gli assegna macro H24, e senza il check finirebbe etichettato per fascia.
+  static String _etichettaEvento(SlotPiano primo) {
+    if (primo.ruolo == RuoloPiano.centralino) return 'centralino';
+    if (primo.macro == 'GETTONE') return 'gettone';
+    if (primo.macro == 'ASSISTENZA') return 'assistenza';
+    if (primo.macro == 'H12' || primo.macro == 'H24') {
+      return primo.fascia.etichetta.toLowerCase();
+    }
+    return 'altro';
+  }
+
+  /// Apre l'editor eventi del calendario di sistema precompilato col blocco:
+  /// titolo "CVS (fascia)" e data/orario letti dal foglio (notte a cavallo
+  /// di mezzanotte inclusa); niente descrizione, per scelta dell'utente.
+  /// Si passa dall'intent di inserimento, non dalla scrittura diretta:
+  /// nessun permesso runtime e l'utente conferma/ritocca l'evento nella sua
+  /// app calendario. Per lo stesso motivo il colore dell'evento non è
+  /// impostabile da qui: l'intent Android non lo prevede, l'evento prende
+  /// il colore del calendario su cui viene salvato.
+  Future<void> _aggiungiAlCalendario(List<SlotPiano> gruppo) async {
+    // add_2_calendar è solo Android/iOS: su desktop il canale nativo manca.
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Aggiunta al calendario disponibile solo su Android')));
+      return;
+    }
+    final intervallo = _piano!.intervalloEvento(gruppo.first);
+    if (intervallo == null) return; // il pulsante non compare senza orario
+    final (inizio, fine) = intervallo;
+
+    final ok = await Add2Calendar.addEvent2Cal(Event(
+      title: 'CVS (${_etichettaEvento(gruppo.first)})',
+      startDate: inizio,
+      endDate: fine,
+    ));
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nessuna app calendario trovata sul dispositivo')));
+    }
+  }
+
   Widget _cardBlocco(List<SlotPiano> gruppo) {
     final primo = gruppo.first;
     final colore = _colorePerSlot(primo);
+    // Slot con orari diversi (centralino diurno: mattina e pomeriggio hanno
+    // ciascuno il proprio intervallo): orario e pulsante calendario vanno
+    // sulla riga di ogni slot, non nell'intestazione — un solo pulsante non
+    // saprebbe quale dei due eventi creare.
+    final orariDiversi = gruppo.map((s) => s.orario).toSet().length > 1;
+    final orario = orariDiversi ? null : primo.orarioParsed;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -677,10 +730,28 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                   decoration: BoxDecoration(shape: BoxShape.circle, color: colore),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  _titoloBlocco(gruppo),
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                Expanded(
+                  child: Text(
+                    _titoloBlocco(gruppo),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
                 ),
+                // Orario e pulsante calendario solo se il foglio ha l'orario
+                // del blocco: senza, l'evento non avrebbe inizio/fine.
+                if (orario != null) ...[
+                  Text(
+                    primo.orario,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_calendar_outlined,
+                        size: 20, color: Colors.white70),
+                    tooltip: 'Aggiungi al calendario',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _aggiungiAlCalendario(gruppo),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 8),
@@ -703,14 +774,15 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 ],
               ),
             ),
-            for (final slot in gruppo) _rigaSlot(slot),
+            for (final slot in gruppo)
+              _rigaSlot(slot, calendarioInRiga: orariDiversi),
           ],
         ),
       ),
     );
   }
 
-  Widget _rigaSlot(SlotPiano slot) {
+  Widget _rigaSlot(SlotPiano slot, {bool calendarioInRiga = false}) {
     // Etichetta: per il centralino la fascia distingue gli slot del blocco
     // (mattina/pomeriggio), per gli altri blocchi la fascia è nel titolo.
     final etichetta = slot.ruolo == RuoloPiano.centralino
@@ -764,6 +836,21 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               ),
             ),
           ],
+          // Pulsante calendario per slot (centralino diurno): compatto per
+          // non alzare la riga, l'orario dello slot è nel tooltip.
+          if (calendarioInRiga && slot.orarioParsed != null)
+            SizedBox(
+              width: 26,
+              height: 20,
+              child: IconButton(
+                icon: const Icon(Icons.edit_calendar_outlined,
+                    size: 16, color: Colors.white70),
+                tooltip: 'Aggiungi al calendario (${slot.orario})',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => _aggiungiAlCalendario([slot]),
+              ),
+            ),
         ],
       ),
     );

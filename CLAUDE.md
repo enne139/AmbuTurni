@@ -60,6 +60,7 @@
 | Preferenze | `shared_preferences` |
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Lettura XLSX (Piano turni) | `excel` |
+| Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso) |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
 
@@ -212,6 +213,36 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   storico del tool HTML: ogni mese ha un suo foglio) con lista nel form e
   bottom sheet dall'AppBar, e ricerca volontario per nome
   (`PianoMensile.cercaNome`, tap sul risultato → il calendario salta al giorno).
+- **Piano turni → "Aggiungi al calendario"** (branch `dev`): pulsante sulle
+  card dei blocchi che apre l'editor eventi del calendario di sistema
+  precompilato via `add_2_calendar` — intent `ACTION_INSERT`, nessun permesso
+  runtime, ma serve la `<queries>` nel manifest (package visibility Android
+  11+; senza, fallisce solo su device reale, stessa famiglia di bug di
+  INTERNET/WAL). Titolo "CVS (mattina/pomeriggio/sera/notte/centralino/
+  gettone/assistenza/altro)" e nessuna descrizione, formato chiesto
+  dall'utente (una prima versione metteva l'equipaggio nella descrizione:
+  rimosso). Il colore verde chiesto per l'evento NON è impostabile: l'intent
+  di inserimento non prevede un extra colore, l'evento prende il colore del
+  calendario di destinazione (mitigazione: calendario dedicato verde lato
+  Google Calendar). L'orario viene dalla colonna info del blocco nel foglio:
+  terza riga per i blocchi a 4 ruoli ("18:30 - 23:30"), seconda riga per il
+  centralino, dove la scheda diurna ha i due intervalli mattina/pomeriggio
+  separati da "/" — divisi tra i due slot, che in UI hanno ciascuno il
+  proprio pulsante sulla propria riga (l'intestazione della card mostra
+  orario+pulsante solo se tutti gli slot condividono lo stesso orario).
+  Nuovo campo `SlotPiano.orario` + `orarioParsed` e
+  `PianoMensile.intervalloEvento`, che gestisce i turni a cavallo di
+  mezzanotte (fine <= inizio → giorno dopo, via costruttore `DateTime` e non
+  `add(Duration)` per non sbagliare di un'ora nelle notti di cambio ora
+  legale). Blocchi senza orario riconoscibile: niente pulsante, non si
+  inventano orari. Su desktop il plugin non esiste: snackbar "solo su Android". Il nome attivo è
+  mostrato in legenda e persiste tra i riavvii (`piano_turni_ultima_ricerca`,
+  la stessa pref della ricerca): tipicamente si cerca il proprio nome una
+  volta e da lì i propri turni si vedono a colpo d'occhio. Per questo il
+  salvataggio della ricerca è passato da `dispose` a `onChanged`: il
+  chiamante rilegge la pref subito dopo il pop, ma il dispose della route
+  arriva solo a fine transizione — in dispose i segnalini sarebbero rimasti
+  al nome precedente. Svuotare il campo di ricerca cancella anche i segnalini.
 - **Permesso INTERNET nel manifest Android (v1.3.1)**: le build debug lo
   includono automaticamente, le release no — il Piano turni (prima feature di
   rete su main) falliva con "Failed host lookup" solo sull'APK release.
@@ -362,7 +393,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
 - ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione), nessuno storico.
 - ✅ **Tools → Piano turni**: calendario equipaggi/buchi dal foglio Google
-  mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri ruolo).
+  mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
+  ruolo, aggiunta del turno al calendario di sistema).
 - ✅ Windows desktop, icona app personalizzata, 29 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
