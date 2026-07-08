@@ -41,7 +41,9 @@
    e si manifestava solo su Android reale.
 9. **Processo di release:** bump della versione in `pubspec.yaml` (`X.Y.Z+N`,
    incrementando entrambe le parti), commit su `main`, poi tag `vX.Y.Z`: il push
-   del tag fa pubblicare al workflow Gitea l'APK come artifact e come Release.
+   del tag fa pubblicare al workflow Gitea l'APK come artifact e come Release,
+   e pubblica anche l'immagine Docker della versione web (build-web.yml) con
+   un tag pari alla versione — il deploy sul server resta comunque manuale.
 
 ---
 
@@ -135,6 +137,9 @@ lib/
 
 backend/                            API sync Node+Express+PostgreSQL (invariata)
 .gitea/workflows/build-backend.yml  CI Docker backend (solo su modifiche a backend/)
+.gitea/workflows/build-web.yml      CI Docker versione web (build Flutter + nginx)
+Dockerfile                          build multi-stage versione web (root: serve tutto il progetto)
+nginx.conf                          config nginx della versione web (SPA fallback + cache statica)
 windows/                            progetto CMake generato da flutter create --platforms windows
 assets/icon/                        sorgenti icona app (SVG + PNG 1024×1024), vedi sotto
 ```
@@ -408,6 +413,24 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - **CI Android in `ghcr.io/cirruslabs/flutter:3.44.0`**: elimina i ~10 min di
   setup Flutter/SDK a ogni run su runner effimero (dettagli e motivazioni nei
   commenti in testa a `build-android.yml`, per non duplicarli qui).
+- **Pubblicazione web: immagine Docker (nginx), stesso pattern del backend**
+  (`Dockerfile` alla radice + `.gitea/workflows/build-web.yml`): build
+  multi-stage, stage 1 `ghcr.io/cirruslabs/flutter:3.44.0` (stessa immagine
+  pinnata della CI Android, include già il setup di
+  `sqflite_common_ffi_web:setup` non versionato) compila `flutter build web
+  --release`, stage 2 `nginx:alpine` copia solo l'output statico —
+  nell'immagine finale non c'è il toolchain Flutter. Pubblicata sul
+  Container Registry della stessa istanza Gitea del backend
+  (`ambuturni-web`, accanto a `ambulanza-sync`), riusando lo stesso secret
+  `REGISTRY_TOKEN`. Trigger sui tag `vX.Y.Z` (come `build-android.yml`, non
+  a ogni push su `main`: la web app segue lo stesso versionamento
+  dell'APK), immagine taggata sia `latest`/SHA sia col nome del tag —
+  permette di puntare sul server a una versione precisa. Deploy sul server
+  manuale, come già per il backend — il workflow si ferma al push
+  dell'immagine. `nginx.conf`: fallback SPA
+  (`try_files` su `index.html`) e cache lunga solo sugli asset con hash nel
+  nome (`main.dart.js`, `assets/*`), `index.html` sempre rivalidato perché è
+  lui a referenziare l'hash aggiornato a ogni build.
 - **`pubspec.lock` versionato**: raccomandazione Flutter per le app (non le
   librerie) — build riproducibili in CI. Gli step actions/cache (Gradle/pub)
   sono stati rimossi dal workflow: senza cache backend sull'istanza Gitea

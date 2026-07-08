@@ -1,0 +1,13 @@
+# Non servono alla build web: velocizzano il trasferimento del contesto Docker.
+.git
+.dart_tool
+build
+android
+windows
+backend
+test
+.gitea
+.idea
+.vscode
+*.iml
+README.md
