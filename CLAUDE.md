@@ -60,9 +60,13 @@
 | Preferenze | `shared_preferences` |
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Lettura XLSX (Piano turni) | `excel` |
-| Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso) |
-| Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows da `assets/icon/` |
+| Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
+| Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
+
+Web (Chrome/Edge, `flutter run -d chrome` / `flutter build web`): DB via
+`sqflite_common_ffi_web` (SQLite compilato in WASM, persistito in IndexedDB),
+vedi "Piattaforma web" in Decisioni tecniche per i dettagli e i limiti.
 
 ---
 
@@ -75,13 +79,20 @@ lib/
 │   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
 │   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
 │   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
-│   ├── piano_cache.dart           cache su file (JSON per mese) dei piani decodificati
+│   ├── piano_cache.dart           cache dei piani decodificati: solo export condizionale
+│   │                               (vedi Piattaforma web), impl. in piano_cache_io.dart
+│   │                               (file JSON per mese) / piano_cache_web.dart
+│   │                               (shared_preferences/localStorage)
+│   ├── platform_check.dart        isDesktop/isMobile: export condizionale io/web di
+│   │                               Platform.isX (dart:io non compila sul target web)
 │   └── prefs_keys.dart            chiavi SharedPreferences condivise (Piano turni + backup)
 ├── db/
 │   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
 │   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
 │   ├── helpers.dart               TUTTE le funzioni CRUD + StatisticheData
-│   └── backup.dart                exportBackup() + importBackup() via share_plus/file_picker
+│   └── backup.dart                exportBackup() + importBackup(); il filesystem/picker è
+│                                    in backup_file.dart, export condizionale io/web (vedi
+│                                    Piattaforma web)
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider, StatisticheProvider
 ├── navigation/
@@ -166,7 +177,17 @@ flutter pub get
 flutter analyze          # deve passare senza errori (exit 0)
 flutter run              # su device Android connesso o emulatore
 flutter run -d windows   # per test rapido su Windows (richiede Visual Studio)
+flutter run -d chrome    # per test rapido su web
 flutter build apk        # APK debug/release
+flutter build web        # build web (dist in build/web)
+```
+
+Dopo un `flutter create`/clone pulito, prima del primo `flutter run -d chrome`/
+`build web` va rigenerato il worker SQLite (non versionato, vedi
+`.gitignore` e Piattaforma web in Decisioni tecniche):
+
+```bash
+dart run sqflite_common_ffi_web:setup
 ```
 
 ## Gradle / Java
@@ -431,6 +452,63 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   debug. In CI arriva dai secret Gitea `KEYSTORE_B64`/`KEYSTORE_PASSWORD`. Le
   release passate (v1.0.0, v1.1.0) sono state ri-firmate per uniformità: gli
   update via Obtainium richiedono la stessa firma tra versioni.
+- **Piattaforma web** (`flutter create . --platforms web`): il blocco vero
+  non era il target in sé ma tre dipendenze Android/desktop-only, trovate
+  leggendo il codice prima di iniziare:
+  - **DB**: `sqflite`/`sqflite_common_ffi` non esistono nel browser. Aggiunto
+    `sqflite_common_ffi_web` (SQLite compilato in WASM, persistito in
+    IndexedDB tramite un worker — binari generati con
+    `dart run sqflite_common_ffi_web:setup` in `web/sqlite3.wasm` +
+    `web/sqflite_sw.js`, non versionati, da rigenerare dopo un
+    `flutter create`/clone pulito). `getDb()` sceglie `databaseFactoryFfiWeb`
+    su `kIsWeb`. Due bug reali trovati solo lanciando l'app in Chrome (non da
+    `flutter analyze`/`test`/`build web`, che passavano lo stesso):
+    `getDatabasesPath()` lancia su questa implementazione ("getDatabasesPath
+    is null") — su web si passa un nome fisso (`'ambulanza_turni.db'`) invece
+    del path da `getDatabasesPath()`, che resta usato su Android/desktop;
+    e la versione 0.4.x del pacchetto è troppo vecchia per la
+    `sqflite_common` risolta da pub (compila ma va in eccezione a runtime,
+    `Unsupported operation: unsupported result null`) — servita la 1.1.2,
+    che a sua volta richiede `sqlite3 >=3.1.2`, incompatibile con
+    `sqflite_common_ffi` 2.3.5 (import di `package:sqlite3/open.dart`,
+    rimosso in sqlite3 3.x — errore di compilazione anche nativo, non solo
+    web). Risolto con `sqflite_common_ffi: ^2.4.2` (aggiornato anche lui) +
+    `sqlite3: ^3.1.2` pinnato esplicitamente. Lezione: per questa famiglia di
+    pacchetti i vincoli in pubspec non bastano a garantire compatibilità
+    runtime, serve lanciare l'app per davvero (coerente con la regola 8, qui
+    estesa al web: browser reale, non solo `flutter analyze`).
+  - **`dart:io` non condizionale = errore di compilazione sul target web**
+    (non un'eccezione a runtime rimandabile): isolato dietro export
+    condizionali (`if (dart.library.io)`) in tre punti — `database.dart`
+    (branch `isDesktop`/`isMobile` per la scelta del `databaseFactory`, via
+    `utils/platform_check.dart`), `db/backup.dart` (filesystem/file_picker/
+    share_plus spostati in `db/backup_file_io.dart` vs `db/backup_file_web.dart`,
+    riusata anche per l'export .ics del Piano turni, vedi sotto) e
+    `utils/piano_cache.dart` (`piano_cache_io.dart`: file JSON per mese in
+    directory di supporto; `piano_cache_web.dart`: stessa cache ma su
+    `shared_preferences`/localStorage, path_provider non ha lì una directory
+    persistente utilizzabile allo stesso modo).
+  - **Backup su web**: `file_picker` non implementa `saveFile` nel browser
+    (solo `pickFiles`, con `bytes` invece di un path reale). Export via
+    `XFile.fromData` (bytes in memoria, nessun file scritto) passato a
+    `share_plus`, che sul web tenta la Web Share API nativa e ricade da solo
+    su un download via Blob URL se non disponibile (`downloadFallbackEnabled`,
+    default `true`) — bump `share_plus` da `^9.0.0` a `^12.0.2` richiesto da
+    `sqflite_common_ffi_web` (dipende da `package:web >=1.0.0`, incompatibile
+    con `web ^0.5.0` di share_plus 9.x); import con `withData: true` per
+    leggere i `bytes` invece del path (null sul web).
+  - **`add_2_calendar`**: dichiara solo Android/iOS nel suo `pubspec.yaml`,
+    nessuna implementazione web. Su desktop/web `_aggiungiAlCalendario` in
+    `piano_turni_screen.dart` genera invece un file .ics (RFC 5545, orari
+    "floating" senza Z/TZID — stesso orario locale passato finora all'intent
+    Android, nessuna conversione fuso orario altrove nel codice) e lo salva
+    con `salvaFilePiattaforma` di `backup_file.dart` (già generica: dialog
+    "Salva come" su desktop, download/share sul web), invece di limitarsi a
+    un messaggio "non disponibile".
+  - **Icona web**: aggiunta sezione `web:` a `flutter_launcher_icons` in
+    `pubspec.yaml` (stesso `app_icon.png`, sfondo/tema `#00A651`); nome e
+    descrizione in `web/manifest.json`/`web/index.html` aggiornati a mano
+    (il tool non li tocca).
 
 ---
 
@@ -457,7 +535,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tools → Piano turni**: calendario equipaggi/buchi dal foglio Google
   mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
   ruolo, aggiunta del turno al calendario di sistema).
-- ✅ Windows desktop, icona app personalizzata, 29 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 64 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

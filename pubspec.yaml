@@ -10,9 +10,21 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # SQLite locale (nativo su Android, FFI su Windows/desktop)
+  # SQLite locale (nativo su Android, FFI su Windows/desktop, WASM su web).
+  # sqflite_common_ffi bump da ^2.3.3 (2.3.5) a ^2.4.2: la 2.3.5 importa
+  # `package:sqlite3/open.dart`, rimosso in sqlite3 3.x — compilava (e
+  # funzionava) solo finché sqlite3 restava in 2.x. sqflite_common_ffi_web
+  # 1.x invece richiede sqlite3 >=3.1.2: con entrambi i pacchetti sulla 2.x
+  # (i vincoli originali di entrambi lo permettevano) l'app compilava ma
+  # sqflite_common_ffi_web 0.4.x falliva a runtime nel browser
+  # (`Unsupported operation: unsupported result null`, verificato in Chrome)
+  # — versione troppo vecchia per la sqflite_common in uso nonostante il
+  # vincolo di pubspec lo permettesse. sqlite3 pinnato esplicitamente perché
+  # senza pub sceglie comunque una versione diversa a ogni pub get.
   sqflite: ^2.3.3
-  sqflite_common_ffi: ^2.3.3
+  sqflite_common_ffi: ^2.4.2
+  sqflite_common_ffi_web: ^1.1.2
+  sqlite3: ^3.1.2
   path: ^1.9.0
 
   # Percorsi di sistema (Documents, cache…)
@@ -27,8 +39,12 @@ dependencies:
   # Generazione UUID per gli id locali
   uuid: ^4.4.0
 
-  # Condivisione file (export backup)
-  share_plus: ^9.0.0
+  # Condivisione file (export backup). Bump da ^9.0.0 a ^12.0.2 richiesto da
+  # sqflite_common_ffi_web (dipende da package:web >=1.0.0, incompatibile con
+  # web ^0.5.0 di share_plus 9.x): la versione web-only "SQLite in WASM" del
+  # DB porta con sé un aggiornamento a cascata di questa dipendenza non
+  # collegata, altrimenti pub non risolve.
+  share_plus: ^12.0.2
 
   # Selezione file (import backup)
   file_picker: ^8.0.7
@@ -76,3 +92,8 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/icon/app_icon.png"
     icon_size: 256
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#00A651"
+    theme_color: "#00A651"

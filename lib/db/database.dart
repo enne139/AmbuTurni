@@ -1,8 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+
+import '../utils/platform_check.dart';
 
 // Schema SQL locale. Nato identico a quello dell'app React Native (schema.ts),
 // ora dismessa: dalla v8 lo schema è libero di evolvere (vedi `tipologie`).
@@ -174,14 +176,26 @@ Future<Database> openTestDb() async {
 
 /// Restituisce l'istanza aperta del DB, inizializzandola se necessario.
 /// Su desktop (Windows/Linux/macOS) usa sqflite_common_ffi perché sqflite
-/// nativo non è disponibile fuori da Android/iOS.
+/// nativo non è disponibile fuori da Android/iOS; su web usa
+/// sqflite_common_ffi_web (SQLite compilato in WASM, persistito in IndexedDB
+/// via il worker generato da `dart run sqflite_common_ffi_web:setup` in
+/// web/sqflite_sw.js + web/sqlite3.wasm) perché né sqflite né la FFI nativa
+/// esistono nel browser. Su web NON si passa da `getDatabasesPath()`: quella
+/// chiamata lancia (`getDatabasesPath is null`, verificato a runtime in
+/// Chrome) perché il metodo non è cablato in questa implementazione — si usa
+/// direttamente un nome fisso come path, come nell'esempio del pacchetto
+/// (il "filesystem" reale è IndexedDB, il nome è solo una chiave).
 Future<Database> getDb() async {
   if (_db != null) return _db!;
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  } else if (isDesktop) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-  final dbPath = join(await getDatabasesPath(), 'ambulanza_turni.db');
+  final dbPath = kIsWeb
+      ? 'ambulanza_turni.db'
+      : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
     version: 8,
@@ -464,7 +478,12 @@ Future<void> _onCreate(Database db, int version) async {
 /// _onCreate, dove SQLite rifiuta il passaggio a WAL) e con rawQuery invece
 /// di execute: su Android nativo restituisce una riga col nuovo modo, ed
 /// execute/execSQL rifiuta le query che restituiscono risultati.
+/// Su web niente WAL: il DB WASM non ha un vero filesystem con locking tra
+/// processi (persiste tramite un worker su IndexedDB), quindi il problema
+/// che il WAL risolveva su Android non si pone.
 Future<void> _onOpen(Database db) async {
-  await db.rawQuery('PRAGMA journal_mode = WAL');
+  if (!kIsWeb) {
+    await db.rawQuery('PRAGMA journal_mode = WAL');
+  }
   await db.execute('PRAGMA foreign_keys = ON');
 }

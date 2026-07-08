@@ -17,6 +17,12 @@ android/app/google-services.json
 # iOS (non usato, piattaforma non abilitata)
 ios/
 
+# Web: binari SQLite WASM generati da `dart run sqflite_common_ffi_web:setup`
+# (grossi, scaricati da GitHub, uguali per tutti — non ha senso versionarli;
+# rigenerare dopo un clone pulito, vedi Avvio & verifica in CLAUDE.md)
+web/sqlite3.wasm
+web/sqflite_sw.js
+
 # Local databases
 *.db
 *.db-shm

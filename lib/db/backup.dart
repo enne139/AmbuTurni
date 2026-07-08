@@ -1,11 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prefs_keys.dart';
+import 'backup_file.dart';
 import 'database.dart';
 import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
 
@@ -64,7 +61,8 @@ String _timestampFile() {
 
 /// Esporta tutti i dati in un file JSON.
 /// Su desktop (Windows/Linux/macOS) mostra un dialog "Salva come" nativo;
-/// su Android/iOS apre la share sheet (consente di salvare su Drive, Files, ecc.).
+/// su Android/iOS apre la share sheet (consente di salvare su Drive, Files,
+/// ecc.); su web scarica il file nel browser (vedi backup_file_web.dart).
 /// Restituisce il percorso salvato, oppure null se l'utente annulla.
 Future<String?> exportBackup() async {
   final db = await getDb();
@@ -205,58 +203,30 @@ Future<String?> exportSemplificato() async {
 }
 
 /// Helper condiviso: salva il testo [contenuto] su filesystem.
-/// Desktop → dialog "Salva come"; mobile → share sheet.
-Future<String?> _salvaFile(String contenuto, String nomeFile, String shareText) async {
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Salva file',
-      fileName: nomeFile,
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
-    if (outputPath == null) return null;
-    await File(outputPath).writeAsString(contenuto, encoding: utf8);
-    return outputPath;
-  } else {
-    // Cache dir invece di Documents: prima ogni export lasciava per sempre
-    // nel sandbox una copia del file (con dentro dati personali). La cache
-    // può essere ripulita dal sistema e comunque gli export delle volte
-    // precedenti vengono eliminati qui sotto. Il file corrente NON viene
-    // cancellato subito dopo la share: alcune app destinatarie lo leggono
-    // in modo asincrono dopo la chiusura della share sheet.
-    final dir = await getTemporaryDirectory();
-    await for (final f in dir.list()) {
-      final nome = f.uri.pathSegments.last;
-      if (f is File && nome.startsWith('ambuturni_') && nome.endsWith('.json')) {
-        try {
-          await f.delete();
-        } catch (_) {
-          // Best-effort: un file bloccato non deve impedire l'export.
-        }
-      }
-    }
-    final file = File('${dir.path}/$nomeFile');
-    await file.writeAsString(contenuto, encoding: utf8);
-    await Share.shareXFiles([XFile(file.path)], text: shareText);
-    return file.path;
-  }
-}
+/// Desktop → dialog "Salva come"; mobile → share sheet; web → download
+/// browser. La parte che tocca filesystem/picker/share vive in
+/// backup_file.dart (import condizionale io/web): qui non deve mai comparire
+/// dart:io, altrimenti l'intero file (e con esso l'app) non compilerebbe
+/// per il target web.
+Future<String?> _salvaFile(String contenuto, String nomeFile, String shareText) =>
+    salvaFilePiattaforma(contenuto, nomeFile, shareText);
 
 /// Importa un backup JSON scelto dall'utente.
 /// Sovrascrive TUTTI i dati locali (import distruttivo, come da spec originale).
 /// Restituisce un messaggio di esito (successo o errore).
 Future<String> importBackup() async {
-  // Apre il file picker filtrato su JSON.
-  final result = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['json'],
-  );
-  if (result == null || result.files.isEmpty) return 'Import annullato.';
+  // Apre il file picker filtrato su JSON e legge il contenuto: la parte che
+  // tocca filesystem/picker vive in backup_file.dart (io/web separati, vedi
+  // _salvaFile sopra per il perché).
+  final String raw;
+  try {
+    final letto = await leggiBackupScelto();
+    if (letto == null) return 'Import annullato.';
+    raw = letto;
+  } on StateError catch (e) {
+    return e.message;
+  }
 
-  final path = result.files.single.path;
-  if (path == null) return 'Percorso file non disponibile.';
-
-  final raw = await File(path).readAsString(encoding: utf8);
   final Map<String, dynamic> payload;
   try {
     payload = jsonDecode(raw) as Map<String, dynamic>;

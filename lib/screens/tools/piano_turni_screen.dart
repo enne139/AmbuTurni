@@ -1,16 +1,20 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import '../../db/backup_file.dart';
 import '../../utils/format.dart';
 import '../../utils/piano_cache.dart';
 import '../../utils/piano_mensile.dart';
+import '../../utils/platform_check.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
+
+const _uuid = Uuid();
 
 // Preferenze persistenti (chiavi in utils/prefs_keys.dart, condivise col
 // backup): link dell'ultimo foglio (ricaricato all'apertura), archivio dei
@@ -796,34 +800,87 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     return 'altro';
   }
 
-  /// Apre l'editor eventi del calendario di sistema precompilato col blocco:
-  /// titolo "CVS (fascia)" e data/orario letti dal foglio (notte a cavallo
-  /// di mezzanotte inclusa); niente descrizione, per scelta dell'utente.
-  /// Si passa dall'intent di inserimento, non dalla scrittura diretta:
-  /// nessun permesso runtime e l'utente conferma/ritocca l'evento nella sua
-  /// app calendario. Per lo stesso motivo il colore dell'evento non è
-  /// impostabile da qui: l'intent Android non lo prevede, l'evento prende
-  /// il colore del calendario su cui viene salvato.
+  /// Su Android/iOS apre l'editor eventi del calendario di sistema
+  /// precompilato col blocco: titolo "CVS (fascia)" e data/orario letti dal
+  /// foglio (notte a cavallo di mezzanotte inclusa); niente descrizione, per
+  /// scelta dell'utente. Si passa dall'intent di inserimento, non dalla
+  /// scrittura diretta: nessun permesso runtime e l'utente conferma/ritocca
+  /// l'evento nella sua app calendario. Per lo stesso motivo il colore
+  /// dell'evento non è impostabile da qui: l'intent Android non lo prevede,
+  /// l'evento prende il colore del calendario su cui viene salvato.
+  /// Su desktop/web (add_2_calendar non ha né canale nativo né
+  /// implementazione browser) si genera invece un file .ics standard: vedi
+  /// `_eventoIcs`.
   Future<void> _aggiungiAlCalendario(List<SlotPiano> gruppo) async {
-    // add_2_calendar è solo Android/iOS: su desktop il canale nativo manca.
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Aggiunta al calendario disponibile solo su Android')));
-      return;
-    }
     final intervallo = _piano!.intervalloEvento(gruppo.first);
     if (intervallo == null) return; // il pulsante non compare senza orario
     final (inizio, fine) = intervallo;
+    final titolo = 'CVS (${_etichettaEvento(gruppo.first)})';
 
-    final ok = await Add2Calendar.addEvent2Cal(Event(
-      title: 'CVS (${_etichettaEvento(gruppo.first)})',
-      startDate: inizio,
-      endDate: fine,
-    ));
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Nessuna app calendario trovata sul dispositivo')));
+    if (isMobile) {
+      final ok = await Add2Calendar.addEvent2Cal(Event(
+        title: titolo,
+        startDate: inizio,
+        endDate: fine,
+      ));
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Nessuna app calendario trovata sul dispositivo')));
+      }
+      return;
     }
+
+    // Desktop/web: si salva un file .ics con lo stesso percorso usato per il
+    // backup (dialog "Salva come" su desktop, download/share sul web) — la
+    // funzione è già generica (testo + nome file), riusata invece di
+    // duplicare la logica io/web per un secondo tipo di file.
+    try {
+      final ics = _eventoIcs(titolo, inizio, fine);
+      final nomeFile = 'cvs_${dateToIso(inizio)}_${_etichettaEvento(gruppo.first)}.ics';
+      final path = await salvaFilePiattaforma(ics, nomeFile, 'Evento calendario AmbuTurni');
+      if (mounted) {
+        final msg = path != null ? 'File calendario salvato.' : 'Salvataggio annullato.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Errore: $e')));
+      }
+    }
+  }
+
+  /// Contenuto testuale di un file .ics (RFC 5545) con un singolo evento.
+  /// Orari "floating" (senza Z/TZID): stesso orario locale passato finora
+  /// all'intent Android, nessuna conversione fuso orario altrove nel codice.
+  static String _eventoIcs(String titolo, DateTime inizio, DateTime fine) {
+    String fmt(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}'
+        '${d.month.toString().padLeft(2, '0')}'
+        '${d.day.toString().padLeft(2, '0')}T'
+        '${d.hour.toString().padLeft(2, '0')}'
+        '${d.minute.toString().padLeft(2, '0')}'
+        '${d.second.toString().padLeft(2, '0')}';
+    String esc(String s) => s
+        .replaceAll('\\', '\\\\')
+        .replaceAll(';', '\\;')
+        .replaceAll(',', '\\,')
+        .replaceAll('\n', '\\n');
+    final dtstamp = '${fmt(DateTime.now().toUtc())}Z';
+    final uid = '${_uuid.v4()}@ambuturni';
+    return [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//AmbuTurni//IT',
+      'BEGIN:VEVENT',
+      'UID:$uid',
+      'DTSTAMP:$dtstamp',
+      'DTSTART:${fmt(inizio)}',
+      'DTEND:${fmt(fine)}',
+      'SUMMARY:${esc(titolo)}',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
   }
 
   Widget _cardBlocco(List<SlotPiano> gruppo) {
