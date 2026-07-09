@@ -10,3 +10,9 @@ const kPrefPianoTurniUltimaRicerca = 'piano_turni_ultima_ricerca';
 // mostrare subito all'apertura, prima che il download aggiorni i dati.
 // Non va nel backup: le cache sono locali al device e non vengono esportate.
 const kPrefPianoTurniUltimoMese = 'piano_turni_ultimo_mese';
+
+// Chiavi del tool Magazzino Verde (URL del server e chiave API del device).
+// Anche loro condivise col backup, per la stessa ragione: senza, un restore
+// su un device nuovo costringerebbe a recuperare URL e chiave a mano.
+const kPrefMagazzinoUrl = 'magazzino_url';
+const kPrefMagazzinoApiKey = 'magazzino_api_key';

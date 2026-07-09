@@ -80,6 +80,8 @@ lib/
 ├── utils/
 │   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
 │   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
+│   ├── magazzino_api.dart         client dell'API JSON del gestionale Magazzino Verde
+│   │                               (Dart puro, testato con MockClient)
 │   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
 │   ├── piano_cache.dart           cache dei piani decodificati: solo export condizionale
 │   │                               (vedi Piattaforma web), impl. in piano_cache_io.dart
@@ -87,7 +89,8 @@ lib/
 │   │                               (shared_preferences/localStorage)
 │   ├── platform_check.dart        isDesktop/isMobile: export condizionale io/web di
 │   │                               Platform.isX (dart:io non compila sul target web)
-│   └── prefs_keys.dart            chiavi SharedPreferences condivise (Piano turni + backup)
+│   └── prefs_keys.dart            chiavi SharedPreferences condivise col backup
+│                                   (Piano turni + Magazzino Verde)
 ├── db/
 │   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
 │   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
@@ -123,8 +126,11 @@ lib/
     ├── statistiche/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
-    │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni)
+    │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni,
+    │   │                               Magazzino Verde)
     │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni
+    │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
+    │   │                               esterno Magazzino Verde (API JSON con chiave)
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
@@ -304,6 +310,31 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   Cache illeggibile/valori sconosciuti = cache assente (si riscarica);
   rimuovere un foglio dai salvati elimina anche il suo file. Il pulsante
   ricarica resta non-silenzioso: feedback esplicito con lo spinner.
+- **Tool "Magazzino Verde"** (`magazzino_screen.dart` +
+  `utils/magazzino_api.dart`): si collega al gestionale di magazzino esterno
+  dell'utente (progetto Go separato, stessa istanza Gitea del backend) via la
+  sua API JSON (`/api/v1`, header `X-API-Key`). Client Dart puro come
+  `piano_mensile.dart`, unit-testato con `MockClient` di
+  `package:http/testing` (nessun server vero nei test, nessun package nuovo:
+  `http` c'era già); usa solo la lista materiali e la POST movimenti per ID —
+  gli endpoint per codice a barre sono pensati per lo scanner sul Raspberry
+  Pi, qui i codici servono solo alla ricerca testuale locale (si possono
+  digitare le cifre del barcode). UI: lista giacenze con evidenza rossa
+  "sotto scorta" (giacenza <= soglia di allerta, stesso criterio della home
+  web del gestionale) e chip-filtro col conteggio; tap su un materiale →
+  bottom sheet carico/scarico con stepper/campo quantità. La POST parte
+  dallo sheet, che si chiude solo a successo (un errore resta visibile
+  accanto ai pulsanti) restituendo il materiale aggiornato dalla risposta
+  201: si aggiorna la sola riga toccata, senza ricaricare la lista, e il
+  verso mostrato nello snackbar è dedotto dalla giacenza prima/dopo (dato
+  confermato dal server). Configurazione URL+chiave API in SharedPreferences
+  (`kPrefMagazzino*` in `prefs_keys.dart`), inclusa nella sezione
+  `preferenze` del backup — chiave API compresa, scelta deliberata: il
+  backup completo serve al trasferimento su device nuovo e senza chiave il
+  tool resterebbe scollegato — senza bump del formato (ogni chiave della
+  sezione è opzionale, i backup vecchi restano validi). Limite noto su web:
+  la chiamata dal browser richiede che il server esponga gli header CORS —
+  vincolo lato server, non aggirabile dal client Flutter.
 - **Tab unificata "Attività"** (Turni + Assistenze): scelta dell'utente tra
   le due alternative proposte (selettore vs lista unica mescolata) — vince
   il selettore `SegmentedButton` sotto l'AppBar perché lascia intatte le due
@@ -558,7 +589,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tools → Piano turni**: calendario equipaggi/buchi dal foglio Google
   mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
   ruolo, aggiunta del turno al calendario di sistema).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 64 test unitari.
+- ✅ **Tools → Magazzino Verde**: giacenze e movimenti carico/scarico dal
+  gestionale di magazzino esterno (API JSON con chiave, evidenza sotto scorta).
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 82 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO
