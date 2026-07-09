@@ -6,7 +6,9 @@ import 'backup_file.dart';
 import 'database.dart';
 import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
 
-// Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni).
+// Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni; poi
+// estesa al Magazzino Verde senza bump: ogni chiave è opzionale, un backup
+// che non la contiene lascia la preferenza del device com'era).
 // L'import accetta qualunque versione >= 1: i backup v1 semplicemente non
 // hanno la sezione e le preferenze del device restano com'erano.
 const int _backupVersion = 2;
@@ -92,6 +94,12 @@ Future<String?> exportBackup() async {
     kPrefPianoTurniUrl: prefs.getString(kPrefPianoTurniUrl),
     kPrefPianoTurniFogli: fogli,
     kPrefPianoTurniUltimaRicerca: prefs.getString(kPrefPianoTurniUltimaRicerca),
+    // Configurazione del Magazzino Verde: la chiave API viene inclusa
+    // deliberatamente — il backup completo serve al trasferimento su un
+    // device nuovo, e senza chiave il tool resterebbe scollegato (andrebbe
+    // rigenerata dalla pagina Amministrazione del gestionale).
+    kPrefMagazzinoUrl: prefs.getString(kPrefMagazzinoUrl),
+    kPrefMagazzinoApiKey: prefs.getString(kPrefMagazzinoApiKey),
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
@@ -342,6 +350,14 @@ Future<String> importBackup() async {
     final ricerca = preferenze[kPrefPianoTurniUltimaRicerca];
     if (ricerca is String && ricerca.isNotEmpty) {
       await prefs.setString(kPrefPianoTurniUltimaRicerca, ricerca);
+    }
+    final magazzinoUrl = preferenze[kPrefMagazzinoUrl];
+    if (magazzinoUrl is String && magazzinoUrl.isNotEmpty) {
+      await prefs.setString(kPrefMagazzinoUrl, magazzinoUrl);
+    }
+    final magazzinoKey = preferenze[kPrefMagazzinoApiKey];
+    if (magazzinoKey is String && magazzinoKey.isNotEmpty) {
+      await prefs.setString(kPrefMagazzinoApiKey, magazzinoKey);
     }
   }
 

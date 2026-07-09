@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../utils/theme.dart';
+import 'magazzino_screen.dart';
 import 'materiali_usati_screen.dart';
 import 'piano_turni_screen.dart';
 
@@ -36,6 +37,18 @@ class ToolsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const PianoTurniScreen()),
+              ),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.warehouse_outlined, color: kPrimary),
+              title: const Text('Magazzino Verde'),
+              subtitle: const Text('Giacenze e movimenti dal gestionale di magazzino'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MagazzinoScreen()),
               ),
             ),
           ),
