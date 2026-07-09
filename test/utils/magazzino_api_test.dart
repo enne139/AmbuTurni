@@ -118,12 +118,13 @@ void main() {
       expect(lista.single.nome, 'cerotti già tagliati');
     });
 
-    test('401 → messaggio sulla chiave API', () async {
+    test('401 → messaggio sulla chiave API (e statusCode esposto)', () async {
       final api = _api(_json({'error': 'unauthorized'}, 401), []);
       expect(
         () => api.getMateriali(),
-        throwsA(isA<MagazzinoApiException>().having(
-            (e) => e.message, 'message', contains('Chiave API'))),
+        throwsA(isA<MagazzinoApiException>()
+            .having((e) => e.message, 'message', contains('Chiave API'))
+            .having((e) => e.statusCode, 'statusCode', 401)),
       );
     });
 
@@ -153,6 +154,51 @@ void main() {
         () => api.getMateriali(),
         throwsA(isA<MagazzinoApiException>().having(
             (e) => e.message, 'message', contains('502'))),
+      );
+    });
+  });
+
+  group('getMaterialePerCodice', () {
+    test('chiama GET /api/v1/materials/code/{code} e parsa il materiale',
+        () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json({
+          'id': 'abc',
+          'name': 'garze',
+          'codes': ['8001234567890'],
+          'amount': 50,
+          'alert': 10,
+        }, 200),
+        richieste,
+      );
+      final m = await api.getMaterialePerCodice('8001234567890');
+      expect(richieste.single.method, 'GET');
+      expect(richieste.single.url.toString(),
+          'https://magazzino.test/api/v1/materials/code/8001234567890');
+      expect(richieste.single.headers['X-API-Key'], 'chiave-di-prova');
+      expect(m.nome, 'garze');
+      expect(m.codici, contains('8001234567890'));
+    });
+
+    test('caratteri speciali nel codice (es. QR con /) percent-encoded',
+        () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json({'id': 'x', 'name': 'x', 'amount': 1, 'alert': 0}, 200),
+        richieste,
+      );
+      await api.getMaterialePerCodice('AB/12 34');
+      expect(richieste.single.url.toString(),
+          'https://magazzino.test/api/v1/materials/code/AB%2F12%2034');
+    });
+
+    test('404 (codice non associato) espone statusCode per la UI', () async {
+      final api = _api(_json({'error': 'not found'}, 404), []);
+      expect(
+        () => api.getMaterialePerCodice('0000000000000'),
+        throwsA(isA<MagazzinoApiException>()
+            .having((e) => e.statusCode, 'statusCode', 404)),
       );
     });
   });

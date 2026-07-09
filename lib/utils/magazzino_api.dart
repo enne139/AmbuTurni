@@ -44,7 +44,14 @@ class MaterialeMagazzino {
 /// Errore dell'API con messaggio già pronto da mostrare all'utente.
 class MagazzinoApiException implements Exception {
   final String message;
-  const MagazzinoApiException(this.message);
+
+  /// Codice HTTP che ha originato l'errore (null se l'errore non viene da
+  /// una risposta HTTP, es. body malformato). Serve alla UI per distinguere
+  /// i casi: dopo una scansione il 404 non è un guasto, significa "codice
+  /// non ancora associato a nessun materiale".
+  final int? statusCode;
+
+  const MagazzinoApiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;
@@ -59,10 +66,10 @@ String messaggioErroreMagazzino(Object e) {
   return 'Impossibile contattare il server. ($e)';
 }
 
-/// Client minimale dei soli endpoint usati dall'app: lista materiali e
-/// registrazione movimenti per ID. La ricerca per codice a barre resta fuori:
-/// è pensata per lo scanner sul Raspberry Pi, qui i codici servono solo come
-/// campo di ricerca testuale sulla lista già scaricata.
+/// Client minimale dei soli endpoint usati dall'app: lista materiali,
+/// registrazione movimenti per ID e ricerca per codice a barre (usata come
+/// fallback dopo una scansione, quando il codice non compare nella lista
+/// già scaricata — lo stesso flusso previsto per lo scanner sul Raspberry).
 class MagazzinoApi {
   final String baseUrl;
   final String apiKey;
@@ -115,6 +122,26 @@ class MagazzinoApi {
     return materiali;
   }
 
+  /// GET /api/v1/materials/code/{code} — materiale associato a un codice a
+  /// barre. Chiamata dopo una scansione, come fallback quando il codice non
+  /// è su nessun materiale della lista già scaricata (es. associato dopo
+  /// l'ultimo refresh); 404 = codice non associato a nessun materiale.
+  Future<MaterialeMagazzino> getMaterialePerCodice(String codice) async {
+    final resp = await _client
+        .get(
+          Uri.parse(
+              '$baseUrl/api/v1/materials/code/${Uri.encodeComponent(codice)}'),
+          headers: _headers,
+        )
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    if (decoded is! Map) {
+      throw const MagazzinoApiException('Risposta del server non riconosciuta.');
+    }
+    return MaterialeMagazzino.fromMap(Map<String, dynamic>.from(decoded));
+  }
+
   /// POST /api/v1/materials/{id}/transactions — registra un movimento:
   /// [amount] positivo = carico, negativo = scarico (la giacenza si muove
   /// solo così, mai scrivendola direttamente: lo storico resta coerente).
@@ -144,12 +171,15 @@ class MagazzinoApi {
     switch (resp.statusCode) {
       case 401:
         throw const MagazzinoApiException(
-            'Chiave API mancante o errata: controlla la configurazione.');
+            'Chiave API mancante o errata: controlla la configurazione.',
+            statusCode: 401);
       case 503:
         throw const MagazzinoApiException(
-            'Nessuna chiave API configurata sul server.');
+            'Nessuna chiave API configurata sul server.',
+            statusCode: 503);
       case 404:
-        throw const MagazzinoApiException('Materiale non trovato sul server.');
+        throw const MagazzinoApiException('Materiale non trovato sul server.',
+            statusCode: 404);
     }
     String? messaggioServer;
     try {
@@ -162,6 +192,7 @@ class MagazzinoApi {
     }
     throw MagazzinoApiException(
         'Errore del server (${resp.statusCode})'
-        '${messaggioServer == null ? '' : ': $messaggioServer'}.');
+        '${messaggioServer == null ? '' : ': $messaggioServer'}.',
+        statusCode: resp.statusCode);
   }
 }

@@ -63,6 +63,7 @@
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Lettura XLSX (Piano turni) | `excel` |
 | Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
+| Scansione barcode/QR (Magazzino) | `mobile_scanner` (solo Android/iOS; il FAB Scansiona non esiste su desktop/web) |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
 
@@ -131,6 +132,8 @@ lib/
     │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni
     │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
     │   │                               esterno Magazzino Verde (API JSON con chiave)
+    │   ├── scanner_barcode_screen.dart scanner barcode/QR a schermo intero (mobile_scanner),
+    │   │                               pop col codice letto; aperto solo dietro isMobile
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
@@ -315,11 +318,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   dell'utente (progetto Go separato, stessa istanza Gitea del backend) via la
   sua API JSON (`/api/v1`, header `X-API-Key`). Client Dart puro come
   `piano_mensile.dart`, unit-testato con `MockClient` di
-  `package:http/testing` (nessun server vero nei test, nessun package nuovo:
-  `http` c'era già); usa solo la lista materiali e la POST movimenti per ID —
-  gli endpoint per codice a barre sono pensati per lo scanner sul Raspberry
-  Pi, qui i codici servono solo alla ricerca testuale locale (si possono
-  digitare le cifre del barcode). UI: lista giacenze con evidenza rossa
+  `package:http/testing` (nessun server vero nei test); usa la lista
+  materiali, la POST movimenti per ID e la GET per codice a barre (solo come
+  fallback della scansione, vedi bullet successivo — nella ricerca testuale
+  i codici si confrontano sulla lista già scaricata, si possono digitare le
+  cifre del barcode). UI: lista giacenze con evidenza rossa
   "sotto scorta" (giacenza <= soglia di allerta, stesso criterio della home
   web del gestionale) e chip-filtro col conteggio; tap su un materiale →
   bottom sheet carico/scarico con stepper/campo quantità. La POST parte
@@ -335,6 +338,28 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   sezione è opzionale, i backup vecchi restano validi). Limite noto su web:
   la chiamata dal browser richiede che il server esponga gli header CORS —
   vincolo lato server, non aggirabile dal client Flutter.
+- **Magazzino → scansione barcode/QR su mobile**
+  (`scanner_barcode_screen.dart`, package `mobile_scanner`): FAB "Scansiona"
+  nella schermata Magazzino, solo su Android/iOS dietro `isMobile` (il
+  plugin non ha implementazione desktop — stesso pattern di add_2_calendar;
+  sul web il FAB non compare). Lo scanner è una schermata generica che fa
+  pop col primo codice letto (guard anti-pop-multipli: `onDetect` arriva a
+  raffica finché il codice resta inquadrato), con torcia in AppBar e
+  `errorBuilder` per il permesso fotocamera negato. Il permesso CAMERA
+  NON va aggiunto al manifest dell'app: sta nel manifest del plugin e il
+  manifest merger lo porta nell'APK anche in release (verificato nel
+  sorgente del package — non è il caso di INTERNET, che era iniettato dal
+  tooling solo in debug); la richiesta runtime la gestisce il plugin.
+  Flusso dopo la lettura: match locale sui `codes` della lista già
+  scaricata (immediato), poi `GET /materials/code/{code}` come fallback per
+  materiali/codici associati dopo l'ultimo refresh — il 404 qui non è un
+  guasto ma "codice non associato" (messaggio dedicato, distinto tramite il
+  campo `statusCode` di `MagazzinoApiException`); trovato il materiale si
+  apre direttamente lo sheet carico/scarico (flusso scanner del Raspberry:
+  scansiona → registra). Un materiale arrivato dal fallback e assente
+  dalla lista viene inserito in ordine alfabetico dopo il movimento.
+  mobile_scanner richiede Android SDK Platform 35 installata (la build la
+  scarica da sola).
 - **Tab unificata "Attività"** (Turni + Assistenze): scelta dell'utente tra
   le due alternative proposte (selettore vs lista unica mescolata) — vince
   il selettore `SegmentedButton` sotto l'AppBar perché lascia intatte le due
@@ -590,8 +615,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
   ruolo, aggiunta del turno al calendario di sistema).
 - ✅ **Tools → Magazzino Verde**: giacenze e movimenti carico/scarico dal
-  gestionale di magazzino esterno (API JSON con chiave, evidenza sotto scorta).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 82 test unitari.
+  gestionale di magazzino esterno (API JSON con chiave, evidenza sotto
+  scorta, scansione barcode/QR su mobile).
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 85 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/magazzino_api.dart';
+import '../../utils/platform_check.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
+import 'scanner_barcode_screen.dart';
 
 // Colori dei movimenti: verde per il carico, rosso per lo scarico — stessi
 // toni dei codici verde/rosso già usati nel resto dell'app.
@@ -135,7 +137,16 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
     if (aggiornato == null || !mounted) return;
     setState(() {
       final idx = _materiali.indexWhere((x) => x.id == aggiornato.id);
-      if (idx != -1) _materiali[idx] = aggiornato;
+      if (idx != -1) {
+        _materiali[idx] = aggiornato;
+      } else {
+        // Materiale arrivato dal fallback per codice scansionato (non era
+        // nella lista, es. creato dopo l'ultimo refresh): si inserisce
+        // mantenendo lo stesso ordine per nome della lista scaricata.
+        _materiali.add(aggiornato);
+        _materiali.sort(
+            (a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+      }
     });
     // Il verso del movimento si deduce dalla giacenza prima/dopo: è il dato
     // confermato dal server, non quello che l'utente credeva di inviare.
@@ -144,6 +155,44 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
       content: Text('${delta >= 0 ? 'Carico' : 'Scarico'} registrato: '
           '«${aggiornato.nome}» ora ha ${aggiornato.giacenza} pezzi.'),
     ));
+  }
+
+  /// Scansione barcode/QR (solo mobile, il FAB non esiste altrove): il
+  /// codice letto si cerca prima nella lista già scaricata (immediato), poi
+  /// sull'endpoint per codice come fallback — copre un materiale o un codice
+  /// associato dopo l'ultimo refresh. Trovato il materiale, si apre
+  /// direttamente lo sheet carico/scarico: è il flusso "da magazzino"
+  /// (scansiona → registra), lo stesso previsto per lo scanner del Raspberry.
+  Future<void> _scansiona() async {
+    final api = _api;
+    if (api == null) return;
+    final codice = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const ScannerBarcodeScreen()),
+    );
+    if (codice == null || codice.isEmpty || !mounted) return;
+    var materiale =
+        _materiali.where((m) => m.codici.contains(codice)).firstOrNull;
+    if (materiale == null) {
+      try {
+        materiale = await api.getMaterialePerCodice(codice);
+      } catch (e) {
+        if (!mounted) return;
+        // Il 404 qui non è un guasto: il codice esiste ma nessun materiale
+        // lo ha ancora tra i suoi (si associa dall'interfaccia web).
+        final nonAssociato =
+            e is MagazzinoApiException && e.statusCode == 404;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(nonAssociato
+              ? 'Nessun materiale ha il codice "$codice": associalo dalla '
+                  'scheda del materiale nell\'interfaccia web.'
+              : messaggioErroreMagazzino(e)),
+        ));
+        return;
+      }
+    }
+    if (!mounted) return;
+    await _movimento(materiale);
   }
 
   /// Lista filtrata da ricerca testuale (nome, descrizione o codice a barre:
@@ -179,6 +228,16 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
         ],
       ),
       body: _buildBody(),
+      // Scansione solo su Android/iOS: mobile_scanner non ha implementazione
+      // desktop e sul web la fotocamera non è il caso d'uso di questa app
+      // (stesso criterio di add_2_calendar nel Piano turni).
+      floatingActionButton: _api != null && isMobile
+          ? FloatingActionButton.extended(
+              onPressed: _scansiona,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scansiona'),
+            )
+          : null,
     );
   }
 
