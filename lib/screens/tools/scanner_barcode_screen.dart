@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../../utils/scanner_errors.dart';
 
 /// Scanner barcode/QR a schermo intero: si chiude da solo alla prima lettura
 /// restituendo il valore del codice via Navigator.pop (null se l'utente torna
@@ -31,23 +32,6 @@ class _ScannerBarcodeScreenState extends State<ScannerBarcodeScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
-
-  /// Messaggio per l'errore della fotocamera, differenziato su web perché lì
-  /// il permesso e i requisiti (HTTPS) sono del browser, non dell'app.
-  String _messaggioErrore(MobileScannerErrorCode codice) {
-    if (codice == MobileScannerErrorCode.permissionDenied) {
-      return kIsWeb
-          ? 'Permesso fotocamera negato: concedilo dalle impostazioni del '
-              'sito nel browser per scansionare.'
-          : 'Permesso fotocamera negato: concedilo dalle impostazioni di '
-              'sistema dell\'app per scansionare.';
-    }
-    if (kIsWeb && codice == MobileScannerErrorCode.unsupported) {
-      return 'Il browser non supporta l\'accesso alla fotocamera: serve una '
-          'connessione HTTPS e un browser aggiornato (Chrome, Edge, Firefox).';
-    }
-    return 'Fotocamera non disponibile (${codice.name}).';
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -92,7 +76,7 @@ class _ScannerBarcodeScreenState extends State<ScannerBarcodeScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  _messaggioErrore(error.errorCode),
+                  messaggioErroreFotocamera(error.errorCode),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70),
                 ),

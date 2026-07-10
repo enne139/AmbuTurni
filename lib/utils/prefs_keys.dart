@@ -16,3 +16,10 @@ const kPrefPianoTurniUltimoMese = 'piano_turni_ultimo_mese';
 // su un device nuovo costringerebbe a recuperare URL e chiave a mano.
 const kPrefMagazzinoUrl = 'magazzino_url';
 const kPrefMagazzinoApiKey = 'magazzino_api_key';
+
+// Elenco (List<String>) degli ID dei tool attivi in Impostazioni → Tools
+// attivi, vedi utils/tools_config.dart. Assente = mai salvato: si applicano
+// i default del catalogo (attivoDiDefault), non tutti abilitati (es. il
+// Magazzino Verde parte disattivato). Una volta salvato riflette esattamente
+// le scelte dell'utente, incluso nel backup come le altre preferenze.
+const kPrefToolsAttivi = 'tools_attivi';

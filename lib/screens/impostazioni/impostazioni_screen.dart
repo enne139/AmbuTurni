@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import '../../db/backup.dart';
 import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
+import '../../utils/tools_config.dart';
 import 'turni_filtrati_screen.dart';
 
 /// Schermata Impostazioni: CRUD di associazioni, persone, ospedali, tipologie.
@@ -21,6 +23,8 @@ class ImpostazioniScreen extends StatelessWidget {
         children: const [
           _SezioneBackup(),
           Divider(height: 24),
+          _SezioneToolsAttivi(),
+          Divider(height: 24),
           _SezioneAssociazioni(),
           Divider(height: 1),
           _SezionePersone(),
@@ -28,7 +32,9 @@ class ImpostazioniScreen extends StatelessWidget {
           _SezioneOspedali(),
           Divider(height: 1),
           _SezioneTipologie(),
-          SizedBox(height: 24),
+          Divider(height: 24),
+          _VersioneApp(),
+          SizedBox(height: 8),
         ],
       ),
     );
@@ -567,6 +573,7 @@ class _SezioneBackupState extends State<_SezioneBackup> {
       context.read<TurniProvider>().ricarica();
       context.read<AssistenzeProvider>().ricarica();
       context.read<StatisticheProvider>().ricarica();
+      context.read<ToolsProvider>().carica();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
@@ -638,6 +645,87 @@ class _SezioneBackupState extends State<_SezioneBackup> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Tools attivi
+// ---------------------------------------------------------------------------
+
+/// Switch per attivare/disattivare i tool mostrati nella tab Tools
+/// (ToolsProvider): il Magazzino Verde parte disattivato di default (si
+/// collega a un server esterno da configurare), gli altri sono attivi.
+/// Collassata di default come le sezioni anagrafiche (_SezioneAnag): non è
+/// qualcosa che si tocca spesso, non deve occupare spazio in cima alla
+/// schermata a ogni apertura.
+class _SezioneToolsAttivi extends StatefulWidget {
+  const _SezioneToolsAttivi();
+
+  @override
+  State<_SezioneToolsAttivi> createState() => _SezioneToolsAttiviState();
+}
+
+class _SezioneToolsAttiviState extends State<_SezioneToolsAttivi> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tools = context.watch<ToolsProvider>();
+    final numAttivi = kToolsDisponibili.where((t) => tools.attivo(t.id)).length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.handyman_outlined, size: 18, color: kPrimary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Tools attivi',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: kPrimary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$numAttivi/${kToolsDisponibili.length}',
+                    style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          if (!tools.caricato)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: LinearProgressIndicator(),
+            )
+          else
+            ...kToolsDisponibili.map((t) => SwitchListTile(
+                  dense: true,
+                  secondary: Icon(t.icon, color: Colors.white70),
+                  title: Text(t.titolo),
+                  subtitle: Text(t.sottotitolo, style: const TextStyle(color: Colors.white54)),
+                  value: tools.attivo(t.id),
+                  activeTrackColor: kPrimary,
+                  onChanged: (v) => context.read<ToolsProvider>().setAttivo(t.id, v),
+                )),
+      ],
+    );
+  }
+}
+
 /// Dialog con campo nome e palette colori per associazioni e tipologie.
 Future<void> _dialogNomeEColore(
   BuildContext context,
@@ -698,6 +786,36 @@ Future<void> _dialogNomeEColore(
   );
   if (ok == true && ctrl.text.trim().isNotEmpty) {
     await onSalva(ctrl.text.trim(), coloreSelezionato);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Versione app
+// ---------------------------------------------------------------------------
+
+/// Numero di versione (X.Y.Z+N) in fondo a Impostazioni, letto dalla
+/// piattaforma con package_info_plus invece che duplicato a mano: riflette
+/// sempre quello che è stato davvero compilato in pubspec.yaml.
+class _VersioneApp extends StatelessWidget {
+  const _VersioneApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Center(
+            child: Text(
+              info == null ? '' : 'AmbuTurni v${info.version}+${info.buildNumber}',
+              style: const TextStyle(color: Colors.white24, fontSize: 12),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

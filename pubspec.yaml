@@ -66,7 +66,13 @@ dependencies:
   # "Aggiungi al calendario" sulle card dei blocchi). Su Android apre l'editor
   # evento del calendario via intent, senza permessi runtime.
   add_2_calendar: ^3.1.1
+
+  # Scansione barcode/QR (tool Magazzino Verde). Android/iOS/web.
   mobile_scanner: ^7.2.0
+
+  # Versione app compilata (X.Y.Z+N) letta dalla piattaforma, per mostrarla
+  # in Impostazioni senza duplicarla a mano fuori da pubspec.yaml.
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

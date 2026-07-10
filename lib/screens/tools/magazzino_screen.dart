@@ -5,6 +5,7 @@ import '../../utils/magazzino_api.dart';
 import '../../utils/platform_check.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
+import 'conta_screen.dart';
 import 'scanner_barcode_screen.dart';
 
 // Colori dei movimenti: verde per il carico, rosso per lo scarico — stessi
@@ -214,6 +215,17 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
       appBar: AppBar(
         title: const Text('Magazzino Verde'),
         actions: [
+          // Contatore indipendente dall'API (nessun materiale selezionato,
+          // nessuna giacenza toccata): sempre disponibile, anche a server
+          // non configurato.
+          IconButton(
+            icon: const Icon(Icons.numbers),
+            tooltip: 'Conta',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ContaScreen()),
+            ),
+          ),
           if (_api != null)
             IconButton(
               icon: const Icon(Icons.refresh),

@@ -24,9 +24,10 @@ class _AppNavigatorState extends State<AppNavigator> {
   @override
   void initState() {
     super.initState();
-    // Carica le anagrafiche una sola volta all'avvio.
+    // Carica le anagrafiche e i tool attivi una sola volta all'avvio.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AnagraficheProvider>().carica();
+      context.read<ToolsProvider>().carica();
     });
   }
 

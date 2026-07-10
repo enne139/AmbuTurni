@@ -1,59 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
+import '../../utils/tools_config.dart';
 import 'magazzino_screen.dart';
 import 'materiali_usati_screen.dart';
 import 'piano_turni_screen.dart';
 
+// Schermata di destinazione per ogni tool del catalogo (utils/tools_config.dart).
+// Mappa separata dai metadati: questi widget non servono a Impostazioni,
+// che mostra solo gli switch.
+final Map<String, WidgetBuilder> _destinazioni = {
+  kToolMaterialiUsati: (_) => const MaterialiUsatiScreen(),
+  kToolPianoTurni: (_) => const PianoTurniScreen(),
+  kToolMagazzino: (_) => const MagazzinoScreen(),
+};
+
 /// Elenco degli strumenti extra dell'app (fuori dal flusso turni/assistenze).
-/// Pensata per ospitare più strumenti senza ridisegnare la navigazione principale.
+/// Mostra solo i tool attivati da Impostazioni → Tools attivi (ToolsProvider):
+/// pensata per ospitare più strumenti senza ridisegnare la navigazione
+/// principale, senza però ingombrare la lista con quelli che non si usano.
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final tools = context.watch<ToolsProvider>();
+    if (!tools.caricato) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final attivi = kToolsDisponibili.where((t) => tools.attivo(t.id)).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Tools')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.inventory_2_outlined, color: kPrimary),
-              title: const Text('Materiali usati'),
-              subtitle: const Text('Segna i materiali usati da ripristinare'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MaterialiUsatiScreen()),
+      body: attivi.isEmpty
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text(
+                  'Nessun tool attivo: abilitali da Impostazioni → Tools attivi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54),
+                ),
               ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: attivi.map((t) => Card(
+                child: ListTile(
+                  leading: Icon(t.icon, color: kPrimary),
+                  title: Text(t.titolo),
+                  subtitle: Text(t.sottotitolo),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: _destinazioni[t.id]!),
+                  ),
+                ),
+              )).toList(),
             ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.event_busy_outlined, color: kPrimary),
-              title: const Text('Piano turni'),
-              subtitle: const Text('Equipaggi e buchi dal foglio Google dei turni'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PianoTurniScreen()),
-              ),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.warehouse_outlined, color: kPrimary),
-              title: const Text('Magazzino Verde'),
-              subtitle: const Text('Giacenze e movimenti dal gestionale di magazzino'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MagazzinoScreen()),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

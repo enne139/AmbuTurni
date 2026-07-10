@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../db/helpers.dart';
 import '../db/models.dart';
+import '../utils/prefs_keys.dart';
+import '../utils/tools_config.dart';
 
 /// Provider per le anagrafiche (associazioni, persone, ospedali, tipologie).
 /// Caricato all'avvio in AppNavigator e richiamato dopo ogni modifica nelle
@@ -141,5 +144,46 @@ class AssistenzeProvider extends ChangeNotifier {
     assistenze = await getAssistenze(
         associazioneId: _filtroAssociazioneId, ricerca: _ricerca);
     notifyListeners();
+  }
+}
+
+/// Provider per quali tool (Materiali usati, Piano turni, Magazzino Verde...)
+/// sono attivi nella tab Tools, scelti da Impostazioni → Tools attivi.
+/// Stesso motivo di StatisticheProvider: ToolsScreen e ImpostazioniScreen
+/// restano entrambe montate nell'IndexedStack di AppNavigator, quindi uno
+/// switch cambiato in Impostazioni non farebbe ricostruire da solo la lista
+/// già mostrata in Tools senza un provider condiviso che le tiene allineate.
+class ToolsProvider extends ChangeNotifier {
+  Set<String> _attivi = {};
+  bool _caricato = false;
+
+  bool get caricato => _caricato;
+
+  bool attivo(String id) => _attivi.contains(id);
+
+  /// Se la preferenza non è mai stata salvata si applicano i default del
+  /// catalogo (kToolsDisponibili): il Magazzino Verde parte disattivato.
+  Future<void> carica() async {
+    final prefs = await SharedPreferences.getInstance();
+    final salvati = prefs.getStringList(kPrefToolsAttivi);
+    _attivi = salvati != null
+        ? salvati.toSet()
+        : {
+            for (final t in kToolsDisponibili)
+              if (t.attivoDiDefault) t.id
+          };
+    _caricato = true;
+    notifyListeners();
+  }
+
+  Future<void> setAttivo(String id, bool valore) async {
+    if (valore) {
+      _attivi.add(id);
+    } else {
+      _attivi.remove(id);
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(kPrefToolsAttivi, _attivi.toList());
   }
 }

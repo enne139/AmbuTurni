@@ -65,6 +65,7 @@
 | Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
 | Scansione barcode/QR (Magazzino) | `mobile_scanner` (Android/iOS/web; il FAB Scansiona non esiste su desktop nativo) |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
+| Versione app a runtime | `package_info_plus` (legge X.Y.Z+N dalla piattaforma, mostrata in Impostazioni) |
 | Build | `flutter build apk` oppure workflow Gitea |
 
 Web (Chrome/Edge, `flutter run -d chrome` / `flutter build web`): DB via
@@ -90,8 +91,13 @@ lib/
 │   │                               (shared_preferences/localStorage)
 │   ├── platform_check.dart        isDesktop/isMobile: export condizionale io/web di
 │   │                               Platform.isX (dart:io non compila sul target web)
-│   └── prefs_keys.dart            chiavi SharedPreferences condivise col backup
-│                                   (Piano turni + Magazzino Verde)
+│   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
+│   │                               (Piano turni + Magazzino Verde + Tools attivi)
+│   ├── scanner_errors.dart        messaggio d'errore fotocamera per mobile_scanner,
+│   │                               condiviso tra scanner_barcode_screen e conta_screen
+│   └── tools_config.dart          catalogo dei tool disattivabili (id, titolo, icona,
+│                                   attivoDiDefault): fonte unica per ToolsScreen e
+│                                   Impostazioni → Tools attivi
 ├── db/
 │   ├── database.dart              getDb() singleton sqflite, schema SQL, migrations
 │   ├── models.dart                classi Dart (fromMap/toMap/copyWith) — 1:1 con le tabelle
@@ -100,7 +106,8 @@ lib/
 │                                    in backup_file.dart, export condizionale io/web (vedi
 │                                    Piattaforma web)
 ├── providers/
-│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider, StatisticheProvider
+│   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider,
+│                                   StatisticheProvider, ToolsProvider
 ├── navigation/
 │   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack);
 │                                   la tab Attività unisce Turni e Assistenze con un
@@ -128,19 +135,21 @@ lib/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
     │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni,
-    │   │                               Magazzino Verde)
+    │   │                               Magazzino Verde), filtrato dai tool attivi (ToolsProvider)
     │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni
     │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
     │   │                               esterno Magazzino Verde (API JSON con chiave)
     │   ├── scanner_barcode_screen.dart scanner barcode/QR a schermo intero (mobile_scanner),
-    │   │                               pop col codice letto; aperto solo dietro isMobile
+    │   │                               pop col codice letto; aperto solo dietro !isDesktop
+    │   ├── conta_screen.dart          contatore rapido indipendente dall'API: manuale
+    │   │                               (pulsanti grandi +1/-1) o a scansione continua
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
     │   └── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
     │                                   (doppioni case-insensitive bloccati: niente UNIQUE sul nome)
     └── impostazioni/
-        ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup
+        ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup + versione app
         └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
                                         assistenze) in cui compare una persona/ospedale
 
@@ -372,6 +381,50 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   registra). Un materiale arrivato dal fallback e assente dalla lista viene
   inserito in ordine alfabetico dopo il movimento. mobile_scanner richiede
   Android SDK Platform 35 installata (la build la scarica da sola).
+- **Magazzino → "Conta"** (`conta_screen.dart`, pulsante `Icons.numbers` in
+  AppBar): contatore rapido scollegato dall'API — nessun materiale
+  selezionato, nessuna giacenza toccata, solo un numero che sale/scende.
+  Sempre raggiungibile anche a server non configurato (`_api == null`),
+  a differenza del resto della schermata. Due modalità, cambiate da un
+  pulsante in AppBar: manuale (due pulsanti grandi +1/-1, pensati per essere
+  premuti anche con i guanti o tenendo in mano delle scatole — il -1 è
+  disabilitato sotto zero, un conteggio fisico non è mai negativo) e
+  scansione (ogni codice a barre/QR inquadrato incrementa di 1, per contare
+  oggetti che passano davanti alla fotocamera). In scansione un cooldown di
+  1200ms tra un conteggio e il successivo evita di contare più volte lo
+  stesso codice se resta a lungo davanti alla fotocamera (`onDetect` arriva
+  a raffica finché è a fuoco) — a differenza dello scanner di lookup del
+  Magazzino, qui la fotocamera resta aperta e si continua a contare finché
+  l'utente non torna alla modalità manuale, quindi non basta il guard "solo
+  la prima lettura". Il pulsante per cambiare modalità è nascosto su
+  desktop nativo (`isDesktop`, mobile_scanner non ha canale lì): la
+  modalità manuale invece funziona ovunque, quindi il contatore resta
+  sempre raggiungibile. Il messaggio d'errore fotocamera (permesso negato,
+  browser non supportato) è condiviso con `scanner_barcode_screen.dart`
+  tramite `utils/scanner_errors.dart` invece di duplicarlo.
+- **Impostazioni → Tools attivi** (`_SezioneToolsAttivi`, `ToolsProvider`,
+  `utils/tools_config.dart`): switch per attivare/disattivare i tool
+  mostrati nella tab Tools. Il Magazzino Verde parte **disattivato di
+  default** (`attivoDiDefault: false` nel catalogo): si collega a un server
+  esterno da configurare, non è utile finché non lo si imposta — meglio non
+  ingombrare la lista finché non lo si attiva esplicitamente; gli altri
+  tool sono attivi di default. Catalogo (id, titolo, sottotitolo, icona,
+  attivoDiDefault) unico in `tools_config.dart`, usato sia da
+  `ToolsScreen` (filtra `kToolsDisponibili` sugli id attivi, mappa
+  id→schermata di destinazione tenuta separata perché Impostazioni non ne
+  ha bisogno) sia da `_SezioneToolsAttivi` (uno `SwitchListTile` per voce).
+  `ToolsProvider` (stesso motivo di `StatisticheProvider`: l'IndexedStack
+  di `AppNavigator` tiene Tools e Impostazioni entrambe montate, senza un
+  provider condiviso uno switch cambiato non farebbe aggiornare la lista
+  già mostrata) salva l'insieme degli id attivi come `List<String>` in
+  SharedPreferences (`kPrefToolsAttivi`); se la chiave non è mai stata
+  salvata si applicano i default del catalogo, altrimenti si usa esattamente
+  quanto salvato (anche lista vuota, se l'utente disattiva tutto — Tools
+  mostra un messaggio invece della lista). Inclusa nel backup come le altre
+  preferenze, ma con una differenza: in `importBackup` una lista vuota è un
+  valore valido da ripristinare (a differenza delle stringhe vuote delle
+  altre preferenze, scartate) — solo il campo assente (backup precedenti a
+  questa funzionalità) lascia i default del device.
 - **Tab unificata "Attività"** (Turni + Assistenze): scelta dell'utente tra
   le due alternative proposte (selettore vs lista unica mescolata) — vince
   il selettore `SegmentedButton` sotto l'AppBar perché lascia intatte le due
@@ -530,6 +583,11 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   una voce ancora referenziata è bloccato dalle FK (voluto, a differenza dei
   materiali) ma prima falliva in silenzio; ora `_confermaEdElimina` intercetta
   l'errore FK e mostra un messaggio specifico.
+- **Versione app in Impostazioni** (`_VersioneApp` in fondo alla schermata):
+  letta a runtime con `package_info_plus` (`PackageInfo.fromPlatform()`)
+  invece di duplicare la stringa a mano — riflette sempre `X.Y.Z+N` di
+  quello che è stato davvero compilato, senza rischio di disallinearsi da
+  `pubspec.yaml` a ogni release.
 - **`MaterialeUsatoForm`: `createdAt` passato esplicitamente in modifica**:
   altrimenti l'UPDATE lo sovrascriverebbe a NULL.
 - **`MaterialePicker` come catalogo con creazione inline**, non testo libero:
@@ -619,7 +677,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Assistenze**: come i turni ma senza tipologia né servizi; ricerca
   testuale (descrizione/note) e vista calendario come i turni.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
-- ✅ **Impostazioni**: CRUD anagrafiche, "Vedi turni" per persona/ospedale.
+- ✅ **Impostazioni**: CRUD anagrafiche, "Vedi turni" per persona/ospedale,
+  Tools attivi (attiva/disattiva i tool mostrati in Tools).
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.
 - ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
 - ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione), nessuno storico.
@@ -628,7 +687,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   ruolo, aggiunta del turno al calendario di sistema).
 - ✅ **Tools → Magazzino Verde**: giacenze e movimenti carico/scarico dal
   gestionale di magazzino esterno (API JSON con chiave, evidenza sotto
-  scorta, scansione barcode/QR su mobile e web).
+  scorta, scansione barcode/QR su mobile e web, contatore rapido manuale
+  o a scansione scollegato dall'API).
 - ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 85 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 

@@ -100,6 +100,9 @@ Future<String?> exportBackup() async {
     // rigenerata dalla pagina Amministrazione del gestionale).
     kPrefMagazzinoUrl: prefs.getString(kPrefMagazzinoUrl),
     kPrefMagazzinoApiKey: prefs.getString(kPrefMagazzinoApiKey),
+    // Tool attivi in Impostazioni: null se mai salvato (si applicano i
+    // default del catalogo al restore, come su un device mai configurato).
+    kPrefToolsAttivi: prefs.getStringList(kPrefToolsAttivi),
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
@@ -358,6 +361,14 @@ Future<String> importBackup() async {
     final magazzinoKey = preferenze[kPrefMagazzinoApiKey];
     if (magazzinoKey is String && magazzinoKey.isNotEmpty) {
       await prefs.setString(kPrefMagazzinoApiKey, magazzinoKey);
+    }
+    // Lista (non stringa): a differenza delle altre preferenze una lista
+    // vuota è un valore valido (l'utente ha disattivato tutti i tool), non
+    // va scartata come le stringhe vuote sopra — solo l'assenza del campo
+    // (backup pre-funzionalità) lascia i default del device.
+    final toolsAttivi = preferenze[kPrefToolsAttivi];
+    if (toolsAttivi is List && toolsAttivi.every((e) => e is String)) {
+      await prefs.setStringList(kPrefToolsAttivi, toolsAttivi.cast<String>());
     }
   }
 
