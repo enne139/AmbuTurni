@@ -228,10 +228,11 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
         ],
       ),
       body: _buildBody(),
-      // Scansione solo su Android/iOS: mobile_scanner non ha implementazione
-      // desktop e sul web la fotocamera non è il caso d'uso di questa app
-      // (stesso criterio di add_2_calendar nel Piano turni).
-      floatingActionButton: _api != null && isMobile
+      // Scansione su Android/iOS e web (mobile_scanner ha un'implementazione
+      // per entrambi, via ZXing caricato a runtime sul web); non su desktop
+      // nativo, dove il plugin non ha canale — a differenza di add_2_calendar
+      // nel Piano turni, che sul web resta solo mobile/nessuna alternativa web.
+      floatingActionButton: _api != null && !isDesktop
           ? FloatingActionButton.extended(
               onPressed: _scansiona,
               icon: const Icon(Icons.qr_code_scanner),

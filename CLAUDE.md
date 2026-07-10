@@ -63,7 +63,7 @@
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Lettura XLSX (Piano turni) | `excel` |
 | Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
-| Scansione barcode/QR (Magazzino) | `mobile_scanner` (solo Android/iOS; il FAB Scansiona non esiste su desktop/web) |
+| Scansione barcode/QR (Magazzino) | `mobile_scanner` (Android/iOS/web; il FAB Scansiona non esiste su desktop nativo) |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Build | `flutter build apk` oppure workflow Gitea |
 
@@ -338,28 +338,40 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   sezione è opzionale, i backup vecchi restano validi). Limite noto su web:
   la chiamata dal browser richiede che il server esponga gli header CORS —
   vincolo lato server, non aggirabile dal client Flutter.
-- **Magazzino → scansione barcode/QR su mobile**
+- **Magazzino → scansione barcode/QR su mobile e web**
   (`scanner_barcode_screen.dart`, package `mobile_scanner`): FAB "Scansiona"
-  nella schermata Magazzino, solo su Android/iOS dietro `isMobile` (il
-  plugin non ha implementazione desktop — stesso pattern di add_2_calendar;
-  sul web il FAB non compare). Lo scanner è una schermata generica che fa
-  pop col primo codice letto (guard anti-pop-multipli: `onDetect` arriva a
-  raffica finché il codice resta inquadrato), con torcia in AppBar e
-  `errorBuilder` per il permesso fotocamera negato. Il permesso CAMERA
-  NON va aggiunto al manifest dell'app: sta nel manifest del plugin e il
-  manifest merger lo porta nell'APK anche in release (verificato nel
-  sorgente del package — non è il caso di INTERNET, che era iniettato dal
-  tooling solo in debug); la richiesta runtime la gestisce il plugin.
-  Flusso dopo la lettura: match locale sui `codes` della lista già
-  scaricata (immediato), poi `GET /materials/code/{code}` come fallback per
-  materiali/codici associati dopo l'ultimo refresh — il 404 qui non è un
-  guasto ma "codice non associato" (messaggio dedicato, distinto tramite il
-  campo `statusCode` di `MagazzinoApiException`); trovato il materiale si
-  apre direttamente lo sheet carico/scarico (flusso scanner del Raspberry:
-  scansiona → registra). Un materiale arrivato dal fallback e assente
-  dalla lista viene inserito in ordine alfabetico dopo il movimento.
-  mobile_scanner richiede Android SDK Platform 35 installata (la build la
-  scarica da sola).
+  nella schermata Magazzino su Android/iOS **e** web, dietro `!isDesktop`
+  (il plugin non ha canale per desktop nativo — a differenza di
+  add_2_calendar nel Piano turni, che sul web non ha alternativa e resta
+  mobile-only). Lo scanner è una schermata generica che fa pop col primo
+  codice letto (guard anti-pop-multipli: `onDetect` arriva a raffica finché
+  il codice resta inquadrato), con torcia in AppBar (nascosta su web con
+  `kIsWeb`: `toggleTorch()` lancia `UnsupportedError` lì, i video track del
+  browser non espongono il controllo torcia) e `errorBuilder` per il
+  permesso fotocamera negato, con testo diverso tra le due piattaforme
+  (impostazioni di sistema dell'app su mobile, impostazioni del sito nel
+  browser su web) più un messaggio dedicato per browser non supportato.
+  Il permesso CAMERA NON va aggiunto al manifest Android dell'app: sta nel
+  manifest del plugin e il manifest merger lo porta nell'APK anche in
+  release (verificato nel sorgente del package — non è il caso di INTERNET,
+  che era iniettato dal tooling solo in debug); la richiesta runtime la
+  gestisce il plugin. Sul web la richiesta è quella nativa del browser
+  (`getUserMedia`), che **richiede un contesto sicuro (HTTPS o localhost)**
+  — stesso vincolo già noto del login in produzione (`ENV=production`),
+  nessun requisito nuovo per il deploy; la libreria di decodifica (ZXing)
+  viene caricata da uno script esterno al primo uso (dalla v5 del plugin
+  nessuna configurazione in `index.html` necessaria), quindi la prima
+  scansione su web richiede una connessione di rete funzionante anche col
+  server Magazzino Verde già raggiungibile. Flusso dopo la lettura: match
+  locale sui `codes` della lista già scaricata (immediato), poi
+  `GET /materials/code/{code}` come fallback per materiali/codici associati
+  dopo l'ultimo refresh — il 404 qui non è un guasto ma "codice non
+  associato" (messaggio dedicato, distinto tramite il campo `statusCode` di
+  `MagazzinoApiException`); trovato il materiale si apre direttamente lo
+  sheet carico/scarico (flusso scanner del Raspberry: scansiona →
+  registra). Un materiale arrivato dal fallback e assente dalla lista viene
+  inserito in ordine alfabetico dopo il movimento. mobile_scanner richiede
+  Android SDK Platform 35 installata (la build la scarica da sola).
 - **Tab unificata "Attività"** (Turni + Assistenze): scelta dell'utente tra
   le due alternative proposte (selettore vs lista unica mescolata) — vince
   il selettore `SegmentedButton` sotto l'AppBar perché lascia intatte le due
@@ -616,7 +628,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   ruolo, aggiunta del turno al calendario di sistema).
 - ✅ **Tools → Magazzino Verde**: giacenze e movimenti carico/scarico dal
   gestionale di magazzino esterno (API JSON con chiave, evidenza sotto
-  scorta, scansione barcode/QR su mobile).
+  scorta, scansione barcode/QR su mobile e web).
 - ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 85 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
