@@ -5,6 +5,7 @@ import '../../db/backup.dart';
 import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
+import '../../utils/geocoding_api.dart';
 import '../../utils/theme.dart';
 import '../../utils/tools_config.dart';
 import 'turni_filtrati_screen.dart';
@@ -165,12 +166,15 @@ class _SezioneOspedali extends StatelessWidget {
   Future<void> _dialogOspedale(BuildContext context, Ospedale? o) async {
     final nomeCtrl = TextEditingController(text: o?.nome ?? '');
     final cittaCtrl = TextEditingController(text: o?.citta ?? '');
+    final viaCtrl = TextEditingController(text: o?.via ?? '');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(o == null ? 'Nuovo ospedale' : 'Modifica ospedale'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
+          const SizedBox(height: 12),
+          TextField(controller: viaCtrl, decoration: const InputDecoration(labelText: 'Via (opzionale)'), textCapitalization: TextCapitalization.sentences),
           const SizedBox(height: 12),
           TextField(controller: cittaCtrl, decoration: const InputDecoration(labelText: 'Città (opzionale)'), textCapitalization: TextCapitalization.words),
         ]),
@@ -183,10 +187,32 @@ class _SezioneOspedali extends StatelessWidget {
     if (ok == true) {
       final n = nomeCtrl.text.trim();
       if (n.isNotEmpty) {
-        await saveOspedale(n, cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim(), id: o?.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
+        final via = viaCtrl.text.trim();
+        final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
+        final id = await saveOspedale(n, citta, id: o?.id, via: via.isEmpty ? null : via);
+        if (!context.mounted) return;
+        context.read<AnagraficheProvider>().carica();
+        // Geocoding in sottofondo, solo se l'indirizzo è nuovo o cambiato:
+        // non blocca il salvataggio (offline-first) e non ripete la chiamata
+        // a Nominatim a ogni modifica banale (es. solo il nome).
+        if (via.isNotEmpty && (o == null || via != (o.via ?? '') || citta != o.citta)) {
+          _geocodificaInSottofondo(context, id, via, citta);
+        }
       }
     }
+  }
+
+  /// Risolve via+città in coordinate e le salva se trovate; nessun feedback
+  /// d'errore in UI (è un arricchimento best-effort per la mappa del tool
+  /// Lista ospedali, non un'operazione che l'utente ha chiesto esplicitamente
+  /// né di cui deve accorgersi se il device è offline).
+  Future<void> _geocodificaInSottofondo(
+      BuildContext context, String id, String via, String? citta) async {
+    final indirizzo = [via, citta].whereType<String>().where((s) => s.isNotEmpty).join(', ');
+    final coord = await GeocodingApi().geocodifica(indirizzo);
+    if (coord == null) return;
+    await aggiornaCoordinateOspedale(id, coord.lat, coord.lng);
+    if (context.mounted) context.read<AnagraficheProvider>().carica();
   }
 }
 

@@ -102,7 +102,10 @@ Future<List<Ospedale>> getOspedali() async {
 }
 
 /// Restituisce l'id della riga creata/aggiornata (vedi savePersona).
-Future<String> saveOspedale(String nome, String? citta, {String? id}) async {
+/// Non tocca lat/lng: quelle si scrivono solo con [aggiornaCoordinateOspedale],
+/// così una modifica che non cambia l'indirizzo (es. solo il nome) non
+/// cancella le coordinate già geocodificate.
+Future<String> saveOspedale(String nome, String? citta, {String? id, String? via}) async {
   final db = await getDb();
   final now = _now();
   if (id == null) {
@@ -111,6 +114,7 @@ Future<String> saveOspedale(String nome, String? citta, {String? id}) async {
       'id': nuovoId,
       'nome': nome,
       'citta': citta,
+      'via': via,
       'created_at': now,
       'updated_at': now,
       'is_synced': 0,
@@ -119,12 +123,25 @@ Future<String> saveOspedale(String nome, String? citta, {String? id}) async {
   } else {
     await db.update(
       'ospedali',
-      {'nome': nome, 'citta': citta, 'updated_at': now, 'is_synced': 0},
+      {'nome': nome, 'citta': citta, 'via': via, 'updated_at': now, 'is_synced': 0},
       where: 'id = ?',
       whereArgs: [id],
     );
     return id;
   }
+}
+
+/// Salva le coordinate risolte dal geocoding dell'indirizzo (tool Lista
+/// ospedali). Chiamata a parte da saveOspedale: è un aggiornamento in
+/// sottofondo, successivo al salvataggio dell'ospedale, non un campo del form.
+Future<void> aggiornaCoordinateOspedale(String id, double lat, double lng) async {
+  final db = await getDb();
+  await db.update(
+    'ospedali',
+    {'lat': lat, 'lng': lng, 'updated_at': _now(), 'is_synced': 0},
+    where: 'id = ?',
+    whereArgs: [id],
+  );
 }
 
 Future<void> deleteOspedale(String id) async {

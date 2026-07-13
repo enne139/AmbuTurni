@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/tools_config.dart';
+import 'lista_ospedali_screen.dart';
 import 'magazzino_screen.dart';
 import 'materiali_usati_screen.dart';
 import 'piano_turni_screen.dart';
@@ -14,6 +15,7 @@ final Map<String, WidgetBuilder> _destinazioni = {
   kToolMaterialiUsati: (_) => const MaterialiUsatiScreen(),
   kToolPianoTurni: (_) => const PianoTurniScreen(),
   kToolMagazzino: (_) => const MagazzinoScreen(),
+  kToolListaOspedali: (_) => const ListaOspedaliScreen(),
 };
 
 /// Elenco degli strumenti extra dell'app (fuori dal flusso turni/assistenze).

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 const kToolMaterialiUsati = 'materiali_usati';
 const kToolPianoTurni = 'piano_turni';
 const kToolMagazzino = 'magazzino';
+const kToolListaOspedali = 'lista_ospedali';
 
 /// Metadati di un tool per la card in Tools e lo switch in Impostazioni:
 /// un'unica fonte così le due schermate restano coerenti (stesso titolo,
@@ -48,5 +49,11 @@ const kToolsDisponibili = [
     sottotitolo: 'Giacenze e movimenti dal gestionale di magazzino',
     icon: Icons.warehouse_outlined,
     attivoDiDefault: false,
+  ),
+  ToolInfo(
+    id: kToolListaOspedali,
+    titolo: 'Lista ospedali',
+    sottotitolo: 'Cerca, indirizzo, naviga e mappa degli ospedali',
+    icon: Icons.local_hospital_outlined,
   ),
 ];

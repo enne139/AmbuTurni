@@ -64,6 +64,9 @@
 | Lettura XLSX (Piano turni) | `excel` |
 | Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
 | Scansione barcode/QR (Magazzino) | `mobile_scanner` (Android/iOS/web; il FAB Scansiona non esiste su desktop nativo) |
+| Mappa (Lista ospedali) | `flutter_map` + `latlong2`, tile OpenStreetMap, nessuna API key (funziona anche su Windows/web) |
+| Geocoding indirizzi (Lista ospedali) | Nominatim (OpenStreetMap), nessuna API key, chiamato solo alla creazione/modifica di un ospedale |
+| Apertura navigatore esterno (Lista ospedali) | `url_launcher`, link universale Google Maps |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Versione app a runtime | `package_info_plus` (legge X.Y.Z+N dalla piattaforma, mostrata in Impostazioni) |
 | Build | `flutter build apk` oppure workflow Gitea |
@@ -91,6 +94,9 @@ lib/
 │   │                               (shared_preferences/localStorage)
 │   ├── platform_check.dart        isDesktop/isMobile: export condizionale io/web di
 │   │                               Platform.isX (dart:io non compila sul target web)
+│   ├── geocoding_api.dart         client Dart puro di Nominatim (OpenStreetMap): risolve
+│   │                               un indirizzo testuale in lat/lng per la mappa del tool
+│   │                               Lista ospedali, testato con MockClient
 │   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
 │   │                               (Piano turni + Magazzino Verde + Tools attivi)
 │   ├── scanner_errors.dart        messaggio d'errore fotocamera per mobile_scanner,
@@ -139,6 +145,9 @@ lib/
     │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni
     │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
     │   │                               esterno Magazzino Verde (API JSON con chiave)
+    │   ├── lista_ospedali_screen.dart cerca ospedali per nome/via/città, pulsante Naviga
+    │   │                               (apre Google Maps esterno) e vista mappa con tutti
+    │   │                               gli ospedali geocodificati (flutter_map + OSM)
     │   ├── scanner_barcode_screen.dart scanner barcode/QR a schermo intero (mobile_scanner),
     │   │                               pop col codice letto; aperto solo dietro !isDesktop
     │   ├── conta_screen.dart          contatore rapido indipendente dall'API: manuale
@@ -182,8 +191,11 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 8); `_onOpen` esegue soltanto i PRAGMA di connessione
+(versione corrente: 9); `_onOpen` esegue soltanto i PRAGMA di connessione
 (WAL + foreign_keys).
+
+`ospedali` ha anche `via` (indirizzo testuale) e `lat`/`lng` (coordinate da
+geocoding automatico, v9): vedi il tool "Lista ospedali" in Decisioni tecniche.
 
 ### Desktop (Windows/Linux/macOS)
 
@@ -664,6 +676,39 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     `pubspec.yaml` (stesso `app_icon.png`, sfondo/tema `#00A651`); nome e
     descrizione in `web/manifest.json`/`web/index.html` aggiornati a mano
     (il tool non li tocca).
+- **Tool "Lista ospedali"** (`lista_ospedali_screen.dart`,
+  `utils/geocoding_api.dart`, v9): sola consultazione degli ospedali già in
+  anagrafica (creare/rinominare resta in Impostazioni → Ospedali, ora con un
+  campo `via` in più) — ricerca per nome/via/città, pulsante "Naviga" per
+  ospedale e vista mappa con tutti gli ospedali geocodificati, toggle
+  lista/mappa persistito come in turni/assistenze (chiave locale nella
+  schermata, non nel backup, stesso pattern di `_kVistaCalendarioKey`).
+  Tre decisioni "nessuna API key", coerenti con Piano turni/Magazzino Verde:
+  - **Naviga → link universale Google Maps**, non un intent `geo:`: apre
+    `https://www.google.com/maps/search/?api=1&query=...` con nome+via+città
+    come testo via `url_launcher` — Google Maps risolve l'indirizzo da sé, il
+    pulsante funziona anche per un ospedale senza coordinate salvate e non
+    serve alcuna voce `<queries>` nel manifest (a differenza di un intent
+    `geo:` diretto, un link http(s) è implicitamente visibile su Android 11+).
+  - **Mappa in-app con `flutter_map`** (tile OpenStreetMap, `RichAttributionWidget`
+    con l'attribuzione richiesta dalla policy OSM): mostra solo gli ospedali
+    con `lat`/`lng` valorizzate; funziona anche su Windows/web perché non è
+    un plugin nativo (a differenza di mobile_scanner/add_2_calendar), solo
+    rendering + richieste HTTP delle tile.
+  - **Geocoding automatico via Nominatim** (`GeocodingApi.geocodifica`, Dart
+    puro e testato con `MockClient` come `magazzino_api.dart`): risolve
+    `via, città` in coordinate con uno User-Agent identificativo (richiesto
+    dalla policy del servizio) e non lancia mai eccezioni — è un
+    arricchimento best-effort per la mappa, non deve mai bloccare il
+    salvataggio di un ospedale (app offline-first). Scatta in sottofondo da
+    `_dialogOspedale` in Impostazioni dopo il salvataggio (non lo blocca) e
+    solo quando l'indirizzo è nuovo o cambiato, non a ogni modifica banale
+    (es. solo il nome) — per questo `saveOspedale` non tocca più `lat`/`lng`,
+    scritte solo da `aggiornaCoordinateOspedale`, separata apposta perché un
+    save successivo con indirizzo invariato non deve azzerarle. Chi fallisce
+    (offline, indirizzo non risolvibile) resta comunque salvato senza
+    coordinate: in Lista ospedali un'icona sulla riga permette di ritentare
+    sul posto senza riaprire il form.
 
 ---
 
@@ -695,7 +740,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   gestionale di magazzino esterno (API JSON con chiave, evidenza sotto
   scorta, scansione barcode/QR su mobile e web, contatore rapido manuale
   o a scansione scollegato dall'API).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 85 test unitari.
+- ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città,
+  pulsante Naviga (apre Google Maps/navigatore esterno) e vista mappa con
+  tutti gli ospedali geocodificati automaticamente (nessuna API key).
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 98 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

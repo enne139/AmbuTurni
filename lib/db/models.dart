@@ -81,6 +81,12 @@ class Ospedale {
   final String id;
   final String nome;
   final String? citta;
+  final String? via;
+  // Coordinate da geocoding automatico (tool Lista ospedali): null finché
+  // non risolte o se l'indirizzo non è geocodificabile — l'ospedale resta
+  // comunque utilizzabile ovunque, semplicemente non compare sulla mappa.
+  final double? lat;
+  final double? lng;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -89,6 +95,9 @@ class Ospedale {
     required this.id,
     required this.nome,
     this.citta,
+    this.via,
+    this.lat,
+    this.lng,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -97,10 +106,15 @@ class Ospedale {
   /// Etichetta visualizzata: "Nome - Città" oppure solo "Nome".
   String get label => citta != null && citta!.isNotEmpty ? '$nome - $citta' : nome;
 
+  bool get haCoordinate => lat != null && lng != null;
+
   factory Ospedale.fromMap(Map<String, dynamic> m) => Ospedale(
         id: m['id'] as String,
         nome: m['nome'] as String,
         citta: m['citta'] as String?,
+        via: m['via'] as String?,
+        lat: (m['lat'] as num?)?.toDouble(),
+        lng: (m['lng'] as num?)?.toDouble(),
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -110,6 +124,9 @@ class Ospedale {
         'id': id,
         'nome': nome,
         'citta': citta,
+        'via': via,
+        'lat': lat,
+        'lng': lng,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,

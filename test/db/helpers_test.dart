@@ -52,6 +52,28 @@ void main() {
     });
   });
 
+  group('Modello Ospedale', () {
+    test('fromMap → toMap è identico', () {
+      final map = {
+        'id': 'o1',
+        'nome': 'Ospedale Test',
+        'citta': 'Milano',
+        'via': 'Via Roma 1',
+        'lat': 45.4642,
+        'lng': 9.19,
+        'created_at': null,
+        'updated_at': null,
+        'is_synced': 0,
+      };
+      expect(Ospedale.fromMap(map).toMap(), map);
+    });
+
+    test('haCoordinate falso finché lat/lng non sono valorizzate', () {
+      const o = Ospedale(id: 'o1', nome: 'X', via: 'Via Y');
+      expect(o.haCoordinate, isFalse);
+    });
+  });
+
   group('Modello TipologiaTurno', () {
     test('ordine default 0 quando assente nella map', () {
       final t = TipologiaTurno.fromMap({'id': 't1', 'nome': 'Ordinario'});
@@ -157,6 +179,45 @@ void main() {
       expect(list.any((p) => p.id == id2), isTrue);
       // In modalità update l'id restituito è quello passato.
       expect(await savePersona('Omonimo', 'Rinominato', id: id1), id1);
+    });
+  });
+
+  group('CRUD ospedali', () {
+    test('saveOspedale salva via, getOspedali la restituisce', () async {
+      await saveOspedale('Ospedale Test', 'Milano', via: 'Via Roma 1');
+      final list = await getOspedali();
+      final o = list.firstWhere((x) => x.nome == 'Ospedale Test');
+      expect(o.via, 'Via Roma 1');
+      expect(o.citta, 'Milano');
+      expect(o.haCoordinate, isFalse);
+    });
+
+    test('saveOspedale in modifica non tocca lat/lng già geocodificate',
+        () async {
+      final id = await saveOspedale('Ospedale Coord', 'Roma', via: 'Via A');
+      await aggiornaCoordinateOspedale(id, 41.9, 12.5);
+      // Modifica che non cambia l'indirizzo (es. solo il nome).
+      await saveOspedale('Ospedale Coord Rinominato', 'Roma', id: id, via: 'Via A');
+      final o = (await getOspedali()).firstWhere((x) => x.id == id);
+      expect(o.nome, 'Ospedale Coord Rinominato');
+      expect(o.lat, 41.9);
+      expect(o.lng, 12.5);
+    });
+
+    test('aggiornaCoordinateOspedale imposta lat/lng', () async {
+      final id = await saveOspedale('Ospedale Geo', null, via: 'Via B');
+      await aggiornaCoordinateOspedale(id, 45.46, 9.19);
+      final o = (await getOspedali()).firstWhere((x) => x.id == id);
+      expect(o.haCoordinate, isTrue);
+      expect(o.lat, 45.46);
+      expect(o.lng, 9.19);
+    });
+
+    test('deleteOspedale rimuove la riga', () async {
+      final id = await saveOspedale('Ospedale Da Eliminare', null);
+      await deleteOspedale(id);
+      final after = await getOspedali();
+      expect(after.any((x) => x.id == id), isFalse);
     });
   });
 

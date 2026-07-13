@@ -74,6 +74,18 @@ dependencies:
   # in Impostazioni senza duplicarla a mano fuori da pubspec.yaml.
   package_info_plus: ^9.0.1
 
+  # Mappa del tool Lista ospedali: tile OpenStreetMap, nessuna API key
+  # (stessa scelta "no key" di Piano turni/Magazzino Verde). Funziona anche
+  # su Windows/web: a differenza di mobile_scanner/add_2_calendar non serve
+  # un plugin nativo, solo rendering + richieste HTTP delle tile.
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
+
+  # Apre il navigatore/Google Maps esterno (tool Lista ospedali, pulsante
+  # "Naviga"): link universale https://maps.google.com/..., nessun permesso
+  # né voce <queries> nel manifest (a differenza di un intent geo: diretto).
+  url_launcher: ^6.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

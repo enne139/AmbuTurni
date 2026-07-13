@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS ospedali (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL UNIQUE,
   citta TEXT,
+  via TEXT,
+  lat REAL,
+  lng REAL,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
@@ -198,7 +201,7 @@ Future<Database> getDb() async {
       : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 8,
+    version: 9,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -426,6 +429,14 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
         await db.insert('turni', nuovaRiga);
       }
     }
+  }
+  if (oldVersion < 9) {
+    // Tool "Lista ospedali": via (indirizzo testuale) e lat/lng (geocoding
+    // automatico via Nominatim, best-effort — restano NULL se il servizio
+    // non risolve l'indirizzo o il device è offline al momento del salvataggio).
+    try { await db.execute('ALTER TABLE ospedali ADD COLUMN via TEXT'); } catch (_) {}
+    try { await db.execute('ALTER TABLE ospedali ADD COLUMN lat REAL'); } catch (_) {}
+    try { await db.execute('ALTER TABLE ospedali ADD COLUMN lng REAL'); } catch (_) {}
   }
 }
 
