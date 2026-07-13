@@ -96,7 +96,12 @@ class _TurniListState extends State<TurniList> {
       context,
       MaterialPageRoute(builder: (_) => TurnoDetail(turnoId: turnoId)),
     );
-    if (mounted) context.read<TurniProvider>().ricarica();
+    if (!mounted) return;
+    context.read<TurniProvider>().ricarica();
+    // Le statistiche (ore, conteggi) dipendono da turni e servizi: senza
+    // questo refresh restavano quelle di prima anche dopo una modifica, dato
+    // che la tab Statistiche resta montata nell'IndexedStack di AppNavigator.
+    context.read<StatisticheProvider>().ricarica();
   }
 
   Future<void> _nuovoTurno() async {
@@ -110,7 +115,9 @@ class _TurniListState extends State<TurniList> {
         ),
       ),
     );
-    if (mounted) context.read<TurniProvider>().ricarica();
+    if (!mounted) return;
+    context.read<TurniProvider>().ricarica();
+    context.read<StatisticheProvider>().ricarica();
   }
 
   @override

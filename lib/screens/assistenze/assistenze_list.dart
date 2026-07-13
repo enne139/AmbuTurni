@@ -96,7 +96,12 @@ class _AssistenzeListState extends State<AssistenzeList> {
       context,
       MaterialPageRoute(builder: (_) => AssistenzaDetail(assistenzaId: assistenzaId)),
     );
-    if (mounted) context.read<AssistenzeProvider>().ricarica();
+    if (!mounted) return;
+    context.read<AssistenzeProvider>().ricarica();
+    // Le statistiche (ore, conteggi) dipendono anche dalle assistenze: senza
+    // questo refresh restavano quelle di prima anche dopo una modifica, dato
+    // che la tab Statistiche resta montata nell'IndexedStack di AppNavigator.
+    context.read<StatisticheProvider>().ricarica();
   }
 
   Future<void> _nuovaAssistenza() async {
@@ -109,7 +114,9 @@ class _AssistenzeListState extends State<AssistenzeList> {
         ),
       ),
     );
-    if (mounted) context.read<AssistenzeProvider>().ricarica();
+    if (!mounted) return;
+    context.read<AssistenzeProvider>().ricarica();
+    context.read<StatisticheProvider>().ricarica();
   }
 
   @override

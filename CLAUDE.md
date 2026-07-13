@@ -485,7 +485,13 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   perché `StatisticheScreen` caricava i dati una volta in stato locale, mai
   invalidato — e `IndexedStack` in `AppNavigator` tiene tutte le tab montate,
   quindi cambiare tab non la ricostruiva. Estratto un provider con lo stesso
-  pattern `carica`/`ricarica` degli altri; `ImpostazioniScreen._import()` lo ricarica.
+  pattern `carica`/`ricarica` degli altri; `ImpostazioniScreen._import()` lo
+  ricarica. Stesso motivo, stesso bug si ripresentava per ogni turno/servizio/
+  assistenza creato, modificato o eliminato dalla tab Attività: `ricarica()`
+  di `StatisticheProvider` mancava nei punti dove `TurniList`/`AssistenzeList`
+  già ricaricano il proprio provider dopo essere tornate da `TurnoForm`/
+  `TurnoDetail`/`AssistenzaForm`/`AssistenzaDetail` (`_apriDettaglio`,
+  `_nuovoTurno`/`_nuovaAssistenza`) — aggiunto lì, stesso punto, stesso pattern.
 - **Note in markdown, editor a schermo intero**: renderizzate con
   `flutter_markdown_plus` (l'ufficiale `flutter_markdown` è `discontinued` su
   pub.dev). `NotaMarkdown` (in `widgets/`) definisce uno style sheet esplicito
