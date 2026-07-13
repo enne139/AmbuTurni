@@ -678,18 +678,25 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     (il tool non li tocca).
 - **Tool "Lista ospedali"** (`lista_ospedali_screen.dart`,
   `utils/geocoding_api.dart`, v9): sola consultazione degli ospedali già in
-  anagrafica (creare/rinominare resta in Impostazioni → Ospedali, ora con un
-  campo `via` in più) — ricerca per nome/via/città, pulsante "Naviga" per
-  ospedale e vista mappa con tutti gli ospedali geocodificati, toggle
-  lista/mappa persistito come in turni/assistenze (chiave locale nella
-  schermata, non nel backup, stesso pattern di `_kVistaCalendarioKey`).
+  anagrafica (creare/rinominare resta in Impostazioni → Ospedali, ora con
+  campi `via` e lat/lng in più) — ricerca per nome/via/città, pulsante
+  "Naviga" per ospedale (scelta tra Google Maps e Waze) e vista mappa con
+  tutti gli ospedali geocodificati, toggle lista/mappa persistito come in
+  turni/assistenze (chiave locale nella schermata, non nel backup, stesso
+  pattern di `_kVistaCalendarioKey`). Attivo di default (`attivoDiDefault:
+  true`): non richiede alcuna configurazione, a differenza del Magazzino Verde.
   Tre decisioni "nessuna API key", coerenti con Piano turni/Magazzino Verde:
-  - **Naviga → link universale Google Maps**, non un intent `geo:`: apre
-    `https://www.google.com/maps/search/?api=1&query=...` con nome+via+città
-    come testo via `url_launcher` — Google Maps risolve l'indirizzo da sé, il
-    pulsante funziona anche per un ospedale senza coordinate salvate e non
-    serve alcuna voce `<queries>` nel manifest (a differenza di un intent
-    `geo:` diretto, un link http(s) è implicitamente visibile su Android 11+).
+  - **Naviga → link universali, non intent/scheme nativi**: Google Maps
+    (`https://www.google.com/maps/search/?api=1&query=...`) e Waze
+    (`https://waze.com/ul?...&navigate=yes`, coordinate se disponibili
+    altrimenti `q=` testuale) via `url_launcher` — entrambi risolvono
+    l'indirizzo da soli, il pulsante funziona anche per un ospedale senza
+    coordinate salvate e non serve alcuna voce `<queries>` nel manifest (a
+    differenza di uno scheme diretto tipo `geo:`/`waze://`, un link
+    http(s) è implicitamente visibile su Android 11+ e i due servizi lo
+    intercettano da soli se l'app è installata). Scelta app: `PopupMenuButton`
+    nella riga della lista (compatta), due pulsanti affiancati nello sheet
+    del marker sulla mappa (più spazio, nessun tap in più).
   - **Mappa in-app con `flutter_map`** (tile OpenStreetMap, `RichAttributionWidget`
     con l'attribuzione richiesta dalla policy OSM): mostra solo gli ospedali
     con `lat`/`lng` valorizzate; funziona anche su Windows/web perché non è
@@ -708,7 +715,28 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     save successivo con indirizzo invariato non deve azzerarle. Chi fallisce
     (offline, indirizzo non risolvibile) resta comunque salvato senza
     coordinate: in Lista ospedali un'icona sulla riga permette di ritentare
-    sul posto senza riaprire il form.
+    sul posto senza riaprire il form. Il form Ospedale ha anche due campi
+    "Latitudine"/"Longitudine" opzionali (accettano sia punto che virgola
+    come separatore decimale) per inserirle a mano — utile per una posizione
+    più precisa di quella trovata da Nominatim (es. l'ingresso ambulanze
+    invece del centroide dell'edificio) o quando l'indirizzo non è
+    geocodificabile: se compilati hanno priorità e saltano del tutto il
+    geocoding automatico.
+- **Tool nuovo con `attivoDiDefault: true` ma "invisibile" dopo un
+  aggiornamento**: bug scoperto aggiungendo Lista ospedali. `ToolsProvider.carica()`
+  applicava i default del catalogo SOLO se `kPrefToolsAttivi` non era mai
+  stato salvato — chi aveva già toccato un solo switch in Tools attivi in
+  passato (es. per accendere il Magazzino Verde) aveva quella chiave salvata,
+  e un tool aggiunto dopo restava escluso per sempre dalla lista finché non
+  lo si accendeva a mano, anche con default true. Corretto tracciando anche
+  `kPrefToolsConosciuti` (id dei tool già "visti" su questo device): un id
+  del catalogo assente da lì è nuovo, e prende il proprio default anche se
+  `kPrefToolsAttivi` esiste già; un id già noto e disattivato esplicitamente
+  resta rispettato. Aggiunto al backup accanto a `kPrefToolsAttivi` (stessa
+  ragione: senza, un restore tratterebbe come "nuovi" tutti i tool già noti
+  all'origine, riaccendendo quelli disattivati prima del backup). Coperto da
+  test dedicati (`test/providers/tools_provider_test.dart`, primo test su un
+  provider in questo progetto: gli altri erano tutti Dart puro/DB).
 
 ---
 
@@ -741,9 +769,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scorta, scansione barcode/QR su mobile e web, contatore rapido manuale
   o a scansione scollegato dall'API).
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città,
-  pulsante Naviga (apre Google Maps/navigatore esterno) e vista mappa con
-  tutti gli ospedali geocodificati automaticamente (nessuna API key).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 98 test unitari.
+  pulsante Naviga (Google Maps o Waze) e vista mappa con tutti gli ospedali
+  geocodificati automaticamente (nessuna API key) o con coordinate inserite
+  a mano nel form Ospedale.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 101 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

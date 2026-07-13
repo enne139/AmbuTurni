@@ -167,17 +167,49 @@ class _SezioneOspedali extends StatelessWidget {
     final nomeCtrl = TextEditingController(text: o?.nome ?? '');
     final cittaCtrl = TextEditingController(text: o?.citta ?? '');
     final viaCtrl = TextEditingController(text: o?.via ?? '');
+    final latCtrl = TextEditingController(text: o?.lat?.toString() ?? '');
+    final lngCtrl = TextEditingController(text: o?.lng?.toString() ?? '');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(o == null ? 'Nuovo ospedale' : 'Modifica ospedale'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
-          const SizedBox(height: 12),
-          TextField(controller: viaCtrl, decoration: const InputDecoration(labelText: 'Via (opzionale)'), textCapitalization: TextCapitalization.sentences),
-          const SizedBox(height: 12),
-          TextField(controller: cittaCtrl, decoration: const InputDecoration(labelText: 'Città (opzionale)'), textCapitalization: TextCapitalization.words),
-        ]),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
+            const SizedBox(height: 12),
+            TextField(controller: viaCtrl, decoration: const InputDecoration(labelText: 'Via (opzionale)'), textCapitalization: TextCapitalization.sentences),
+            const SizedBox(height: 12),
+            TextField(controller: cittaCtrl, decoration: const InputDecoration(labelText: 'Città (opzionale)'), textCapitalization: TextCapitalization.words),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: latCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: const InputDecoration(labelText: 'Latitudine'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: lngCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: const InputDecoration(labelText: 'Longitudine'),
+                ),
+              ),
+            ]),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Lascia vuoto per calcolarle automaticamente dall\'indirizzo.',
+                  style: TextStyle(fontSize: 12, color: Colors.white54),
+                ),
+              ),
+            ),
+          ]),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
@@ -192,10 +224,17 @@ class _SezioneOspedali extends StatelessWidget {
         final id = await saveOspedale(n, citta, id: o?.id, via: via.isEmpty ? null : via);
         if (!context.mounted) return;
         context.read<AnagraficheProvider>().carica();
-        // Geocoding in sottofondo, solo se l'indirizzo è nuovo o cambiato:
-        // non blocca il salvataggio (offline-first) e non ripete la chiamata
-        // a Nominatim a ogni modifica banale (es. solo il nome).
-        if (via.isNotEmpty && (o == null || via != (o.via ?? '') || citta != o.citta)) {
+        // Coordinate inserite a mano hanno priorità sul geocoding automatico
+        // (accetta sia il punto che la virgola come separatore decimale).
+        final latManuale = double.tryParse(latCtrl.text.trim().replaceAll(',', '.'));
+        final lngManuale = double.tryParse(lngCtrl.text.trim().replaceAll(',', '.'));
+        if (latManuale != null && lngManuale != null) {
+          await aggiornaCoordinateOspedale(id, latManuale, lngManuale);
+          if (context.mounted) context.read<AnagraficheProvider>().carica();
+        } else if (via.isNotEmpty && (o == null || via != (o.via ?? '') || citta != o.citta)) {
+          // Geocoding in sottofondo, solo se l'indirizzo è nuovo o cambiato:
+          // non blocca il salvataggio (offline-first) e non ripete la
+          // chiamata a Nominatim a ogni modifica banale (es. solo il nome).
           _geocodificaInSottofondo(context, id, via, citta);
         }
       }

@@ -103,6 +103,10 @@ Future<String?> exportBackup() async {
     // Tool attivi in Impostazioni: null se mai salvato (si applicano i
     // default del catalogo al restore, come su un device mai configurato).
     kPrefToolsAttivi: prefs.getStringList(kPrefToolsAttivi),
+    // Tool già "visti" su questo device (ToolsProvider.carica): senza,
+    // un restore tratterebbe come "nuovi" tutti i tool già noti all'origine,
+    // riaccendendo quelli disattivati esplicitamente prima del backup.
+    kPrefToolsConosciuti: prefs.getStringList(kPrefToolsConosciuti),
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
@@ -369,6 +373,11 @@ Future<String> importBackup() async {
     final toolsAttivi = preferenze[kPrefToolsAttivi];
     if (toolsAttivi is List && toolsAttivi.every((e) => e is String)) {
       await prefs.setStringList(kPrefToolsAttivi, toolsAttivi.cast<String>());
+    }
+    // Stessa eccezione di toolsAttivi: una lista vuota è un valore valido.
+    final toolsConosciuti = preferenze[kPrefToolsConosciuti];
+    if (toolsConosciuti is List && toolsConosciuti.every((e) => e is String)) {
+      await prefs.setStringList(kPrefToolsConosciuti, toolsConosciuti.cast<String>());
     }
   }
 

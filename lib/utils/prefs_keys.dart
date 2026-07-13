@@ -23,3 +23,12 @@ const kPrefMagazzinoApiKey = 'magazzino_api_key';
 // Magazzino Verde parte disattivato). Una volta salvato riflette esattamente
 // le scelte dell'utente, incluso nel backup come le altre preferenze.
 const kPrefToolsAttivi = 'tools_attivi';
+// Elenco (List<String>) degli ID di tool già "visti" da questo device (vedi
+// ToolsProvider.carica): un id del catalogo assente da qui è un tool nuovo,
+// mai proposto all'utente, a cui va applicato attivoDiDefault invece di
+// considerarlo disattivato — altrimenti un tool aggiunto con default true
+// resterebbe invisibile per chi ha già personalizzato Tools attivi in
+// passato. Nel backup insieme a kPrefToolsAttivi: senza, un restore su un
+// device nuovo tratterebbe come "nuovi" tutti i tool già noti sul device di
+// origine, riattivando quelli disattivati esplicitamente prima del backup.
+const kPrefToolsConosciuti = 'tools_conosciuti';

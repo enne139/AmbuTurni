@@ -15,6 +15,9 @@ import '../../utils/theme.dart';
 // turni/assistenze: è solo l'ultima vista scelta su questo device).
 const _kVistaMappaKey = 'lista_ospedali_vista_mappa';
 
+/// App di navigazione esterna apribili dal pulsante Naviga.
+enum _AppNavigazione { googleMaps, waze }
+
 /// Tool "Lista ospedali": cerca per nome negli ospedali già in anagrafica,
 /// mostra l'indirizzo e apre il navigatore esterno, oppure una mappa con la
 /// posizione di tutti gli ospedali geocodificati. Sola consultazione: la
@@ -63,18 +66,38 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
     }).toList();
   }
 
-  /// Apre Google Maps (app se installata, altrimenti browser) con una
-  /// ricerca testuale su nome+via+città: funziona anche per gli ospedali
-  /// senza coordinate geocodificate, che Google Maps risolve da sé.
-  Future<void> _naviga(Ospedale o) async {
+  /// Apre Google Maps o Waze (l'app se installata, altrimenti il sito) su
+  /// [o]. Entrambi via link universale https, come già per Google Maps: apre
+  /// l'app se il device la riconosce come gestore, nessun permesso né voce
+  /// `<queries>` nel manifest (a differenza di uno scheme nativo `waze://`,
+  /// che fallirebbe silenziosamente senza l'app installata). Se l'ospedale ha
+  /// coordinate geocodificate le usa (più precise), altrimenti passa nome+
+  /// via+città come ricerca testuale: entrambi i servizi la risolvono da sé.
+  Future<void> _naviga(Ospedale o, _AppNavigazione app) async {
     final query = [o.nome, o.via, o.citta]
         .whereType<String>()
         .where((s) => s.isNotEmpty)
         .join(', ');
-    final uri = Uri.https('www.google.com', '/maps/search/', {
-      'api': '1',
-      'query': query,
-    });
+    final Uri uri;
+    switch (app) {
+      case _AppNavigazione.googleMaps:
+        uri = Uri.https('www.google.com', '/maps/search/', {
+          'api': '1',
+          'query': query,
+        });
+        break;
+      case _AppNavigazione.waze:
+        uri = o.haCoordinate
+            ? Uri.https('waze.com', '/ul', {
+                'll': '${o.lat},${o.lng}',
+                'navigate': 'yes',
+              })
+            : Uri.https('waze.com', '/ul', {
+                'q': query,
+                'navigate': 'yes',
+              });
+        break;
+    }
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -174,7 +197,7 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
       itemBuilder: (_, i) => _OspedaleCard(
         ospedale: ospedali[i],
         geocodificando: _geocodificando.contains(ospedali[i].id),
-        onNaviga: () => _naviga(ospedali[i]),
+        onNaviga: (app) => _naviga(ospedali[i], app),
         onRiprovaGeocoding: () => _riprovaGeocoding(ospedali[i]),
       ),
     );
@@ -247,14 +270,29 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
                 ),
               ],
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.directions),
-                label: const Text('Naviga'),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _naviga(o);
-                },
-              ),
+              Row(children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.directions),
+                    label: const Text('Google Maps'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _naviga(o, _AppNavigazione.googleMaps);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.navigation_outlined),
+                    label: const Text('Waze'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _naviga(o, _AppNavigazione.waze);
+                    },
+                  ),
+                ),
+              ]),
             ],
           ),
         ),
@@ -269,7 +307,7 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
 class _OspedaleCard extends StatelessWidget {
   final Ospedale ospedale;
   final bool geocodificando;
-  final VoidCallback onNaviga;
+  final void Function(_AppNavigazione app) onNaviga;
   final VoidCallback onRiprovaGeocoding;
 
   const _OspedaleCard({
@@ -309,10 +347,20 @@ class _OspedaleCard extends StatelessWidget {
                       tooltip: 'Cerca posizione per la mappa',
                       onPressed: onRiprovaGeocoding,
                     ),
-            IconButton(
+            PopupMenuButton<_AppNavigazione>(
               icon: const Icon(Icons.directions, color: kPrimary),
               tooltip: 'Naviga',
-              onPressed: onNaviga,
+              onSelected: onNaviga,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: _AppNavigazione.googleMaps,
+                  child: Text('Google Maps'),
+                ),
+                PopupMenuItem(
+                  value: _AppNavigazione.waze,
+                  child: Text('Waze'),
+                ),
+              ],
             ),
           ],
         ),

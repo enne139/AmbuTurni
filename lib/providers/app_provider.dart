@@ -163,15 +163,31 @@ class ToolsProvider extends ChangeNotifier {
 
   /// Se la preferenza non è mai stata salvata si applicano i default del
   /// catalogo (kToolsDisponibili): il Magazzino Verde parte disattivato.
+  /// Un tool presente nel catalogo ma assente da kPrefToolsConosciuti (mai
+  /// proposto prima su questo device, es. un tool aggiunto in un
+  /// aggiornamento successivo) prende anche lui il proprio default invece di
+  /// essere considerato disattivato: altrimenti un id nuovo con
+  /// attivoDiDefault true resterebbe invisibile per chi ha già personalizzato
+  /// Tools attivi in passato (kPrefToolsAttivi salvato non conterrebbe quell'id
+  /// semplicemente perché non esisteva ancora quando è stato scritto).
   Future<void> carica() async {
     final prefs = await SharedPreferences.getInstance();
     final salvati = prefs.getStringList(kPrefToolsAttivi);
-    _attivi = salvati != null
-        ? salvati.toSet()
-        : {
-            for (final t in kToolsDisponibili)
-              if (t.attivoDiDefault) t.id
-          };
+    final conosciuti = prefs.getStringList(kPrefToolsConosciuti)?.toSet() ?? {};
+    if (salvati == null) {
+      _attivi = {for (final t in kToolsDisponibili) if (t.attivoDiDefault) t.id};
+    } else {
+      _attivi = salvati.toSet();
+      for (final t in kToolsDisponibili) {
+        if (!conosciuti.contains(t.id) && t.attivoDiDefault) _attivi.add(t.id);
+      }
+    }
+    // Persiste subito lo stato risolto: i tool appena "scoperti" qui sopra
+    // diventano noti, così uno spegnimento esplicito futuro viene rispettato
+    // invece di essere ririconosciuto come "nuovo" a ogni avvio.
+    await prefs.setStringList(kPrefToolsAttivi, _attivi.toList());
+    await prefs.setStringList(
+        kPrefToolsConosciuti, kToolsDisponibili.map((t) => t.id).toList());
     _caricato = true;
     notifyListeners();
   }
