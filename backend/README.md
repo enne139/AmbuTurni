@@ -32,6 +32,7 @@ chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
 | POST | `/api/auth/users` | sì | crea un nuovo utente admin (solo se già loggato) |
 | GET | `/api/ospedali?citta=` | no | elenco ospedali, filtrato per città se indicata |
 | POST | `/api/ospedali` | sì | `{nome,via,citta,lat,lng}` → crea un ospedale |
+| POST | `/api/ospedali/import` | sì | `[{nome,via,citta,lat,lng},...]` o `{"ospedali":[...]}` → upsert per nome in blocco |
 | DELETE | `/api/ospedali/:id` | sì | elimina un ospedale |
 | GET | `/api/citta` | no | città che hanno almeno un ospedale, ordinate alfabeticamente |
 | GET | `/admin/` | no (poi login nella pagina) | interfaccia web per gestire gli ospedali |

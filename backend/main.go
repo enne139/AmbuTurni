@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -150,6 +152,41 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
+	// Import massivo: usata dal pulsante "Importa file" della pagina admin
+	// per caricare in un colpo solo un elenco intero invece di aggiungere un
+	// ospedale alla volta col form. Accetta sia un array puro sia
+	// {"ospedali": [...]} — lo stesso formato che l'app esporta da
+	// Impostazioni → Ospedali → Esporta, importabile qui senza trasformazioni.
+	mux.HandleFunc("POST /api/ospedali/import", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "corpo della richiesta non valido")
+			return
+		}
+		var righe []OspedaleInput
+		if err := json.Unmarshal(raw, &righe); err != nil {
+			var wrapper struct {
+				Ospedali []OspedaleInput `json:"ospedali"`
+			}
+			if err2 := json.Unmarshal(raw, &wrapper); err2 != nil || wrapper.Ospedali == nil {
+				writeError(w, http.StatusBadRequest,
+					`formato non valido: atteso un elenco di ospedali o {"ospedali": [...]}`)
+				return
+			}
+			righe = wrapper.Ospedali
+		}
+		creati, aggiornati, scartati, err := upsertOspedali(ctx, pool, righe)
+		if err != nil {
+			log.Printf("[ospedali] errore import: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]int{
+			"creati": creati, "aggiornati": aggiornati, "scartati": scartati,
+		})
 	}))
 
 	// --- PAGINA ADMIN ---

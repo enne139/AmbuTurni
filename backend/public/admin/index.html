@@ -78,6 +78,18 @@
     </div>
 
     <div class="card">
+      <strong>Importa da file</strong>
+      <p style="color:#ffffffb3; font-size:13px; margin: 8px 0 4px;">
+        Un file JSON con un elenco di ospedali (nome, via, città, lat, lng) —
+        lo stesso formato che l'app esporta da Impostazioni → Ospedali →
+        Esporta. Un ospedale già presente con lo stesso nome viene
+        aggiornato, uno nuovo viene creato; gli altri restano invariati.
+      </p>
+      <input id="f-import" type="file" accept="application/json,.json" onchange="importaFile(this)" />
+      <div class="errore" id="esito-import"></div>
+    </div>
+
+    <div class="card">
       <strong>Elenco ospedali</strong>
       <table>
         <thead>
@@ -176,6 +188,34 @@ async function aggiungi() {
     await carica();
   } catch (e) {
     erroreEl.textContent = e.message;
+  }
+}
+
+async function importaFile(input) {
+  const esitoEl = document.getElementById('esito-import');
+  esitoEl.style.color = '#cf6679';
+  esitoEl.textContent = '';
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    // Il file è già JSON: si inoltra il testo così com'è, senza
+    // riparsarlo/ristringificarlo lato browser.
+    const testo = await file.text();
+    const resp = await fetch('/api/ospedali/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: testo,
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di importazione');
+    esitoEl.style.color = '#4caf50';
+    const scartatiTxt = dati.scartati ? `, ${dati.scartati} scartati` : '';
+    esitoEl.textContent = `Import completato: ${dati.creati} nuovi, ${dati.aggiornati} aggiornati${scartatiTxt}.`;
+    await carica();
+  } catch (e) {
+    esitoEl.textContent = e.message;
+  } finally {
+    input.value = '';
   }
 }
 

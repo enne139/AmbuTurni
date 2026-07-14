@@ -666,6 +666,25 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     chiudendola). lat/lng inviate come numero JSON (`Number(...)`), non
     stringa: la decodifica JSON di Go in `*float64` è rigorosa sul tipo, a
     differenza del parsing permissivo che aveva il vecchio backend Node.
+  - **Import massivo da file** (`POST /api/ospedali/import`, pulsante
+    "Importa da file" nella pagina admin): oltre al form di aggiunta singola,
+    carica un intero file JSON e fa l'upsert per nome di tutte le righe in
+    un'unica transazione (`upsertOspedali` lato Go in `ospedali.go`, stessa
+    logica — e stesso scopo, bulk import — della funzione omonima lato
+    client in `db/helpers.dart`). Accetta sia un array puro sia
+    `{"ospedali": [...]}`: è lo stesso formato che l'app esporta da
+    Impostazioni → Ospedali → Esporta, quindi un'associazione può esportare
+    la propria anagrafica ospedali e un admin importarla nel backend
+    condiviso senza alcuna trasformazione. `nome` non ha un vincolo UNIQUE
+    nello schema (scelta di semplicità: l'unico scrittore era finora
+    `createOspedale` una riga alla volta) — l'upsert quindi fa una `SELECT`
+    di tutti gli id per nome prima del giro di `INSERT`/`UPDATE`, non un
+    `INSERT ... ON CONFLICT`. Il file si inoltra al backend come testo grezzo
+    (`file.text()` poi `body: testo`), senza riparsarlo/ristringificarlo in
+    JS: è già JSON valido, non c'è motivo di decodificarlo e ricodificarlo
+    nel browser. Testato via curl con array puro, formato wrapper,
+    aggiornamento di un nome già presente, righe senza nome (scartate senza
+    interrompere le altre) e corpo malformato (400).
   - **Docker locale vs produzione**: `backend/Dockerfile` +
     `docker-compose.yml` (backend Go + Postgres, `build: .` invece di tirare
     un'immagine da un registry) servono solo per sviluppare/testare il
@@ -933,8 +952,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   dei dati. Ospedali scaricabili per città anche dal backend condiviso
   (`backend/`, indirizzo configurabile con default centralizzato).
 - ✅ **Backend condiviso ospedali** (`backend/`, Go+PostgreSQL): API pubblica
-  di sola lettura per città + pagina admin (login) per aggiungerli/eliminarli,
-  incorporato nell'immagine Docker della versione web.
+  di sola lettura per città + pagina admin (login) per aggiungerli/eliminarli
+  uno alla volta o in blocco da file JSON, incorporato nell'immagine Docker
+  della versione web.
 - ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 123 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 

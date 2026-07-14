@@ -2,11 +2,24 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// OspedaleInput è il formato di una riga in ingresso per l'import massivo
+// (POST /api/ospedali/import): stesso nome/via/citta/lat/lng usato in
+// esportOspedali/importOspedali lato client (db/backup.dart) — un file
+// esportato dall'app si importa qui senza alcuna trasformazione.
+type OspedaleInput struct {
+	Nome  string   `json:"nome"`
+	Via   *string  `json:"via"`
+	Citta *string  `json:"citta"`
+	Lat   *float64 `json:"lat"`
+	Lng   *float64 `json:"lng"`
+}
 
 // Ospedale rispecchia il formato nome/via/citta/lat/lng già usato
 // dall'export/import JSON dell'app Flutter (db/backup.dart): i client
@@ -87,6 +100,72 @@ func createOspedale(ctx context.Context, pool *pgxpool.Pool, nome string, via, c
 		uuid.NewString(), nome, via, citta, lat, lng,
 	).Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.CreatedAt, &o.UpdatedAt)
 	return o, err
+}
+
+// upsertOspedali importa in blocco una lista di ospedali, upsert per nome
+// (un ospedale già presente con lo stesso nome viene aggiornato, uno nuovo
+// viene creato) dentro un'unica transazione — stessa logica, stesso scopo
+// (bulk import) della funzione omonima lato client in db/helpers.dart,
+// usata dalla pagina admin per l'import da file. `nome` non ha un vincolo
+// UNIQUE nello schema (deciso così per restare semplice, l'unico scrittore
+// finora era createOspedale una riga alla volta): l'upsert si fa quindi con
+// una SELECT preliminare + INSERT/UPDATE, non con INSERT ... ON CONFLICT.
+func upsertOspedali(ctx context.Context, pool *pgxpool.Pool, righe []OspedaleInput) (creati, aggiornati, scartati int, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	esistenti := map[string]string{} // nome -> id
+	rows, err := tx.Query(ctx, "SELECT id, nome FROM ospedali")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	for rows.Next() {
+		var id, nome string
+		if err := rows.Scan(&id, &nome); err != nil {
+			rows.Close()
+			return 0, 0, 0, err
+		}
+		esistenti[nome] = id
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, 0, 0, err
+	}
+
+	for _, r := range righe {
+		nome := strings.TrimSpace(r.Nome)
+		if nome == "" {
+			scartati++
+			continue
+		}
+		if id, ok := esistenti[nome]; ok {
+			if _, err = tx.Exec(ctx,
+				"UPDATE ospedali SET via=$1, citta=$2, lat=$3, lng=$4, updated_at=now() WHERE id=$5",
+				r.Via, r.Citta, r.Lat, r.Lng, id,
+			); err != nil {
+				return 0, 0, 0, err
+			}
+			aggiornati++
+		} else {
+			id := uuid.NewString()
+			if _, err = tx.Exec(ctx,
+				"INSERT INTO ospedali (id, nome, via, citta, lat, lng) VALUES ($1,$2,$3,$4,$5,$6)",
+				id, nome, r.Via, r.Citta, r.Lat, r.Lng,
+			); err != nil {
+				return 0, 0, 0, err
+			}
+			esistenti[nome] = id
+			creati++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, 0, err
+	}
+	return creati, aggiornati, scartati, nil
 }
 
 // deleteOspedale rimuove un ospedale per id. true se una riga è stata rimossa.
