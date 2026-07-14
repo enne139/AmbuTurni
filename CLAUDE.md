@@ -648,9 +648,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     prefisso) — stesso path funzionante sia in locale sia in produzione.
   - **Endpoint**: `GET /api/ospedali?citta=` pubblico (nessuna chiave: è
     quello che chiama l'app, filtro case-insensitive per match esatto,
-    citta assente → tutto l'elenco) — `POST /api/ospedali`/`DELETE
-    /api/ospedali/:id` protetti da JWT (solo la pagina admin). Risposta
-    nello stesso formato nome/via/citta/lat/lng di
+    citta assente → tutto l'elenco) — `POST /api/ospedali`/`PUT
+    /api/ospedali/:id`/`DELETE /api/ospedali/:id` protetti da JWT (solo la
+    pagina admin). Risposta nello stesso formato nome/via/citta/lat/lng di
     `exportOspedali`/`importOspedali` lato client: un client può fare
     l'upsert per nome sulla risposta senza trasformazioni.
     `GET /api/citta` (pubblica anche lei): le città che hanno almeno un
@@ -661,11 +661,23 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     scegliere la città da un elenco invece di farla digitare alla cieca.
   - **Pagina admin** (`backend/public/admin/index.html`): HTML+JS vanilla
     servito come file statico da Go (`http.FileServer`), nessun framework
-    frontend per una form di login + tabella + aggiungi/elimina. Token JWT
-    in `sessionStorage` (sopravvive a un refresh della scheda, sparisce
-    chiudendola). lat/lng inviate come numero JSON (`Number(...)`), non
-    stringa: la decodifica JSON di Go in `*float64` è rigorosa sul tipo, a
-    differenza del parsing permissivo che aveva il vecchio backend Node.
+    frontend per una form di login + tabella + aggiungi/modifica/elimina.
+    Token JWT in `sessionStorage` (sopravvive a un refresh della scheda,
+    sparisce chiudendola). lat/lng inviate come numero JSON (`Number(...)`),
+    non stringa: la decodifica JSON di Go in `*float64` è rigorosa sul tipo,
+    a differenza del parsing permissivo che aveva il vecchio backend Node.
+  - **Modifica e filtro nella pagina admin**: il pulsante "Modifica" di una
+    riga precompila lo stesso form dell'aggiunta (`modificaForm`) invece di
+    aprirne uno separato — una variabile `editingId` (null = modalità
+    aggiungi) decide se `salva()` fa POST o `PUT /api/ospedali/:id`, col
+    titolo/testo del pulsante aggiornati di conseguenza e un "Annulla
+    modifica" per tornare alla modalità aggiungi senza salvare. `nome` non
+    ha UNIQUE (vedi sopra), quindi la modifica è per `id`, non per nome: a
+    differenza dell'import massivo, qui non serve upsert perché si parte
+    sempre da una riga già esistente in tabella. Il campo di ricerca sopra
+    l'elenco filtra lato client (`filtraTabella`, su nome/via/città) l'intero
+    elenco già scaricato — niente nuove chiamate API a ogni carattere
+    digitato, la lista degli ospedali condivisi è piccola.
   - **Import massivo da file** (`POST /api/ospedali/import`, pulsante
     "Importa da file" nella pagina admin): oltre al form di aggiunta singola,
     carica un intero file JSON e fa l'upsert per nome di tutte le righe in

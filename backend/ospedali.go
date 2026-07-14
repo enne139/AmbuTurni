@@ -102,6 +102,20 @@ func createOspedale(ctx context.Context, pool *pgxpool.Pool, nome string, via, c
 	return o, err
 }
 
+// updateOspedale sostituisce tutti i campi di un ospedale esistente e
+// restituisce la riga aggiornata. Se [id] non esiste restituisce
+// pgx.ErrNoRows (RETURNING su un UPDATE che non tocca righe non produce
+// risultati, Scan lo riporta così) — il chiamante lo traduce in 404.
+func updateOspedale(ctx context.Context, pool *pgxpool.Pool, id, nome string, via, citta *string, lat, lng *float64) (Ospedale, error) {
+	var o Ospedale
+	err := pool.QueryRow(ctx,
+		`UPDATE ospedali SET nome=$1, via=$2, citta=$3, lat=$4, lng=$5, updated_at=now()
+		 WHERE id=$6 RETURNING `+colonneOspedale,
+		nome, via, citta, lat, lng, id,
+	).Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.CreatedAt, &o.UpdatedAt)
+	return o, err
+}
+
 // upsertOspedali importa in blocco una lista di ospedali, upsert per nome
 // (un ospedale già presente con lo stesso nome viene aggiornato, uno nuovo
 // viene creato) dentro un'unica transazione — stessa logica, stesso scopo

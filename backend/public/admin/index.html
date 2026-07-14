@@ -30,7 +30,9 @@
   }
   button:hover { opacity: .9; }
   button.secondary { background: transparent; border: 1px solid #ffffff3d; color: #fff; }
-  button.danger { background: #cf6679; padding: 6px 10px; margin: 0; font-size: 13px; }
+  button.danger { background: #cf6679; }
+  button.info { background: #1e88e5; }
+  button.small { padding: 6px 10px; margin: 0 6px 0 0; font-size: 13px; }
   .errore { color: #cf6679; font-size: 13px; margin-top: 10px; min-height: 1em; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2a2a4e; font-size: 14px; }
@@ -54,7 +56,7 @@
   <div id="app-gestione">
     <div class="card">
       <div class="header-row">
-        <strong>Aggiungi ospedale</strong>
+        <strong id="titolo-form">Aggiungi ospedale</strong>
         <button class="secondary" onclick="esci()">Esci</button>
       </div>
       <label for="f-nome">Nome</label>
@@ -73,7 +75,10 @@
           <input id="f-lng" />
         </div>
       </div>
-      <button onclick="aggiungi()">Aggiungi</button>
+      <div class="row">
+        <button id="btn-salva" onclick="salva()">Aggiungi</button>
+        <button id="btn-annulla" class="secondary" onclick="annullaModifica()" style="display:none;">Annulla modifica</button>
+      </div>
       <div class="errore" id="errore-form"></div>
     </div>
 
@@ -90,7 +95,11 @@
     </div>
 
     <div class="card">
-      <strong>Elenco ospedali</strong>
+      <div class="header-row">
+        <strong>Elenco ospedali</strong>
+        <span id="conteggio-ospedali" style="color:#ffffffb3; font-size:13px;"></span>
+      </div>
+      <input id="f-cerca" placeholder="Cerca per nome, via o città..." oninput="filtraTabella()" style="margin-top:8px;" />
       <table>
         <thead>
           <tr><th>Nome</th><th>Via</th><th>Città</th><th>Lat</th><th>Lng</th><th></th></tr>
@@ -138,11 +147,35 @@ async function accedi() {
 function esci() {
   sessionStorage.removeItem(TOKEN_KEY);
   mostraGestione(false);
+  annullaModifica();
 }
+
+// Elenco completo scaricato dal server; il filtro lavora su questa copia
+// locale senza richiamare l'API a ogni carattere digitato.
+let ospedaliCache = [];
+// null = form in modalità "aggiungi"; altrimenti l'id dell'ospedale in
+// modifica (il form è lo stesso, riusato per entrambe le modalità).
+let editingId = null;
 
 async function carica() {
   const resp = await fetch('/api/ospedali');
-  const lista = await resp.json();
+  ospedaliCache = await resp.json();
+  filtraTabella();
+}
+
+function filtraTabella() {
+  const q = document.getElementById('f-cerca').value.trim().toLowerCase();
+  const filtrati = !q ? ospedaliCache : ospedaliCache.filter((o) =>
+    (o.nome || '').toLowerCase().includes(q) ||
+    (o.via || '').toLowerCase().includes(q) ||
+    (o.citta || '').toLowerCase().includes(q)
+  );
+  renderTabella(filtrati);
+  document.getElementById('conteggio-ospedali').textContent =
+    q ? `${filtrati.length} di ${ospedaliCache.length}` : `${ospedaliCache.length}`;
+}
+
+function renderTabella(lista) {
   const corpo = document.getElementById('tabella-ospedali');
   corpo.innerHTML = '';
   for (const o of lista) {
@@ -153,14 +186,48 @@ async function carica() {
       <td>${escapeHtml(o.citta ?? '')}</td>
       <td>${o.lat ?? ''}</td>
       <td>${o.lng ?? ''}</td>
-      <td><button class="danger" data-id="${o.id}">Elimina</button></td>
+      <td>
+        <button class="info small">Modifica</button>
+        <button class="danger small">Elimina</button>
+      </td>
     `;
-    riga.querySelector('button').onclick = () => elimina(o.id);
+    const [btnModifica, btnElimina] = riga.querySelectorAll('button');
+    btnModifica.onclick = () => modificaForm(o);
+    btnElimina.onclick = () => elimina(o.id);
     corpo.appendChild(riga);
   }
 }
 
-async function aggiungi() {
+// Precompila il form coi valori di [o] e lo mette in modalità modifica:
+// stesso form dell'aggiunta, "salva()" decide POST o PUT in base a editingId.
+function modificaForm(o) {
+  editingId = o.id;
+  document.getElementById('f-nome').value = o.nome ?? '';
+  document.getElementById('f-via').value = o.via ?? '';
+  document.getElementById('f-citta').value = o.citta ?? '';
+  document.getElementById('f-lat').value = o.lat ?? '';
+  document.getElementById('f-lng').value = o.lng ?? '';
+  document.getElementById('errore-form').textContent = '';
+  aggiornaModalitaForm();
+  document.getElementById('f-nome').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function annullaModifica() {
+  editingId = null;
+  for (const id of ['f-nome', 'f-via', 'f-citta', 'f-lat', 'f-lng']) {
+    document.getElementById(id).value = '';
+  }
+  document.getElementById('errore-form').textContent = '';
+  aggiornaModalitaForm();
+}
+
+function aggiornaModalitaForm() {
+  document.getElementById('titolo-form').textContent = editingId ? 'Modifica ospedale' : 'Aggiungi ospedale';
+  document.getElementById('btn-salva').textContent = editingId ? 'Salva modifiche' : 'Aggiungi';
+  document.getElementById('btn-annulla').style.display = editingId ? 'inline-block' : 'none';
+}
+
+async function salva() {
   const erroreEl = document.getElementById('errore-form');
   erroreEl.textContent = '';
   // lat/lng come numero JSON (non stringa): il backend Go decodifica il
@@ -175,16 +242,15 @@ async function aggiungi() {
     lng: lngTxt ? Number(lngTxt) : null,
   };
   try {
-    const resp = await fetch('/api/ospedali', {
-      method: 'POST',
+    const url = editingId ? `/api/ospedali/${encodeURIComponent(editingId)}` : '/api/ospedali';
+    const resp = await fetch(url, {
+      method: editingId ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
       body: JSON.stringify(corpo),
     });
     const dati = await resp.json();
     if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
-    for (const id of ['f-nome', 'f-via', 'f-citta', 'f-lat', 'f-lng']) {
-      document.getElementById(id).value = '';
-    }
+    annullaModifica();
     await carica();
   } catch (e) {
     erroreEl.textContent = e.message;

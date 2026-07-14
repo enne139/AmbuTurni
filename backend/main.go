@@ -4,10 +4,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func main() {
@@ -138,6 +141,37 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusCreated, creato)
+	}))
+
+	// Modifica: usata dal pulsante "Modifica" della pagina admin (riusa lo
+	// stesso form dell'aggiunta). Sostituisce tutti i campi, come il POST.
+	mux.HandleFunc("PUT /api/ospedali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Nome  string   `json:"nome"`
+			Via   *string  `json:"via"`
+			Citta *string  `json:"citta"`
+			Lat   *float64 `json:"lat"`
+			Lng   *float64 `json:"lng"`
+		}
+		if !readJSON(w, r, &body) {
+			return
+		}
+		body.Nome = strings.TrimSpace(body.Nome)
+		if body.Nome == "" {
+			writeError(w, http.StatusBadRequest, "nome richiesto")
+			return
+		}
+		aggiornato, err := updateOspedale(ctx, pool, r.PathValue("id"), body.Nome, body.Via, body.Citta, body.Lat, body.Lng)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Ospedale non trovato")
+			return
+		}
+		if err != nil {
+			log.Printf("[ospedali] errore aggiornamento: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, aggiornato)
 	}))
 
 	mux.HandleFunc("DELETE /api/ospedali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
