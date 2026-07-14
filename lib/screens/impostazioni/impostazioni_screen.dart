@@ -160,7 +160,54 @@ class _SezioneOspedali extends StatelessWidget {
         if (context.mounted) context.read<AnagraficheProvider>().carica();
       },
       messaggioVincolo: 'è usato da servizi di turni esistenti.',
+      onExport: () => _export(context),
+      onImport: () => _import(context),
     );
+  }
+
+  /// Esporta nome/via/città/coordinate di tutti gli ospedali in un file JSON
+  /// portabile (utils/backup.dart: exportOspedali) — non il backup completo,
+  /// solo l'anagrafica ospedali, per condividerla o scambiarla facilmente.
+  Future<void> _export(BuildContext context) async {
+    try {
+      final path = await exportOspedali();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(path != null ? 'Ospedali esportati.' : 'Export annullato.'),
+        ));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore export: $e')));
+      }
+    }
+  }
+
+  /// Importa ospedali da un file JSON (lo stesso prodotto da _export, o un
+  /// backup completo). A differenza dell'import di backup NON è distruttivo:
+  /// aggiorna gli ospedali già in anagrafica (per nome) e aggiunge i nuovi,
+  /// senza toccare il resto dei dati né gli ospedali non presenti nel file.
+  Future<void> _import(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Importa ospedali'),
+        content: const Text(
+          'Aggiunge o aggiorna gli ospedali del file scelto (in base al nome). '
+          'Il resto dei dati e gli ospedali non presenti nel file restano invariati.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Importa')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final msg = await importOspedali();
+    if (context.mounted) {
+      context.read<AnagraficheProvider>().carica();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 
   Future<void> _dialogOspedale(BuildContext context, Ospedale? o) async {
@@ -323,6 +370,11 @@ class _SezioneAnag<T> extends StatefulWidget {
   // Se non null, mostra un pulsante per vedere i turni/assistenze in cui compare la voce
   // (usato da Persone e Ospedali per navigare all'elenco filtrato).
   final Future<void> Function(T)? onView;
+  // Se non null, mostrano due pulsanti export/import dell'anagrafica (per
+  // ora solo Ospedali): a differenza di onAdd/onEdit/onDelete non riguardano
+  // una singola voce, quindi niente parametro T.
+  final Future<void> Function()? onExport;
+  final Future<void> Function()? onImport;
 
   const _SezioneAnag({
     required this.titolo,
@@ -338,6 +390,8 @@ class _SezioneAnag<T> extends StatefulWidget {
     this.onMoveUp,
     this.onMoveDown,
     this.onView,
+    this.onExport,
+    this.onImport,
   });
 
   @override
@@ -348,11 +402,35 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
   bool _expanded = false;
   final _searchCtrl = TextEditingController();
   String _query = '';
+  // Disabilita i pulsanti export/import mentre l'operazione è in corso
+  // (file picker + scritture DB, non istantanee): un doppio tap non deve
+  // avviare due import in parallelo.
+  bool _ioBusy = false;
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleExport() async {
+    if (widget.onExport == null || _ioBusy) return;
+    setState(() => _ioBusy = true);
+    try {
+      await widget.onExport!();
+    } finally {
+      if (mounted) setState(() => _ioBusy = false);
+    }
+  }
+
+  Future<void> _handleImport() async {
+    if (widget.onImport == null || _ioBusy) return;
+    setState(() => _ioBusy = true);
+    try {
+      await widget.onImport!();
+    } finally {
+      if (mounted) setState(() => _ioBusy = false);
+    }
   }
 
   /// Filtra la lista per il testo corrente cercando in label e sublabel.
@@ -446,6 +524,34 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                     style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
+                // Export/import dell'intera anagrafica (solo Ospedali per ora):
+                // sempre visibili come l'aggiunta, non richiedono di espandere prima.
+                if (widget.onExport != null || widget.onImport != null)
+                  if (_ioBusy)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else ...[
+                    if (widget.onExport != null)
+                      IconButton(
+                        icon: const Icon(Icons.upload_file, size: 18, color: Colors.white70),
+                        onPressed: _handleExport,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Esporta',
+                      ),
+                    if (widget.onImport != null)
+                      IconButton(
+                        icon: const Icon(Icons.download, size: 18, color: Colors.white70),
+                        onPressed: _handleImport,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Importa',
+                      ),
+                  ],
                 // Pulsante aggiunta sempre visibile (non richiede di espandere prima)
                 IconButton(
                   icon: const Icon(Icons.add, size: 20, color: Colors.white70),

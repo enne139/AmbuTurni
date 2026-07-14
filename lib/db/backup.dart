@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prefs_keys.dart';
 import 'backup_file.dart';
 import 'database.dart';
-import 'helpers.dart' show ricalcolaTutteLeNumerazioni;
+import 'helpers.dart' show ricalcolaTutteLeNumerazioni, saveOspedale, aggiornaCoordinateOspedale;
 
 // Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni; poi
 // estesa al Magazzino Verde senza bump: ogni chiave è opzionale, un backup
@@ -386,4 +386,110 @@ Future<String> importBackup() async {
       ? ''
       : ' Attenzione: $scartate righe non valide scartate (dettagli nel log).';
   return 'Import completato. Dati del $ts ripristinati.$avviso';
+}
+
+/// Esporta la sola anagrafica ospedali (nome, via, città, coordinate) in un
+/// file JSON portabile — a differenza del backup completo, pensato per
+/// scambiare/condividere la lista con un'altra installazione (o un'altra
+/// associazione), non per un ripristino esatto: niente id/timestamp interni.
+/// L'import (vedi importOspedali) fa un upsert per nome, quindi lo stesso
+/// file può anche fare da "esportazione periodica" senza creare doppioni.
+Future<String?> exportOspedali() async {
+  final db = await getDb();
+  final righe = await db.query('ospedali', orderBy: 'nome ASC');
+  final ospedali = righe.map((r) => {
+        'nome': r['nome'],
+        'via': r['via'],
+        'citta': r['citta'],
+        'lat': r['lat'],
+        'lng': r['lng'],
+      }).toList();
+  final json = const JsonEncoder.withIndent('  ').convert({'ospedali': ospedali});
+  return _salvaFile(
+      json, 'ambuturni_ospedali_${_timestampFile()}.json', 'Ospedali AmbuTurni');
+}
+
+/// Importa un file di ospedali: lo stesso prodotto da exportOspedali, oppure
+/// — per comodità — un backup completo (che ha comunque una chiave
+/// "ospedali"). A differenza di importBackup NON è distruttivo: ogni riga fa
+/// un upsert per nome (un ospedale già in anagrafica con lo stesso nome
+/// viene aggiornato, uno nuovo viene creato), il resto dei dati e gli
+/// ospedali non presenti nel file restano invariati. Le coordinate si
+/// scrivono solo se il file le contiene: niente geocoding automatico qui,
+/// per non lanciare una raffica di richieste a Nominatim su un import
+/// massivo (l'utente può comunque ritentarlo per singolo ospedale da Lista
+/// ospedali). Restituisce un messaggio di esito con il conteggio.
+Future<String> importOspedali() async {
+  final String raw;
+  try {
+    final letto = await leggiBackupScelto();
+    if (letto == null) return 'Import annullato.';
+    raw = letto;
+  } on StateError catch (e) {
+    return e.message;
+  }
+
+  final dynamic payload;
+  try {
+    payload = jsonDecode(raw);
+  } catch (_) {
+    return 'File non valido (JSON malformato).';
+  }
+
+  final List<dynamic> righe;
+  if (payload is List) {
+    righe = payload;
+  } else if (payload is Map && payload['ospedali'] is List) {
+    righe = payload['ospedali'] as List;
+  } else {
+    return 'File non valido: non contiene un elenco di ospedali.';
+  }
+
+  final db = await getDb();
+  final esistenti = {
+    for (final r in await db.query('ospedali')) r['nome'] as String: r['id'] as String
+  };
+
+  int creati = 0, aggiornati = 0, scartati = 0;
+  for (final riga in righe) {
+    if (riga is! Map) {
+      scartati++;
+      continue;
+    }
+    final nome = (riga['nome'] as String?)?.trim();
+    if (nome == null || nome.isEmpty) {
+      scartati++;
+      continue;
+    }
+    final via = (riga['via'] as String?)?.trim();
+    final citta = (riga['citta'] as String?)?.trim();
+    final lat = (riga['lat'] as num?)?.toDouble();
+    final lng = (riga['lng'] as num?)?.toDouble();
+
+    final idEsistente = esistenti[nome];
+    final String id;
+    if (idEsistente != null) {
+      id = await saveOspedale(
+        nome,
+        (citta == null || citta.isEmpty) ? null : citta,
+        id: idEsistente,
+        via: (via == null || via.isEmpty) ? null : via,
+      );
+      aggiornati++;
+    } else {
+      id = await saveOspedale(
+        nome,
+        (citta == null || citta.isEmpty) ? null : citta,
+        via: (via == null || via.isEmpty) ? null : via,
+      );
+      esistenti[nome] = id;
+      creati++;
+    }
+    if (lat != null && lng != null) {
+      await aggiornaCoordinateOspedale(id, lat, lng);
+    }
+  }
+
+  final avviso = scartati == 0 ? '' : ' ($scartati righe scartate: nome mancante o formato non valido)';
+  return 'Import completato: $creati nuovi, $aggiornati aggiornati.$avviso';
 }

@@ -722,6 +722,24 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     invece del centroide dell'edificio) o quando l'indirizzo non è
     geocodificabile: se compilati hanno priorità e saltano del tutto il
     geocoding automatico.
+- **Export/import della sola anagrafica ospedali** (`exportOspedali`/
+  `importOspedali` in `db/backup.dart`, pulsanti nell'header della sezione
+  Ospedali in Impostazioni, `_SezioneAnag.onExport`/`onImport`): a differenza
+  del backup completo (distruttivo, sovrascrive tutto) serve a
+  scambiare/condividere solo la lista ospedali, es. con un'altra
+  associazione. Il file JSON esportato ha solo nome/via/città/coordinate,
+  niente id/timestamp interni — l'import fa un **upsert per nome** (un
+  ospedale già in anagrafica con lo stesso nome viene aggiornato, uno nuovo
+  viene creato) invece di sovrascrivere tutto: il resto dei dati e gli
+  ospedali non presenti nel file restano invariati. Accetta anche un backup
+  completo come sorgente (ha comunque una chiave `"ospedali"`), per comodità.
+  Le coordinate si scrivono così come sono nel file, **nessun geocoding
+  automatico in import**: un upsert con molte righe farebbe una raffica di
+  richieste a Nominatim che ne violerebbe la policy (max 1/s) — chi vuole
+  geocodificare un ospedale arrivato senza coordinate può comunque ritentare
+  singolarmente dal pulsante già presente in Lista ospedali. Non testato
+  (come `exportBackup`/`importBackup`, che dipendono dal file picker reale):
+  stesso limite già accettato per quelle funzioni.
 - **Tool nuovo con `attivoDiDefault: true` ma "invisibile" dopo un
   aggiornamento**: bug scoperto aggiungendo Lista ospedali. `ToolsProvider.carica()`
   applicava i default del catalogo SOLO se `kPrefToolsAttivi` non era mai
@@ -771,7 +789,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città,
   pulsante Naviga (Google Maps o Waze) e vista mappa con tutti gli ospedali
   geocodificati automaticamente (nessuna API key) o con coordinate inserite
-  a mano nel form Ospedale.
+  a mano nel form Ospedale. Anagrafica ospedali esportabile/importabile a
+  parte (Impostazioni → Ospedali), upsert per nome, senza toccare il resto
+  dei dati.
 - ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 101 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
