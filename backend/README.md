@@ -1,86 +1,89 @@
-# Backend di sincronizzazione — Ambulanza Turni
+# Backend ospedali — AmbuTurni
 
-API REST (Node.js + Express + PostgreSQL) per sincronizzare i dati dell'app tra più
-dispositivi, con **login** (JWT) per non rendere i dati pubblici.
+API REST (Go + PostgreSQL) che espone un elenco condiviso di ospedali
+(nome, via, città, coordinate), scaricabile per città dall'app AmbuTurni
+(tool "Lista ospedali") e gestibile da una pagina admin statica con login.
 
-## Come funziona
+**Non è un backend di sincronizzazione**: i dati dell'app (turni, persone,
+associazioni…) restano solo locali sul device, trasferibili tra dispositivi
+col backup JSON di Impostazioni. Questo backend serve solo a condividere
+l'anagrafica ospedali tra installazioni/associazioni diverse.
 
-- I dati restano **locali** su ogni dispositivo (SQLite). La sync è opzionale.
-- Ogni riga modificata localmente (`is_synced = 0`) viene inviata col **push**.
-- Il **pull** scarica le modifiche fatte dagli altri dispositivi dopo l'ultima sync.
-- I conflitti si risolvono **last-write-wins** in base a `updated_at` del client.
-- Il server salva tutto in una tabella generica `records (table_name, id, data JSONB, …)`,
-  quindi non va modificato se cambia lo schema dell'app.
+In produzione **non gira da solo**: il binario è incorporato nell'immagine
+Docker della versione web (`Dockerfile` alla radice del repo), che lancia
+sia nginx (file statici Flutter) sia questo backend, con nginx che fa da
+reverse proxy — pass-through, nessun prefisso tolto — su `/api/*`. Il
+`Dockerfile`/`docker-compose.yml` di questa cartella servono solo per
+sviluppare/testare il backend **da solo**, senza dover compilare tutta la
+web app Flutter.
+
+Le rotte API vivono sotto `/api/` **sempre**, anche testando il backend da
+solo (senza nginx davanti): il client Flutter (`utils/backend_api.dart`)
+chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
+(senza `/api/`) risponde 404 — è normale, usa `/api/health`. Solo
+`/admin/` fa eccezione (percorso diretto, non sotto `/api/`).
 
 ## Endpoint
 
 | Metodo | Rotta | Auth | Descrizione |
 |---|---|---|---|
-| GET | `/health` | no | stato del servizio |
-| POST | `/auth/login` | no | `{username,password}` → `{token}` |
-| POST | `/auth/users` | sì | crea un nuovo utente (solo se già loggato) |
-| POST | `/sync/push` | sì | `{changes:[{table,id,data,updated_at,deleted}]}` |
-| GET | `/sync/pull?since=ISO` | sì | `{records:[…], serverTime}` |
+| GET | `/api/health` | no | stato del servizio |
+| POST | `/api/auth/login` | no | `{username,password}` → `{token}` |
+| POST | `/api/auth/users` | sì | crea un nuovo utente admin (solo se già loggato) |
+| GET | `/api/ospedali?citta=` | no | elenco ospedali, filtrato per città se indicata |
+| POST | `/api/ospedali` | sì | `{nome,via,citta,lat,lng}` → crea un ospedale |
+| DELETE | `/api/ospedali/:id` | sì | elimina un ospedale |
+| GET | `/api/citta` | no | città che hanno almeno un ospedale, ordinate alfabeticamente |
+| GET | `/admin/` | no (poi login nella pagina) | interfaccia web per gestire gli ospedali |
 
 Le rotte protette richiedono l'header `Authorization: Bearer <token>`.
+`GET /api/ospedali` è pubblica di proposito: è quella che chiama l'app, che
+non ha (e non deve avere) credenziali.
 
-## Avvio con Docker / Podman
+## Sviluppo locale con Docker / Podman
 
 ```bash
 cd backend
-cp .env.example .env          # personalizza credenziali e SYNC_IMAGE
-podman-compose up -d          # oppure: docker compose up -d
+cp .env.example .env          # personalizza le credenziali
+docker compose up --build     # (oppure: podman-compose up --build)
 ```
 
 Verifica:
 
 ```bash
-curl http://localhost:3000/health           # {"status":"ok"}
-curl -X POST http://localhost:3000/auth/login \
+curl http://localhost:3000/api/health                        # {"status":"ok"}
+curl -X POST http://localhost:3000/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"...";}'
+  -d '{"username":"admin","password":"..."}'
 ```
 
-L'utente admin viene creato al primo avvio da `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+Apri `http://localhost:3000/admin/` per la pagina di gestione ospedali.
+L'utente admin viene creato al primo avvio da `ADMIN_USERNAME`/`ADMIN_PASSWORD`.
+Nell'app Flutter, l'indirizzo del server da configurare (Lista ospedali →
+icona ingranaggio) è la base senza `/api/`, es. `http://localhost:3000` o
+`http://<IP-del-PC>:3000` da telefono: è l'app ad aggiungere `/api/` da sola.
 
-## Sviluppo locale (senza Docker)
+## Sviluppo locale senza Docker
+
+Richiede Go ≥ 1.22 e un PostgreSQL raggiungibile.
 
 ```bash
-npm install
-DATABASE_URL=postgres://ambulanza:pw@localhost:5432/ambulanza \
-JWT_SECRET=dev ADMIN_USERNAME=admin ADMIN_PASSWORD=admin \
-npm run dev
+go run . # legge le variabili d'ambiente sotto
 ```
+
+Variabili principali (vedi `.env.example` per l'elenco completo):
+`DATABASE_URL`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `PORT`.
 
 ## Build dell'immagine
 
-L'immagine viene creata dalla action `.gitea/workflows/build-backend.yml` (Buildah) a ogni
-push su `backend/**` e pubblicata sul **Container Registry dello stesso Gitea**. Il runner
-deve avere `buildah` (o poterlo installare). Tag prodotto:
-
-```
-<REGISTRY_HOST>/<owner>/ambulanza-sync:<sha>   (+ :latest)
-```
-
-Secrets da impostare nel repo (Settings → Actions → Secrets):
-
-| Secret | Esempio | Note |
-|---|---|---|
-| `REGISTRY_HOST` | `gitea.example.com` | host del registry (con porta se serve, es. `:3000`) |
-| `REGISTRY_USER` | `laura` | utente Gitea con scrittura sui package |
-| `REGISTRY_PASSWORD` | *(token/PAT)* | password o PAT con scope `write:package` |
-
-Imposta poi `SYNC_IMAGE` nel `.env` con quel percorso, es.:
-
-```
-SYNC_IMAGE=gitea.miodominio.it/laura/ambulanza-sync:latest
-```
-
-> Per fare il `pull` dell'immagine, il server dove gira il compose deve poter accedere al
-> registry Gitea: se è privato, esegui prima `podman login <host-gitea>`.
+Questo backend **non ha più una sua immagine pubblicata separatamente**: è
+compilato ed eseguito dentro l'immagine web (vedi `.gitea/workflows/build-web.yml`
+e il `Dockerfile` alla radice). `backend/Dockerfile` in questa cartella serve
+solo per lo sviluppo locale via `docker compose` sopra.
 
 ## Sicurezza
 
 - Cambia **sempre** `JWT_SECRET`, `ADMIN_PASSWORD` e `POSTGRES_PASSWORD`.
-- Esponi il servizio dietro HTTPS (reverse proxy) in produzione.
-- Aggiungi altri utenti con `POST /auth/users` (da loggato) — uno per volontario.
+- `GET /api/ospedali` è volutamente pubblica (nessun dato sensibile): non
+  richiede autenticazione né in sviluppo né in produzione.
+- Aggiungi altri utenti admin con `POST /api/auth/users` (da loggato).

@@ -1,10 +1,11 @@
-# Avvio del backend di sincronizzazione + PostgreSQL.
-# Compatibile con docker compose e podman-compose.
+# Avvio del backend ospedali + PostgreSQL, per sviluppo/test locale.
+# Compatibile con docker compose e podman-compose. In produzione questo
+# backend non gira da solo: è incorporato nell'immagine web (vedi il
+# Dockerfile alla radice del repo) — qui si builda invece localmente da
+# backend/Dockerfile, nessuna immagine da un registry.
 #
 #   cp .env.example .env   # personalizza le credenziali
-#   podman-compose up -d   # (oppure: docker compose up -d)
-#
-# Le immagini usano il path completo del registry (richiesto da Podman).
+#   docker compose up --build -d   # (oppure: podman-compose up --build -d)
 
 services:
   db:
@@ -23,9 +24,7 @@ services:
       retries: 5
 
   api:
-    # Immagine prodotta dalla action Gitea (vedi .gitea/workflows/build-backend.yml).
-    # Sovrascrivi SYNC_IMAGE nel file .env con il path del tuo registry.
-    image: ${SYNC_IMAGE:-gitea.example.com/owner/ambulanza-sync:latest}
+    build: .
     restart: unless-stopped
     depends_on:
       db:

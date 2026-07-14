@@ -1,10 +1,11 @@
-# Non servono alla build web: velocizzano il trasferimento del contesto Docker.
+# Non servono alla build (web o backend): velocizzano il trasferimento del
+# contesto Docker. backend/ NON è escluso: la build finale include anche il
+# backend Go (vedi Dockerfile).
 .git
 .dart_tool
 build
 android
 windows
-backend
 test
 .gitea
 .idea

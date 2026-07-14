@@ -1,18 +1,18 @@
-# Immagine del backend di sincronizzazione (Node 20).
-FROM docker.io/library/node:20-alpine
-
+# Immagine di sviluppo/test del solo backend (Go). In produzione questo
+# codice è compilato dentro l'immagine web (vedi il Dockerfile alla radice
+# del repo): questo file serve solo per `docker compose up` in questa
+# cartella, senza dover buildare tutta la web app Flutter.
+FROM golang:1.25-alpine AS build
 WORKDIR /app
-ENV NODE_ENV=production
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /ambuturni-backend .
 
-# Installa solo le dipendenze di produzione (sfrutta la cache dei layer).
-COPY package.json ./
-RUN npm install --omit=dev && npm cache clean --force
-
-# Codice sorgente.
-COPY src ./src
-
+FROM alpine:3.20
+WORKDIR /app
+COPY --from=build /ambuturni-backend ./ambuturni-backend
+COPY public ./public
 EXPOSE 3000
-# Esegui come utente non-root (presente nell'immagine node).
-USER node
-
-CMD ["node", "src/index.js"]
+USER nobody
+CMD ["./ambuturni-backend"]

@@ -47,6 +47,7 @@ web/sqflite_sw.js
 *.mobileprovision
 *.orig.*
 
-# Backend Node.js
-backend/node_modules/
+# Backend Go
+backend/ambuturni-backend
+backend/ambuturni-backend.exe
 backend/.env

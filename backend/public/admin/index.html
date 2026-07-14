@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AmbuTurni — Ospedali (admin)</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 24px; min-height: 100vh; box-sizing: border-box;
+    background: #1a1a2e; color: #fff;
+    font: 15px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 20px; }
+  .card {
+    background: #16213e; border: 1px solid #2a2a4e; border-radius: 12px;
+    padding: 20px; max-width: 720px; margin: 0 auto 20px;
+  }
+  label { display: block; font-size: 13px; color: #ffffffb3; margin: 12px 0 4px; }
+  input {
+    width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px;
+    border: 1px solid #2a2a4e; background: #1a1a2e; color: #fff; font-size: 15px;
+  }
+  input:focus { outline: none; border-color: #e94560; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  button {
+    margin-top: 16px; padding: 10px 16px; border: none; border-radius: 8px;
+    background: #e94560; color: #fff; font-size: 15px; cursor: pointer;
+  }
+  button:hover { opacity: .9; }
+  button.secondary { background: transparent; border: 1px solid #ffffff3d; color: #fff; }
+  button.danger { background: #cf6679; padding: 6px 10px; margin: 0; font-size: 13px; }
+  .errore { color: #cf6679; font-size: 13px; margin-top: 10px; min-height: 1em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2a2a4e; font-size: 14px; }
+  th { color: #ffffffb3; font-weight: 600; }
+  #app-gestione { display: none; }
+  .header-row { display: flex; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+  <h1>AmbuTurni — Ospedali (admin)</h1>
+
+  <div class="card" id="app-login">
+    <label for="username">Utente</label>
+    <input id="username" autocomplete="username" />
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" />
+    <button onclick="accedi()">Accedi</button>
+    <div class="errore" id="errore-login"></div>
+  </div>
+
+  <div id="app-gestione">
+    <div class="card">
+      <div class="header-row">
+        <strong>Aggiungi ospedale</strong>
+        <button class="secondary" onclick="esci()">Esci</button>
+      </div>
+      <label for="f-nome">Nome</label>
+      <input id="f-nome" />
+      <label for="f-via">Via</label>
+      <input id="f-via" />
+      <label for="f-citta">Città</label>
+      <input id="f-citta" />
+      <div class="row">
+        <div>
+          <label for="f-lat">Latitudine</label>
+          <input id="f-lat" />
+        </div>
+        <div>
+          <label for="f-lng">Longitudine</label>
+          <input id="f-lng" />
+        </div>
+      </div>
+      <button onclick="aggiungi()">Aggiungi</button>
+      <div class="errore" id="errore-form"></div>
+    </div>
+
+    <div class="card">
+      <strong>Elenco ospedali</strong>
+      <table>
+        <thead>
+          <tr><th>Nome</th><th>Via</th><th>Città</th><th>Lat</th><th>Lng</th><th></th></tr>
+        </thead>
+        <tbody id="tabella-ospedali"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+// Pagina statica vanilla (nessun framework): il token JWT vive in
+// sessionStorage, così un refresh della pagina non richiede un nuovo login
+// finché la scheda resta aperta, ma si perde chiudendola (niente sessioni
+// admin che restano valide per settimane su un browser condiviso).
+const TOKEN_KEY = 'ambuturni_admin_token';
+
+function token() { return sessionStorage.getItem(TOKEN_KEY); }
+
+function mostraGestione(mostra) {
+  document.getElementById('app-login').style.display = mostra ? 'none' : 'block';
+  document.getElementById('app-gestione').style.display = mostra ? 'block' : 'none';
+}
+
+async function accedi() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const erroreEl = document.getElementById('errore-login');
+  erroreEl.textContent = '';
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Credenziali non valide');
+    sessionStorage.setItem(TOKEN_KEY, dati.token);
+    mostraGestione(true);
+    await carica();
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+function esci() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  mostraGestione(false);
+}
+
+async function carica() {
+  const resp = await fetch('/api/ospedali');
+  const lista = await resp.json();
+  const corpo = document.getElementById('tabella-ospedali');
+  corpo.innerHTML = '';
+  for (const o of lista) {
+    const riga = document.createElement('tr');
+    riga.innerHTML = `
+      <td>${escapeHtml(o.nome)}</td>
+      <td>${escapeHtml(o.via ?? '')}</td>
+      <td>${escapeHtml(o.citta ?? '')}</td>
+      <td>${o.lat ?? ''}</td>
+      <td>${o.lng ?? ''}</td>
+      <td><button class="danger" data-id="${o.id}">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => elimina(o.id);
+    corpo.appendChild(riga);
+  }
+}
+
+async function aggiungi() {
+  const erroreEl = document.getElementById('errore-form');
+  erroreEl.textContent = '';
+  // lat/lng come numero JSON (non stringa): il backend Go decodifica il
+  // corpo in modo rigoroso, un tipo sbagliato farebbe fallire l'intera richiesta.
+  const latTxt = document.getElementById('f-lat').value.trim();
+  const lngTxt = document.getElementById('f-lng').value.trim();
+  const corpo = {
+    nome: document.getElementById('f-nome').value.trim(),
+    via: document.getElementById('f-via').value.trim() || null,
+    citta: document.getElementById('f-citta').value.trim() || null,
+    lat: latTxt ? Number(latTxt) : null,
+    lng: lngTxt ? Number(lngTxt) : null,
+  };
+  try {
+    const resp = await fetch('/api/ospedali', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify(corpo),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    for (const id of ['f-nome', 'f-via', 'f-citta', 'f-lat', 'f-lng']) {
+      document.getElementById(id).value = '';
+    }
+    await carica();
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+async function elimina(id) {
+  if (!confirm('Eliminare questo ospedale?')) return;
+  await fetch(`/api/ospedali/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token()}` },
+  });
+  await carica();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
+
+// Sessione già valida (refresh della pagina): salta direttamente alla gestione.
+if (token()) {
+  mostraGestione(true);
+  carica();
+}
+</script>
+</body>
+</html>
