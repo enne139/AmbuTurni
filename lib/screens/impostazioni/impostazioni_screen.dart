@@ -214,8 +214,14 @@ class _SezioneOspedali extends StatelessWidget {
     final nomeCtrl = TextEditingController(text: o?.nome ?? '');
     final cittaCtrl = TextEditingController(text: o?.citta ?? '');
     final viaCtrl = TextEditingController(text: o?.via ?? '');
-    final latCtrl = TextEditingController(text: o?.lat?.toString() ?? '');
-    final lngCtrl = TextEditingController(text: o?.lng?.toString() ?? '');
+    // Campi SEMPRE vuoti all'apertura, anche se l'ospedale ha già delle
+    // coordinate: precompilarli col valore esistente li avrebbe resi "campi
+    // manuali" già valorizzati, e modificare solo via/città lasciandoli
+    // intatti si sarebbe visto come "coordinate inserite a mano" invece che
+    // "campi vuoti" — il geocoding automatico non sarebbe mai ripartito dopo
+    // la prima volta. Il valore attuale resta visibile come hintText.
+    final latCtrl = TextEditingController();
+    final lngCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -233,7 +239,7 @@ class _SezioneOspedali extends StatelessWidget {
                 child: TextField(
                   controller: latCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: const InputDecoration(labelText: 'Latitudine'),
+                  decoration: InputDecoration(labelText: 'Latitudine', hintText: o?.lat?.toString()),
                 ),
               ),
               const SizedBox(width: 12),
@@ -241,7 +247,7 @@ class _SezioneOspedali extends StatelessWidget {
                 child: TextField(
                   controller: lngCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: const InputDecoration(labelText: 'Longitudine'),
+                  decoration: InputDecoration(labelText: 'Longitudine', hintText: o?.lng?.toString()),
                 ),
               ),
             ]),

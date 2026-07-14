@@ -5,10 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
-import '../../utils/geocoding_api.dart';
 import '../../utils/theme.dart';
 
 // Preferenza locale (non nel backup, come la vista lista/calendario di
@@ -32,8 +30,6 @@ class ListaOspedaliScreen extends StatefulWidget {
 class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
   final _ricercaCtrl = TextEditingController();
   bool _vistaMappa = false;
-  // Id degli ospedali per cui è in corso un retry di geocoding manuale.
-  final Set<String> _geocodificando = {};
 
   @override
   void initState() {
@@ -106,29 +102,6 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
     }
   }
 
-  /// Ritenta il geocoding di un ospedale (es. dopo un primo tentativo fallito
-  /// per assenza di rete): stesso servizio del salvataggio in Impostazioni,
-  /// richiamabile qui senza dover riaprire il form.
-  Future<void> _riprovaGeocoding(Ospedale o) async {
-    final indirizzo = [o.via, o.citta]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .join(', ');
-    setState(() => _geocodificando.add(o.id));
-    final coord = await GeocodingApi().geocodifica(indirizzo);
-    if (coord != null) {
-      await aggiornaCoordinateOspedale(o.id, coord.lat, coord.lng);
-      if (mounted) context.read<AnagraficheProvider>().carica();
-    }
-    if (!mounted) return;
-    setState(() => _geocodificando.remove(o.id));
-    if (coord == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Posizione non trovata per questo indirizzo.')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final ospedali = context.watch<AnagraficheProvider>().ospedali;
@@ -196,9 +169,7 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
       itemCount: ospedali.length,
       itemBuilder: (_, i) => _OspedaleCard(
         ospedale: ospedali[i],
-        geocodificando: _geocodificando.contains(ospedali[i].id),
         onNaviga: (app) => _naviga(ospedali[i], app),
-        onRiprovaGeocoding: () => _riprovaGeocoding(ospedali[i]),
       ),
     );
   }
@@ -301,20 +272,16 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
   }
 }
 
-/// Card di un ospedale nella vista elenco: indirizzo e pulsante Naviga
-/// sempre disponibile; se l'indirizzo non ha ancora coordinate (mappa) mostra
-/// anche un pulsante per ritentare il geocoding sul posto.
+/// Card di un ospedale nella vista elenco: indirizzo e pulsante Naviga.
+/// Nessuna azione per gli ospedali senza coordinate: il geocoding riparte da
+/// solo salvando di nuovo l'indirizzo in Impostazioni → Ospedali.
 class _OspedaleCard extends StatelessWidget {
   final Ospedale ospedale;
-  final bool geocodificando;
   final void Function(_AppNavigazione app) onNaviga;
-  final VoidCallback onRiprovaGeocoding;
 
   const _OspedaleCard({
     required this.ospedale,
-    required this.geocodificando,
     required this.onNaviga,
-    required this.onRiprovaGeocoding,
   });
 
   @override
@@ -329,38 +296,18 @@ class _OspedaleCard extends StatelessWidget {
         subtitle: haIndirizzo
             ? Text(indirizzo, style: const TextStyle(color: Colors.white54))
             : const Text('Nessun indirizzo salvato', style: TextStyle(color: Colors.white38)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (haIndirizzo && !o.haCoordinate)
-              geocodificando
-                  ? const Padding(
-                      padding: EdgeInsets.all(10),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.location_searching, color: Colors.white38),
-                      tooltip: 'Cerca posizione per la mappa',
-                      onPressed: onRiprovaGeocoding,
-                    ),
-            PopupMenuButton<_AppNavigazione>(
-              icon: const Icon(Icons.directions, color: kPrimary),
-              tooltip: 'Naviga',
-              onSelected: onNaviga,
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: _AppNavigazione.googleMaps,
-                  child: Text('Google Maps'),
-                ),
-                PopupMenuItem(
-                  value: _AppNavigazione.waze,
-                  child: Text('Waze'),
-                ),
-              ],
+        trailing: PopupMenuButton<_AppNavigazione>(
+          icon: const Icon(Icons.directions, color: kPrimary),
+          tooltip: 'Naviga',
+          onSelected: onNaviga,
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: _AppNavigazione.googleMaps,
+              child: Text('Google Maps'),
+            ),
+            PopupMenuItem(
+              value: _AppNavigazione.waze,
+              child: Text('Waze'),
             ),
           ],
         ),

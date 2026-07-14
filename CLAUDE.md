@@ -714,14 +714,24 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     scritte solo da `aggiornaCoordinateOspedale`, separata apposta perché un
     save successivo con indirizzo invariato non deve azzerarle. Chi fallisce
     (offline, indirizzo non risolvibile) resta comunque salvato senza
-    coordinate: in Lista ospedali un'icona sulla riga permette di ritentare
-    sul posto senza riaprire il form. Il form Ospedale ha anche due campi
+    coordinate: si ritenta semplicemente risalvando l'ospedale in
+    Impostazioni (nessun pulsante di retry dedicato in Lista ospedali: c'era,
+    rimosso su richiesta perché la sua icona — un mirino di localizzazione —
+    veniva scambiata per "imposta la posizione dell'ospedale alla posizione
+    GPS attuale del telefono", cosa che non ha mai fatto). Il form Ospedale
+    ha anche due campi
     "Latitudine"/"Longitudine" opzionali (accettano sia punto che virgola
     come separatore decimale) per inserirle a mano — utile per una posizione
     più precisa di quella trovata da Nominatim (es. l'ingresso ambulanze
     invece del centroide dell'edificio) o quando l'indirizzo non è
     geocodificabile: se compilati hanno priorità e saltano del tutto il
-    geocoding automatico.
+    geocoding automatico. In modifica i due campi partono **sempre vuoti**
+    anche se l'ospedale ha già coordinate (mostrate come hintText, di sola
+    lettura) — bug corretto dopo la prima versione: precompilarli col valore
+    esistente li rendeva "campi manuali" già valorizzati, quindi correggere
+    solo via/città lasciandoli intatti veniva letto come "coordinate inserite
+    a mano" invece che "campi vuoti", e il geocoding automatico non ripartiva
+    mai più dopo la prima geocodifica riuscita.
 - **Export/import della sola anagrafica ospedali** (`exportOspedali`/
   `importOspedali` in `db/backup.dart`, pulsanti nell'header della sezione
   Ospedali in Impostazioni, `_SezioneAnag.onExport`/`onImport`): a differenza
@@ -735,11 +745,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   completo come sorgente (ha comunque una chiave `"ospedali"`), per comodità.
   Le coordinate si scrivono così come sono nel file, **nessun geocoding
   automatico in import**: un upsert con molte righe farebbe una raffica di
-  richieste a Nominatim che ne violerebbe la policy (max 1/s) — chi vuole
-  geocodificare un ospedale arrivato senza coordinate può comunque ritentare
-  singolarmente dal pulsante già presente in Lista ospedali. Non testato
-  (come `exportBackup`/`importBackup`, che dipendono dal file picker reale):
-  stesso limite già accettato per quelle funzioni.
+  richieste a Nominatim che ne violerebbe la policy (max 1/s) — un ospedale
+  arrivato senza coordinate le calcola risalvandolo in Impostazioni. Non
+  testato (come `exportBackup`/`importBackup`, che dipendono dal file picker
+  reale): stesso limite già accettato per quelle funzioni.
 - **Tool nuovo con `attivoDiDefault: true` ma "invisibile" dopo un
   aggiornamento**: bug scoperto aggiungendo Lista ospedali. `ToolsProvider.carica()`
   applicava i default del catalogo SOLO se `kPrefToolsAttivi` non era mai
