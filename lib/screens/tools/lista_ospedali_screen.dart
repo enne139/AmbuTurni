@@ -71,25 +71,27 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
   /// l'app se il device la riconosce come gestore, nessun permesso né voce
   /// `<queries>` nel manifest (a differenza di uno scheme nativo `waze://`,
   /// che fallirebbe silenziosamente senza l'app installata). Se l'ospedale ha
-  /// coordinate geocodificate le usa (più precise), altrimenti passa nome+
-  /// via+città come ricerca testuale: entrambi i servizi la risolvono da sé.
+  /// coordinate geocodificate le usa (più precise, per entrambi i servizi),
+  /// altrimenti passa nome+via+città come ricerca testuale: entrambi i
+  /// servizi la risolvono da sé.
   Future<void> _naviga(Ospedale o, _AppNavigazione app) async {
     final query = [o.nome, o.via, o.citta]
         .whereType<String>()
         .where((s) => s.isNotEmpty)
         .join(', ');
+    final coordinate = o.haCoordinate ? '${o.lat},${o.lng}' : null;
     final Uri uri;
     switch (app) {
       case _AppNavigazione.googleMaps:
         uri = Uri.https('www.google.com', '/maps/search/', {
           'api': '1',
-          'query': query,
+          'query': coordinate ?? query,
         });
         break;
       case _AppNavigazione.waze:
-        uri = o.haCoordinate
+        uri = coordinate != null
             ? Uri.https('waze.com', '/ul', {
-                'll': '${o.lat},${o.lng}',
+                'll': coordinate,
                 'navigate': 'yes',
               })
             : Uri.https('waze.com', '/ul', {
