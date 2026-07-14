@@ -4,8 +4,10 @@ App Flutter per la gestione di turni e assistenze in ambulanza, pensata per
 associazioni di volontariato (tipo Croce Verde, Pubblica Assistenza).
 Offline-first, tema scuro, dati salvati in locale su SQLite.
 
-Rewrite completo dell'app originale React Native/Expo — il backend
-Node+Express in `backend/` è condiviso tra le due versioni e non cambia.
+Rewrite completo dell'app originale React Native/Expo, dismessa. Il backend
+in `backend/` (Go + PostgreSQL) espone un elenco condiviso di ospedali,
+scaricabile per città dal tool "Lista ospedali" — non sincronizza i dati
+dell'app, che restano locali sul device (vedi Backup qui sotto).
 
 ## Funzionalità
 
@@ -41,6 +43,93 @@ flutter run               # Android (device o emulatore)
 flutter run -d windows    # Windows desktop (richiede Visual Studio)
 flutter build apk         # APK release
 ```
+
+## Backend (elenco condiviso ospedali)
+
+Il codice sta in `backend/` (Go + PostgreSQL); i dettagli degli endpoint
+sono in [`backend/README.md`](backend/README.md). In produzione **non gira
+da solo**: il binario è compilato dentro l'immagine Docker della versione
+web (vedi sotto), non c'è un'immagine backend separata da installare.
+
+### Sviluppo/test locale
+
+Con Docker (backend + Postgres insieme):
+
+```bash
+cd backend
+cp .env.example .env      # personalizza le credenziali
+docker compose up --build -d
+curl http://localhost:3000/api/health        # {"status":"ok"}
+```
+
+Pagina di gestione ospedali: `http://localhost:3000/admin/` (login con
+`ADMIN_USERNAME`/`ADMIN_PASSWORD` da `.env`).
+
+Senza Docker (richiede Go ≥ 1.22 e un Postgres raggiungibile):
+
+```bash
+cd backend
+DATABASE_URL=postgres://ambulanza:pw@localhost:5432/ambulanza \
+JWT_SECRET=dev ADMIN_USERNAME=admin ADMIN_PASSWORD=admin \
+go run .
+```
+
+Per far puntare l'app Flutter a questo backend locale invece che a quello di
+produzione: Lista ospedali → icona ingranaggio → indirizzo del server (es.
+`http://localhost:3000`, o l'IP del PC in rete locale se testi da telefono
+— **senza** `/api/` finale: è l'app ad aggiungerlo da sola a ogni chiamata,
+le rotte del backend vivono sotto `/api/` sia in locale sia in produzione).
+
+### Installazione in produzione
+
+L'immagine `ambuturni-web` (build multi-stage: web Flutter + backend Go +
+nginx, pubblicata sul Container Registry Gitea a ogni tag `vX.Y.Z`) include
+già il backend: serve solo un **PostgreSQL raggiungibile** dal container e
+le variabili d'ambiente del backend passate al container `ambuturni-web`
+(prima, quando l'immagine era solo statica, non servivano):
+
+| Variabile | Descrizione |
+|---|---|
+| `DATABASE_URL` | connessione a PostgreSQL, es. `postgres://ambulanza:PASSWORD@db:5432/ambulanza` |
+| `JWT_SECRET` | stringa lunga e casuale, firma i token della pagina admin |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | credenziali admin create al primo avvio |
+| `TOKEN_TTL` | opzionale, durata del token (default `30d`) |
+
+Esempio di `docker-compose.yml` lato server:
+
+```yaml
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ambulanza
+      POSTGRES_PASSWORD: <password-vera>
+      POSTGRES_DB: ambulanza
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  web:
+    image: gitea.maratuck.com/enne139/ambuturni-web:latest   # o un tag vX.Y.Z
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgres://ambulanza:<stessa-password>@db:5432/ambulanza
+      JWT_SECRET: <stringa-lunga-casuale>
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: <password-vera>
+    ports:
+      - '80:80'   # dietro il reverse proxy/TLS già in uso per il dominio
+
+volumes:
+  pgdata:
+```
+
+Il container espone solo HTTP: la terminazione TLS (es. per
+`ambuturni.maratuck.com`, il default configurato nell'app) resta a un
+reverse proxy davanti, come già oggi. Se il backend non riesce a connettersi
+al database l'app web statica resta comunque servita — solo le chiamate
+`/api/*` falliscono, verificabile nei log del container.
 
 ## Firma di release (keystore)
 
@@ -81,7 +170,7 @@ repository e genera `android/key.properties` prima della build:
 lib/            codice dell'app (db/, providers/, screens/, widgets/, utils/)
 android/        progetto Android nativo
 windows/        progetto Windows desktop (CMake)
-backend/        API di sincronizzazione Node+Express+PostgreSQL
+backend/        API Go+PostgreSQL dell'elenco condiviso ospedali
 assets/icon/    sorgenti dell'icona app
 test/           test unitari (DB in-memory)
 ```

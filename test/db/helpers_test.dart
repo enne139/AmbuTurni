@@ -221,6 +221,62 @@ void main() {
     });
   });
 
+  group('upsertOspedali', () {
+    test('crea le righe nuove (per nome) e conta creati/aggiornati/scartati', () async {
+      final esito = await upsertOspedali([
+        {'nome': 'Upsert Nuovo 1', 'citta': 'Milano', 'via': 'Via A', 'lat': 45.1, 'lng': 9.1},
+        {'nome': 'Upsert Nuovo 2', 'citta': 'Roma'},
+      ]);
+      expect(esito.creati, 2);
+      expect(esito.aggiornati, 0);
+      expect(esito.scartati, 0);
+      final lista = await getOspedali();
+      final o = lista.firstWhere((x) => x.nome == 'Upsert Nuovo 1');
+      expect(o.citta, 'Milano');
+      expect(o.via, 'Via A');
+      expect(o.lat, 45.1);
+      expect(o.lng, 9.1);
+    });
+
+    test('aggiorna una riga già esistente con lo stesso nome, non ne crea una seconda', () async {
+      await saveOspedale('Upsert Esistente', 'Torino', via: 'Via Vecchia');
+      final esito = await upsertOspedali([
+        {'nome': 'Upsert Esistente', 'citta': 'Torino', 'via': 'Via Nuova', 'lat': 45.0, 'lng': 7.6},
+      ]);
+      expect(esito.creati, 0);
+      expect(esito.aggiornati, 1);
+      final lista = await getOspedali();
+      expect(lista.where((x) => x.nome == 'Upsert Esistente').length, 1);
+      final o = lista.firstWhere((x) => x.nome == 'Upsert Esistente');
+      expect(o.via, 'Via Nuova');
+      expect(o.lat, 45.0);
+    });
+
+    test('righe senza nome, o non mappe, vengono scartate senza interrompere le altre', () async {
+      final esito = await upsertOspedali([
+        {'nome': '', 'citta': 'Milano'},
+        {'citta': 'Milano'},
+        'stringa non valida',
+        {'nome': 'Upsert Valido', 'citta': 'Milano'},
+      ]);
+      expect(esito.creati, 1);
+      expect(esito.scartati, 3);
+      final lista = await getOspedali();
+      expect(lista.any((x) => x.nome == 'Upsert Valido'), isTrue);
+    });
+
+    test('senza lat/lng nella riga non tocca eventuali coordinate esistenti', () async {
+      final id = await saveOspedale('Upsert Coord', 'Napoli', via: 'Via X');
+      await aggiornaCoordinateOspedale(id, 40.85, 14.27);
+      await upsertOspedali([
+        {'nome': 'Upsert Coord', 'citta': 'Napoli', 'via': 'Via X'},
+      ]);
+      final o = (await getOspedali()).firstWhere((x) => x.id == id);
+      expect(o.lat, 40.85);
+      expect(o.lng, 14.27);
+    });
+  });
+
   group('CRUD turni', () {
     late String assocId;
 

@@ -1,8 +1,9 @@
 # CLAUDE.md — Guida per le chiamate IA
 
 > Questo è il rewrite completo in Flutter dell'app originale React Native / Expo.
-> Il rewrite è stato integrato su `main` (2026-07-01). Il backend Node+Express
-> in `backend/` è condiviso e non cambia.
+> Il rewrite è stato integrato su `main` (2026-07-01). Il backend in
+> `backend/` (Go, dal 2026-07-14) espone l'elenco condiviso ospedali — non
+> è un backend di sincronizzazione dei dati dell'app, vedi Decisioni tecniche.
 
 ---
 
@@ -97,8 +98,11 @@ lib/
 │   ├── geocoding_api.dart         client Dart puro di Nominatim (OpenStreetMap): risolve
 │   │                               un indirizzo testuale in lat/lng per la mappa del tool
 │   │                               Lista ospedali, testato con MockClient
+│   ├── backend_api.dart           client Dart puro del backend condiviso ospedali (backend/,
+│   │                               Go): GET /api/ospedali?citta=, testato con MockClient
 │   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
-│   │                               (Piano turni + Magazzino Verde + Tools attivi)
+│   │                               (Piano turni + Magazzino Verde + Tools attivi + indirizzo
+│   │                               del backend condiviso ospedali)
 │   ├── scanner_errors.dart        messaggio d'errore fotocamera per mobile_scanner,
 │   │                               condiviso tra scanner_barcode_screen e conta_screen
 │   └── tools_config.dart          catalogo dei tool disattivabili (id, titolo, icona,
@@ -146,8 +150,9 @@ lib/
     │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
     │   │                               esterno Magazzino Verde (API JSON con chiave)
     │   ├── lista_ospedali_screen.dart cerca ospedali per nome/via/città, pulsante Naviga
-    │   │                               (apre Google Maps esterno) e vista mappa con tutti
-    │   │                               gli ospedali geocodificati (flutter_map + OSM)
+    │   │                               (Google Maps o Waze) e vista mappa con tutti gli
+    │   │                               ospedali geocodificati (flutter_map + OSM); scarica
+    │   │                               ospedali per città dal backend condiviso (backend_api.dart)
     │   ├── scanner_barcode_screen.dart scanner barcode/QR a schermo intero (mobile_scanner),
     │   │                               pop col codice letto; aperto solo dietro !isDesktop
     │   ├── conta_screen.dart          contatore rapido indipendente dall'API: manuale
@@ -162,11 +167,19 @@ lib/
         └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
                                         assistenze) in cui compare una persona/ospedale
 
-backend/                            API sync Node+Express+PostgreSQL (invariata)
-.gitea/workflows/build-backend.yml  CI Docker backend (solo su modifiche a backend/)
-.gitea/workflows/build-web.yml      CI Docker versione web (build Flutter + nginx)
-Dockerfile                          build multi-stage versione web (root: serve tutto il progetto)
-nginx.conf                          config nginx della versione web (SPA fallback + cache statica)
+backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome,
+                                     via, città, coordinate) + pagina admin statica; NON è un
+                                     backend di sincronizzazione, vedi Decisioni tecniche.
+                                     backend/Dockerfile + docker-compose.yml sono solo per
+                                     sviluppo locale (`docker compose up --build`) — in
+                                     produzione il binario è incorporato nell'immagine web
+.gitea/workflows/build-web.yml      CI Docker versione web (build Flutter + backend Go + nginx,
+                                     un'unica immagine — build-backend.yml è stato rimosso)
+Dockerfile                          build multi-stage: web Flutter + binario backend Go +
+                                     nginx (root: serve tutto il progetto, backend/ incluso)
+docker-entrypoint.sh                avvia backend Go in sottofondo + nginx in primo piano
+nginx.conf                          SPA fallback + cache statica + reverse proxy /api/ e
+                                     /admin/ verso il backend Go
 windows/                            progetto CMake generato da flutter create --platforms windows
 assets/icon/                        sorgenti icona app (SVG + PNG 1024×1024), vedi sotto
 ```
@@ -182,7 +195,9 @@ compatibilità con i vecchi backup (RN e Flutter pre-v8) è mantenuta in
 `importBackup`, che normalizza le righe dei formati precedenti.
 
 Tabelle principali: `associazioni`, `persone`, `ospedali`, `tipologie_turno`,
-`tipologie_assistenza`, `turni`, `servizi`, `assistenze`, `sync_meta`, `deletions`.
+`tipologie_assistenza`, `turni`, `servizi`, `assistenze`. `sync_meta` e
+`deletions` (scaffolding per una sincronizzazione mai completata) sono state
+rimosse in v10, vedi Decisioni tecniche.
 
 `materiali` e `materiali_usati` (introdotte in versione DB 4, branch `feature/tools`)
 non esistevano nell'app React Native. Sono incluse nel backup JSON
@@ -191,7 +206,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 9); `_onOpen` esegue soltanto i PRAGMA di connessione
+(versione corrente: 10); `_onOpen` esegue soltanto i PRAGMA di connessione
 (WAL + foreign_keys).
 
 `ospedali` ha anche `via` (indirizzo testuale) e `lat`/`lng` (coordinate da
@@ -552,24 +567,139 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
 - **CI Android in `ghcr.io/cirruslabs/flutter:3.44.0`**: elimina i ~10 min di
   setup Flutter/SDK a ogni run su runner effimero (dettagli e motivazioni nei
   commenti in testa a `build-android.yml`, per non duplicarli qui).
-- **Pubblicazione web: immagine Docker (nginx), stesso pattern del backend**
+- **Pubblicazione web: un'unica immagine Docker (nginx + backend Go)**
   (`Dockerfile` alla radice + `.gitea/workflows/build-web.yml`): build
   multi-stage, stage 1 `ghcr.io/cirruslabs/flutter:3.44.0` (stessa immagine
   pinnata della CI Android, include già il setup di
   `sqflite_common_ffi_web:setup` non versionato) compila `flutter build web
-  --release`, stage 2 `nginx:alpine` copia solo l'output statico —
-  nell'immagine finale non c'è il toolchain Flutter. Pubblicata sul
-  Container Registry della stessa istanza Gitea del backend
-  (`ambuturni-web`, accanto a `ambulanza-sync`), riusando lo stesso secret
-  `REGISTRY_TOKEN`. Trigger sui tag `vX.Y.Z` (come `build-android.yml`, non
-  a ogni push su `main`: la web app segue lo stesso versionamento
-  dell'APK), immagine taggata sia `latest`/SHA sia col nome del tag —
-  permette di puntare sul server a una versione precisa. Deploy sul server
-  manuale, come già per il backend — il workflow si ferma al push
-  dell'immagine. `nginx.conf`: fallback SPA
-  (`try_files` su `index.html`) e cache lunga solo sugli asset con hash nel
-  nome (`main.dart.js`, `assets/*`), `index.html` sempre rivalidato perché è
-  lui a referenziare l'hash aggiornato a ogni build.
+  --release`; stage 2 `golang:1.25-alpine` compila il backend di `backend/`
+  in un binario statico (`CGO_ENABLED=0`); stage 3 `nginx:alpine` copia
+  l'output statico Flutter, il binario e la cartella `public/` del backend,
+  `nginx.conf` e `docker-entrypoint.sh` — nell'immagine finale non c'è
+  toolchain Flutter né Go. `docker-entrypoint.sh` avvia il backend in
+  sottofondo e nginx in primo piano (`exec nginx -g 'daemon off;'`, PID 1,
+  riceve i segnali di `docker stop`): se il backend fallisce l'avvio (es.
+  `DATABASE_URL` non configurato) nginx continua comunque a servire i file
+  statici, solo `/api/*` risponde con errore — verificato lanciando
+  l'immagine senza Postgres raggiungibile. `nginx.conf` fa anche da reverse
+  proxy: `/api/` → backend su `/api/` (**pass-through, nessun prefisso
+  tolto** — le rotte Go vivono sotto `/api/` anche quando il backend gira
+  da solo senza nginx davanti, vedi bullet sotto sul perché), `/admin/` →
+  backend su `/admin/` (pagina di gestione ospedali, percorso diretto per
+  un URL più corto). Pubblicata sul Container Registry della stessa istanza Gitea
+  (`ambuturni-web`), un solo secret `REGISTRY_TOKEN`. Trigger sui tag
+  `vX.Y.Z` (come `build-android.yml`, non a ogni push su `main`: la web app
+  segue lo stesso versionamento dell'APK — questo ora vale anche per il
+  backend, che non ha più un versionamento/trigger proprio), immagine
+  taggata sia `latest`/SHA sia col nome del tag. Deploy sul server manuale
+  — il workflow si ferma al push dell'immagine; la configurazione del
+  backend (`DATABASE_URL`, `JWT_SECRET`, `ADMIN_USERNAME`/`PASSWORD`, vedi
+  `backend/.env.example`) va passata come variabili d'ambiente al container
+  in produzione. `nginx.conf`: fallback SPA (`try_files` su `index.html`) e
+  cache lunga solo sugli asset con hash nel nome (`main.dart.js`,
+  `assets/*`), `index.html` sempre rivalidato perché è lui a referenziare
+  l'hash aggiornato a ogni build.
+- **Backend riscritto da zero in Go: da "sync generico" a "elenco condiviso
+  ospedali"** (`backend/`, v10 lato client): il vecchio backend Node+Express
+  (`ambulanza-sync`, tabelle generiche `users`/`records`, endpoint
+  `/sync/push`+`/sync/pull` last-write-wins) sincronizzava l'intero DB
+  dell'app, ma quella sincronizzazione non è mai stata completata lato
+  client — nessuna chiamata la usava davvero, era solo schema scaffolding
+  (`sync_meta`/`deletions`, rimosse in v10 — le colonne `is_synced` sulle
+  altre tabelle restano invece: erano scritte/lette solo da quel
+  meccanismo mai nato, ma toglierle ricostruirebbe ogni tabella per un
+  beneficio nullo) e un TODO mai chiuso. Il backup
+  JSON locale (Impostazioni → Backup/Ripristino, `db/backup.dart`) resta
+  l'unico modo per spostare i dati tra device: **non è stato toccato**,
+  scelta deliberata (rimuovere anche quello avrebbe lasciato l'utente senza
+  alcuna rete di sicurezza per i dati). Il nuovo backend fa una cosa sola:
+  espone un elenco ospedali condiviso (nome/via/città/coordinate) scaricabile
+  per città, con una pagina admin per aggiungerli — non conosce affatto lo
+  schema turni/persone/associazioni dell'app.
+  - **Perché Go**: richiesta esplicita, oltre a essere già lo stack del
+    gestionale Magazzino Verde (progetto separato dello stesso utente,
+    stessa istanza Gitea) — coerenza tra i propri servizi. Libreria standard
+    `net/http` con `ServeMux` (pattern `"GET /api/ospedali"`, `r.PathValue`,
+    disponibili da Go 1.22): nessun framework HTTP, un'API di 6 endpoint non
+    lo giustifica. `github.com/jackc/pgx/v5` per Postgres,
+    `github.com/golang-jwt/jwt/v5` + `golang.org/x/crypto/bcrypt` per
+    l'auth della pagina admin (stesso meccanismo username/password + JWT del
+    vecchio backend, incluso il bootstrap dell'utente admin da
+    `ADMIN_USERNAME`/`ADMIN_PASSWORD` al primo avvio), `google/uuid` per gli
+    id — nessuna dipendenza evitabile con poche righe (CORS incluso, header
+    manuali in `httputil.go`). `go.mod` dichiara `go 1.25` (imposto da
+    `go mod tidy` in base alle dipendenze, non da preferenza): l'immagine
+    builder è pinnata di conseguenza (`golang:1.25-alpine`).
+  - **Tutte le rotte API vivono sotto `/api/`, PERMANENTEMENTE** (non solo
+    dietro nginx in produzione): bug reale scoperto testando il backend
+    standalone in locale, come da `backend/README.md`. Prima le rotte Go
+    erano a livello radice (`/health`, `/ospedali`...) e `nginx.conf`
+    toglieva il prefisso `/api/` inoltrando al backend — corretto in
+    produzione, ma il client (`utils/backend_api.dart`) chiama sempre
+    `$baseUrl/api/...` **anche** quando `baseUrl` punta al backend standalone
+    (`go run .`/`docker compose` in `backend/`, senza nginx davanti): lì
+    nessuna rotta rispondeva su `/api/health`, quindi `verificaConnessione`
+    e ogni chiamata fallivano sempre, indipendentemente dall'indirizzo
+    scritto dall'utente nel dialog di configurazione. Fix: le rotte Go sono
+    ora registrate direttamente come `/api/health`, `/api/ospedali`, ecc.
+    (solo `/admin/` resta a parte), e `nginx.conf` fa un puro pass-through
+    (`proxy_pass http://127.0.0.1:3000;` senza path finale = nginx inoltra
+    l'URI originale invariato, invece del precedente `.../;` che tagliava il
+    prefisso) — stesso path funzionante sia in locale sia in produzione.
+  - **Endpoint**: `GET /api/ospedali?citta=` pubblico (nessuna chiave: è
+    quello che chiama l'app, filtro case-insensitive per match esatto,
+    citta assente → tutto l'elenco) — `POST /api/ospedali`/`DELETE
+    /api/ospedali/:id` protetti da JWT (solo la pagina admin). Risposta
+    nello stesso formato nome/via/citta/lat/lng di
+    `exportOspedali`/`importOspedali` lato client: un client può fare
+    l'upsert per nome sulla risposta senza trasformazioni.
+    `GET /api/citta` (pubblica anche lei): le città che hanno almeno un
+    ospedale, `DISTINCT ON (lower(citta))` invece di un DISTINCT semplice —
+    altrimenti "Milano"/"milano" inserite con maiuscole diverse dalla pagina
+    admin comparirebbero come due voci, mentre `listOspedali` le tratta già
+    come la stessa città (match case-insensitive). Usata dal client per far
+    scegliere la città da un elenco invece di farla digitare alla cieca.
+  - **Pagina admin** (`backend/public/admin/index.html`): HTML+JS vanilla
+    servito come file statico da Go (`http.FileServer`), nessun framework
+    frontend per una form di login + tabella + aggiungi/elimina. Token JWT
+    in `sessionStorage` (sopravvive a un refresh della scheda, sparisce
+    chiudendola). lat/lng inviate come numero JSON (`Number(...)`), non
+    stringa: la decodifica JSON di Go in `*float64` è rigorosa sul tipo, a
+    differenza del parsing permissivo che aveva il vecchio backend Node.
+  - **Docker locale vs produzione**: `backend/Dockerfile` +
+    `docker-compose.yml` (backend Go + Postgres, `build: .` invece di tirare
+    un'immagine da un registry) servono solo per sviluppare/testare il
+    backend da solo, verificato end-to-end con `docker compose up --build`
+    + curl (health, login, CRUD ospedali, filtro città, protezione JWT). In
+    produzione questo codice **non gira da un'immagine propria**: è
+    compilato dentro l'immagine web (vedi bullet sopra) — `build-backend.yml`
+    è stato rimosso, `docker-compose.yml` non usa più `SYNC_IMAGE`.
+  - **Client: indirizzo del backend configurabile, con un default
+    condiviso** (`kPrefBackendUrl`/`kBackendUrlDefault` in
+    `utils/prefs_keys.dart`, `https://ambuturni.maratuck.com/`): a
+    differenza del Magazzino Verde (nessun default universale possibile, un
+    server per associazione) qui c'è un'unica istanza gestita centralmente,
+    quindi il tool funziona da subito senza configurazione — l'icona
+    ingranaggio in Lista ospedali serve solo a puntare altrove (dev/test).
+    Il dialog di configurazione (`_ConfigServerDialog`) **verifica prima di
+    salvare**: il pulsante principale chiama `BackendApi.verificaConnessione`
+    (GET `/api/health`, non lancia mai eccezioni, timeout più corto — 8s —
+    delle altre chiamate perché qui l'utente aspetta in un dialog) e solo se
+    risponde salva; se fallisce mostra l'errore e il pulsante diventa "Salva
+    comunque" (un secondo tap forza il salvataggio: il server potrebbe
+    essere solo temporaneamente giù, non deve bloccare per forza — ma
+    modificare di nuovo il testo dell'indirizzo fa ripartire da capo la
+    verifica, non si "eredita" un bypass per un URL diverso).
+    Il pulsante "Scarica ospedali per città" fa scegliere la città da un
+    elenco (`_SceltaCittaDialog`, scarica `BackendApi.getCitta` all'apertura
+    e la mostra come lista filtrabile) invece di farla digitare alla cieca —
+    se il download dell'elenco fallisce resta comunque un campo libero come
+    ripiego, il download vero (`GET /api/ospedali?citta=`) potrebbe funzionare
+    anche senza quell'elenco. Scelta la città, scarica e fa l'upsert con la
+    stessa funzione condivisa dell'import di backup (`upsertOspedali` in
+    `db/helpers.dart`, estratta da lì per questo riuso — stessa logica, due
+    sorgenti diverse: file JSON o rete). `BackendApi` (`utils/backend_api.dart`)
+    è Dart puro e testato con `MockClient` come `magazzino_api.dart`.
 - **`pubspec.lock` versionato**: raccomandazione Flutter per le app (non le
   librerie) — build riproducibili in CI. Gli step actions/cache (Gradle/pub)
   sono stati rimossi dal workflow: senza cache backend sull'istanza Gitea
@@ -800,8 +930,12 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   geocodificati automaticamente (nessuna API key) o con coordinate inserite
   a mano nel form Ospedale. Anagrafica ospedali esportabile/importabile a
   parte (Impostazioni → Ospedali), upsert per nome, senza toccare il resto
-  dei dati.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 101 test unitari.
+  dei dati. Ospedali scaricabili per città anche dal backend condiviso
+  (`backend/`, indirizzo configurabile con default centralizzato).
+- ✅ **Backend condiviso ospedali** (`backend/`, Go+PostgreSQL): API pubblica
+  di sola lettura per città + pagina admin (login) per aggiungerli/eliminarli,
+  incorporato nell'immagine Docker della versione web.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 123 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO
@@ -810,4 +944,7 @@ Le voci completate sono già documentate in Funzionalità implementate/Decisioni
 tecniche e vengono rimosse da qui una volta chiuse, per non tenere in questo
 elenco un changelog duplicato.
 
-- [ ] Sincronizzazione backend (syncManager) — tabelle `sync_meta` e `deletions` già esistono
+Nessuna voce aperta al momento. (La sincronizzazione completa dei dati
+dell'app con un backend non è più in programma: il backend condiviso serve
+solo l'elenco ospedali, vedi Decisioni tecniche — il backup JSON locale
+resta l'unico modo per spostare i dati tra device.)

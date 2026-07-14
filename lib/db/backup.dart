@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prefs_keys.dart';
 import 'backup_file.dart';
 import 'database.dart';
-import 'helpers.dart' show ricalcolaTutteLeNumerazioni, saveOspedale, aggiornaCoordinateOspedale;
+import 'helpers.dart' show ricalcolaTutteLeNumerazioni, upsertOspedali;
 
 // Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni; poi
 // estesa al Magazzino Verde senza bump: ogni chiave è opzionale, un backup
@@ -18,8 +18,6 @@ const int _backupVersion = 2;
 // importBackup) non sarebbe strettamente necessario, ma resta corretto come
 // difesa nel caso il PRAGMA non venisse applicato.
 const _deleteOrder = [
-  'deletions',
-  'sync_meta',
   'servizi',
   'materiali_usati',
   'turni',
@@ -445,51 +443,7 @@ Future<String> importOspedali() async {
     return 'File non valido: non contiene un elenco di ospedali.';
   }
 
-  final db = await getDb();
-  final esistenti = {
-    for (final r in await db.query('ospedali')) r['nome'] as String: r['id'] as String
-  };
-
-  int creati = 0, aggiornati = 0, scartati = 0;
-  for (final riga in righe) {
-    if (riga is! Map) {
-      scartati++;
-      continue;
-    }
-    final nome = (riga['nome'] as String?)?.trim();
-    if (nome == null || nome.isEmpty) {
-      scartati++;
-      continue;
-    }
-    final via = (riga['via'] as String?)?.trim();
-    final citta = (riga['citta'] as String?)?.trim();
-    final lat = (riga['lat'] as num?)?.toDouble();
-    final lng = (riga['lng'] as num?)?.toDouble();
-
-    final idEsistente = esistenti[nome];
-    final String id;
-    if (idEsistente != null) {
-      id = await saveOspedale(
-        nome,
-        (citta == null || citta.isEmpty) ? null : citta,
-        id: idEsistente,
-        via: (via == null || via.isEmpty) ? null : via,
-      );
-      aggiornati++;
-    } else {
-      id = await saveOspedale(
-        nome,
-        (citta == null || citta.isEmpty) ? null : citta,
-        via: (via == null || via.isEmpty) ? null : via,
-      );
-      esistenti[nome] = id;
-      creati++;
-    }
-    if (lat != null && lng != null) {
-      await aggiornaCoordinateOspedale(id, lat, lng);
-    }
-  }
-
-  final avviso = scartati == 0 ? '' : ' ($scartati righe scartate: nome mancante o formato non valido)';
-  return 'Import completato: $creati nuovi, $aggiornati aggiornati.$avviso';
+  final r = await upsertOspedali(righe);
+  final avviso = r.scartati == 0 ? '' : ' (${r.scartati} righe scartate: nome mancante o formato non valido)';
+  return 'Import completato: ${r.creati} nuovi, ${r.aggiornati} aggiornati.$avviso';
 }

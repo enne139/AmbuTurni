@@ -144,18 +144,6 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
   is_synced INTEGER DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS sync_meta (
-  key TEXT PRIMARY KEY,
-  value TEXT
-);
-
-CREATE TABLE IF NOT EXISTS deletions (
-  table_name TEXT NOT NULL,
-  id TEXT NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  is_synced INTEGER DEFAULT 0,
-  PRIMARY KEY (table_name, id)
-);
 ''';
 
 // Singleton del database: aperto una sola volta e riutilizzato.
@@ -201,7 +189,7 @@ Future<Database> getDb() async {
       : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 9,
+    version: 10,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -437,6 +425,17 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     try { await db.execute('ALTER TABLE ospedali ADD COLUMN via TEXT'); } catch (_) {}
     try { await db.execute('ALTER TABLE ospedali ADD COLUMN lat REAL'); } catch (_) {}
     try { await db.execute('ALTER TABLE ospedali ADD COLUMN lng REAL'); } catch (_) {}
+  }
+  if (oldVersion < 10) {
+    // La sincronizzazione col vecchio backend generico non è mai stata
+    // completata lato client (nessuna chiamata la usava davvero, vedi CLAUDE.md):
+    // queste due tabelle erano solo scaffolding per quella funzionalità, ora
+    // abbandonata a favore del backend condiviso ospedali (tool Lista
+    // ospedali). Le colonne `is_synced` sulle altre tabelle restano: erano
+    // scritte/lette solo da qui, toglierle richiederebbe ricostruire ogni
+    // tabella per un beneficio nullo.
+    try { await db.execute('DROP TABLE IF EXISTS sync_meta'); } catch (_) {}
+    try { await db.execute('DROP TABLE IF EXISTS deletions'); } catch (_) {}
   }
 }
 

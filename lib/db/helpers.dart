@@ -144,6 +144,61 @@ Future<void> aggiornaCoordinateOspedale(String id, double lat, double lng) async
   );
 }
 
+/// Upsert per nome di una lista di ospedali: righe nel formato
+/// nome/via/citta/lat/lng (lo stesso di exportOspedali/importOspedali in
+/// db/backup.dart e della risposta del backend condiviso, vedi
+/// utils/backend_api.dart). Un ospedale già in anagrafica con lo stesso nome
+/// viene aggiornato, uno nuovo viene creato; le coordinate si scrivono così
+/// come sono nella riga, nessun geocoding qui (lo fa solo il form Ospedale
+/// in Impostazioni). Condivisa tra import di backup e download dal backend:
+/// stessa logica, due sorgenti diverse (file JSON o rete).
+Future<({int creati, int aggiornati, int scartati})> upsertOspedali(List<dynamic> righe) async {
+  final db = await getDb();
+  final esistenti = {
+    for (final r in await db.query('ospedali')) r['nome'] as String: r['id'] as String
+  };
+  int creati = 0, aggiornati = 0, scartati = 0;
+  for (final riga in righe) {
+    if (riga is! Map) {
+      scartati++;
+      continue;
+    }
+    final nome = (riga['nome'] as String?)?.trim();
+    if (nome == null || nome.isEmpty) {
+      scartati++;
+      continue;
+    }
+    final via = (riga['via'] as String?)?.trim();
+    final citta = (riga['citta'] as String?)?.trim();
+    final lat = (riga['lat'] as num?)?.toDouble();
+    final lng = (riga['lng'] as num?)?.toDouble();
+
+    final idEsistente = esistenti[nome];
+    final String id;
+    if (idEsistente != null) {
+      id = await saveOspedale(
+        nome,
+        (citta == null || citta.isEmpty) ? null : citta,
+        id: idEsistente,
+        via: (via == null || via.isEmpty) ? null : via,
+      );
+      aggiornati++;
+    } else {
+      id = await saveOspedale(
+        nome,
+        (citta == null || citta.isEmpty) ? null : citta,
+        via: (via == null || via.isEmpty) ? null : via,
+      );
+      esistenti[nome] = id;
+      creati++;
+    }
+    if (lat != null && lng != null) {
+      await aggiornaCoordinateOspedale(id, lat, lng);
+    }
+  }
+  return (creati: creati, aggiornati: aggiornati, scartati: scartati);
+}
+
 Future<void> deleteOspedale(String id) async {
   final db = await getDb();
   await db.delete('ospedali', where: 'id = ?', whereArgs: [id]);
