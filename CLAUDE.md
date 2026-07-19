@@ -596,9 +596,30 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   backend (`DATABASE_URL`, `JWT_SECRET`, `ADMIN_USERNAME`/`PASSWORD`, vedi
   `backend/.env.example`) va passata come variabili d'ambiente al container
   in produzione. `nginx.conf`: fallback SPA (`try_files` su `index.html`) e
-  cache lunga solo sugli asset con hash nel nome (`main.dart.js`,
-  `assets/*`), `index.html` sempre rivalidato perché è lui a referenziare
-  l'hash aggiornato a ogni build.
+  `Cache-Control: no-cache` su tutti i file statici (il browser tiene la
+  copia ma la rivalida a ogni uso via ETag/304) — vedi il bullet dedicato
+  sotto sul perché nessuna cache lunga è sicura per una build Flutter web.
+- **Web che non si aggiornava dopo i deploy: colpa della cache `immutable`
+  in nginx**: la prima versione di `nginx.conf` metteva `expires 30d` +
+  `Cache-Control: public, immutable` su tutti i `.js`/`.wasm`/immagini,
+  nell'assunzione (sbagliata) che Flutter generasse nomi file con hash.
+  Flutter web invece NON versiona i nomi: `main.dart.js`,
+  `flutter_bootstrap.js`, `flutter.js`, `sqflite_sw.js`, `sqlite3.wasm`,
+  `assets/*` si chiamano uguali a ogni build. Con `immutable` il browser non
+  rivalidava per 30 giorni il vecchio `flutter_bootstrap.js`, che contiene la
+  versione del service worker (registrato come
+  `flutter_service_worker.js?v=...`): il vecchio bootstrap ri-registrava il
+  vecchio service worker, che serviva l'intera vecchia app dalla sua cache —
+  e anche senza service worker il vecchio `main.dart.js` sarebbe rimasto
+  comunque in cache un mese. Per questo dopo un deploy l'app spesso restava
+  alla versione precedente finché non si faceva un hard-refresh. Fix:
+  `no-cache` su tutto lo statico (dentro `location /`, niente più blocco
+  regex): a ogni accesso il browser rivalida con richieste condizionali
+  (304 se invariato, costo minimo) e scarica solo i file cambiati; col
+  bootstrap fresco, `flutter.js` vede la nuova versione del service worker,
+  la installa e carica l'app aggiornata. I nomi non-hashati sono un limite
+  di Flutter web, non di questa config: se in futuro la build generasse
+  asset fingerprinted, solo allora avrebbe senso reintrodurre una cache lunga.
 - **Backend riscritto da zero in Go: da "sync generico" a "elenco condiviso
   ospedali"** (`backend/`, v10 lato client): il vecchio backend Node+Express
   (`ambulanza-sync`, tabelle generiche `users`/`records`, endpoint
@@ -976,7 +997,13 @@ Le voci completate sono già documentate in Funzionalità implementate/Decisioni
 tecniche e vengono rimosse da qui una volta chiuse, per non tenere in questo
 elenco un changelog duplicato.
 
-Nessuna voce aperta al momento. (La sincronizzazione completa dei dati
+(La sincronizzazione completa dei dati
 dell'app con un backend non è più in programma: il backend condiviso serve
 solo l'elenco ospedali, vedi Decisioni tecniche — il backup JSON locale
 resta l'unico modo per spostare i dati tra device.)
+
+- [ ] voglio spostare la configurazione del backend nelle impostazioni e toglierlo dal lista ospedali
+- [ ] voglio che la lista degli ospedali sia raggruppata per regione, e aggiungere l'opzione per scaricare tutti quelli della regione
+- [ ] voglio che aggiungi il fatto che sul backend vengano salvato i link dei fogli turni, e che li scarichi aggioranmente se l'impostazione è impostata (di default attiva)
+- [ ] aggiuni anche nel backend la lista dei materiali
+- [ ] nelle impostazioni voglio un impostazione per impostare la pagina principale se turni/assisenze o tools, e e anche di poter disattivare turni/sistenze
