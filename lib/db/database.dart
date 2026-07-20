@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS assistenze (
 );
 
 CREATE INDEX IF NOT EXISTS idx_servizi_turno ON servizi(turno_id);
+CREATE INDEX IF NOT EXISTS idx_servizi_ospedale ON servizi(ospedale_id);
 CREATE INDEX IF NOT EXISTS idx_turni_assoc ON turni(associazione_id);
 CREATE INDEX IF NOT EXISTS idx_assistenze_assoc ON assistenze(associazione_id);
 
@@ -190,7 +191,7 @@ Future<Database> getDb() async {
       : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 11,
+    version: 12,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -444,6 +445,12 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // per scaricare in blocco gli ospedali di un'intera regione dal backend
     // condiviso.
     try { await db.execute('ALTER TABLE ospedali ADD COLUMN regione TEXT'); } catch (_) {}
+  }
+  if (oldVersion < 12) {
+    // "Vedi turni" di un ospedale (getTurniPerOspedale) filtra su
+    // servizi.ospedale_id senza indice: con anni di turni/servizi accumulati
+    // la query degenera in uno scan completo della tabella servizi.
+    try { await db.execute('CREATE INDEX IF NOT EXISTS idx_servizi_ospedale ON servizi(ospedale_id)'); } catch (_) {}
   }
 }
 

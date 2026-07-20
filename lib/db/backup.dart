@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prefs_keys.dart';
 import 'backup_file.dart';
 import 'database.dart';
-import 'helpers.dart' show ricalcolaTutteLeNumerazioni, upsertOspedali;
+import 'helpers.dart' show ricalcolaTutteLeNumerazioni, ricalcolaTuttiINumServizi, upsertOspedali;
 
 // Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni, poi
 // estesa ad altre preferenze senza bump: ogni chiave è opzionale, un backup
@@ -257,15 +257,30 @@ Future<String> importBackup() async {
     return 'File non valido (JSON malformato).';
   }
 
-  // Verifica versione minima del formato.
-  final version = payload['version'] as int? ?? 0;
+  // Verifica versione minima del formato. Cast protetto: un file manomesso
+  // con "version" di tipo diverso da un numero non deve far propagare un
+  // TypeError non gestito, ma restituire lo stesso messaggio "file non
+  // valido" degli altri controlli sopra.
+  final versionRaw = payload['version'];
+  final int version;
+  if (versionRaw == null) {
+    version = 0;
+  } else if (versionRaw is int) {
+    version = versionRaw;
+  } else {
+    return 'File non valido: il campo "version" non è un numero.';
+  }
   if (version < 1) return 'Formato backup non supportato (versione $version).';
 
   // Compatibilità con il formato legacy React Native: nell'app RN le tabelle
   // erano annidate sotto la chiave "tables" invece che al livello radice.
+  // Stesso motivo del cast protetto sopra: "tables" potrebbe non essere un
+  // oggetto in un file manomesso.
   final Map<String, dynamic> tables;
   if (payload.containsKey('tables')) {
-    tables = Map<String, dynamic>.from(payload['tables'] as Map);
+    final rawTables = payload['tables'];
+    if (rawTables is! Map) return 'File non valido: il campo "tables" non è un oggetto.';
+    tables = Map<String, dynamic>.from(rawTables);
   } else {
     tables = payload;
   }
@@ -324,7 +339,14 @@ Future<String> importBackup() async {
       for (final table in _backupTables) {
         final rows = tables[table];
         if (rows == null) continue;
-        for (final row in (rows as List)) {
+        // Cast protetto: una tabella il cui valore non è una lista (file
+        // manomesso) viene saltata invece di far propagare un TypeError e
+        // interrompere l'intero import a metà.
+        if (rows is! List) {
+          debugPrint('[import] tabella $table ignorata: non è una lista');
+          continue;
+        }
+        for (final row in rows) {
           try {
             await txn.insert(table, Map<String, dynamic>.from(row as Map));
           } catch (e) {
@@ -346,6 +368,11 @@ Future<String> importBackup() async {
   // del backup non passano per saveTurno, quindi i numeri potrebbero essere
   // sbagliati o assenti se il backup non li aveva aggiornati.
   await ricalcolaTutteLeNumerazioni();
+  // Ricalcola anche num_servizi da un COUNT(*) reale: se righe di servizi
+  // sono state scartate sopra (vedi "scartate"), il valore importato
+  // verbatim da turni.num_servizi resta disallineato dal numero di servizi
+  // davvero presenti.
+  await ricalcolaTuttiINumServizi();
 
   // Ripristina le preferenze del Piano turni, se il backup le contiene
   // (v1 e formati RN non le hanno: le preferenze del device restano
