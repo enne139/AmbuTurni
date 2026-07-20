@@ -217,7 +217,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 11); `_onOpen` esegue soltanto i PRAGMA di connessione
+(versione corrente: 12); `_onOpen` esegue soltanto i PRAGMA di connessione
 (WAL + foreign_keys).
 
 `ospedali` ha anche `via` (indirizzo testuale), `lat`/`lng` (coordinate da
@@ -1098,6 +1098,123 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   all'origine, riaccendendo quelli disattivati prima del backup). Coperto da
   test dedicati (`test/providers/tools_provider_test.dart`, primo test su un
   provider in questo progetto: gli altri erano tutti Dart puro/DB).
+- **Giro di bug fix da code review multi-agente** (2026-07-20, tracciato in
+  `TODO.md` durante il lavoro, poi svuotato): analisi sistematica di tutto il
+  progetto (DB layer, state management, schermate, tool, backend Go) seguita
+  da una sessione di fix quasi completa. Raggruppato per area invece di un
+  bullet per voce, per non triplicare la lunghezza di questo file:
+  - **DB/backup — perdita dati e atomicità**: `saveOspedale`/`upsertOspedali`
+    non scrivono più `via`/`citta` a `null` quando la riga in arrivo non li
+    valorizza (stesso pattern "solo se non vuoto" già in uso per
+    lat/lng/regione) — prima, scaricare ospedali per città/regione o
+    importare un JSON senza quei campi cancellava silenziosamente indirizzi
+    inseriti a mano. `upsertOspedali`/`upsertMateriali` girano ora in
+    un'unica `db.transaction()` invece di N scritture separate.
+    `importBackup` protegge i cast "duri" su `version`/`tables`/righe di
+    tabella (un file manomesso restituisce il messaggio "file non valido"
+    invece di un `TypeError` non gestito) e ricalcola `num_servizi` da un
+    `COUNT(*)` reale a fine import (`ricalcolaTuttiINumServizi`), non più
+    verbatim dal backup — disallineato se righe di `servizi` vengono
+    scartate. `_ricalcolaNumerazioneTurni`/`_ricalcolaNumerazioneAssistenze`
+    unificate in `_ricalcolaNumerazione(db, tabella, assocId)`. Ricerca
+    testuale (`getTurni`/`getAssistenze`) con `ESCAPE '\'` e `_escapeLike`:
+    prima `%`/`_` digitati dall'utente erano wildcard SQL, non caratteri
+    letterali. **Indice `idx_servizi_ospedale` su `servizi(ospedale_id)`**
+    (migrazione v11→v12): "Vedi turni" di un ospedale faceva uno scan
+    completo della tabella `servizi` senza — **testato solo su
+    desktop/analyze, non ancora verificato su Android reale** (regola 8: va
+    fatto prima della prossima release APK).
+  - **Gestione errori mancante in salvataggi/eliminazioni**: `servizio_form.dart`,
+    l'import backup in Impostazioni e i salvataggi in `anagrafiche_screen.dart`
+    (violazione `UNIQUE` su un nome duplicato) non avevano try/catch —
+    un'eccezione lasciava lo spinner acceso per sempre o falliva in silenzio.
+    Stesso trattamento per `_carica`/`_eliminaTurno`/`_sposta`/`_modificaNote`
+    in `turno_detail.dart`/`assistenza_detail.dart` e per il caricamento
+    iniziale di `turno_form.dart`/`assistenza_form.dart`. **Eliminazione di un
+    servizio ora chiede conferma** (dialog identico a turno/assistenza: prima
+    il tap sul menu a tre puntini cancellava subito). Le frecce di riordino
+    servizi si disabilitano durante l'operazione (`_riordinando`): tap multipli
+    rapidi prima che `_carica()` tornasse potevano invertire l'ordine atteso.
+    Il campo "Ore" di turno/assistenza rifiuta valori negativi nel validator
+    (`formatOre` li scomponeva ore/minuti in modo scorretto, e inquinavano le
+    somme in Statistiche).
+  - **Piano turni**: il download dell'XLSX ora ha un `.timeout(20s)` (era
+    l'unica chiamata di rete dell'app senza — una rete instabile bloccava lo
+    spinner a schermo intero indefinitamente). Il completamento di `_carica`
+    verifica che `_urlCtrl.text.trim()` coincida ancora con l'input di
+    partenza prima di applicare lo stato: premere "Cambia foglio" durante un
+    refresh silenzioso in corso non fa più ricomparire il piano appena
+    cancellato. Il merge additivo della sincronizzazione dal backend condiviso
+    ora esclude le chiavi in `kPrefPianoTurniFogliRimossi` (nuova preferenza,
+    locale al device come `kPrefPianoTurniUltimoMese`): un foglio rimosso
+    esplicitamente dai salvati non viene più "resuscitato" se il backend lo
+    ha ancora.
+  - **Widget/provider**: `colorFromHex` valida che l'input sia 6/8 cifre
+    esadecimali (con o senza `#`) invece di lasciare che un valore senza `#`
+    (es. da un backup modificato a mano) venga interpretato come decimale,
+    producendo un colore quasi trasparente invece del fallback `null` atteso.
+    `CodiceChip` tratta anche la stringa vuota come "nessun codice".
+    `CalendarioMensile<T>` memoizza il raggruppamento per giorno in
+    `didUpdateWidget` (ricalcolato solo se cambia `widget.elementi`, non a
+    ogni build) e risincronizza il mese mostrato se `giornoSelezionato`
+    cambia di mese da fuori senza far rimontare il widget. `avviaTutorial`
+    ha una guardia globale anti-concorrenza (un secondo avvio mentre uno è
+    già a schermo — doppio tap su "Rivedi tutorial" — veniva ignorato invece
+    di inserire una seconda `OverlayEntry` irraggiungibile) e la card del
+    passo è ora in un `ConstrainedBox` + `SingleChildScrollView` invece di
+    poter eccedere lo schermo in landscape sui passi più lunghi. `tools_screen.dart`
+    non fa più un null-check secco su `_destinazioni[t.id]` (un tool nel
+    catalogo senza voce lì diventa un tap senza effetto, non un crash).
+    `ToolsProvider.carica()` scrive le due `List<String>` in
+    SharedPreferences solo se il valore risolto differisce da quello già
+    salvato, non a ogni avvio incondizionatamente. `backend_api.dart`
+    incapsula ogni `jsonDecode` in un'eccezione tipizzata (`_decodeJson`): un
+    body 200 non-JSON (proxy/manutenzione) mostrava prima un errore grezzo.
+  - **Piano turni, parser**: `parsePianoMensile` valida `giorno` contro i
+    giorni reali del mese individuato da B2 (28-31), non solo `1..31` — un
+    refuso nel nome scheda (es. "MAR 31" in un mese di 30 giorni) restava
+    prima raggiungibile da `cercaNome`/`giorniInServizio` con una data che
+    `DateTime` normalizzava silenziosamente su un altro giorno/mese.
+  - **Materiali usati**: `_variaQuantita` fa rollback dello stato locale se
+    la scrittura su DB fallisce (l'aggiornamento ottimistico prima restava
+    "sporco" senza alcun feedback in caso di errore).
+  - **Backend Go — sicurezza**: `checkJwtSecret()` (chiamata a inizio
+    `main()`, prima di aprire qualunque connessione) termina il processo se
+    `JWT_SECRET` è assente o coincide con uno dei placeholder noti del
+    progetto (fallback Go, default `docker-compose.yml`, esempio in
+    `.env.example`) — prima il server partiva comunque con un segreto
+    pubblico, permettendo di firmarsi un JWT admin valido. `readJSON`/gli
+    endpoint di import usano `http.MaxBytesReader` (1 MiB per il JSON
+    generico, incluso il login non autenticato; 10 MiB per gli import
+    massivi) contro un DoS a basso costo. Tutti gli handler usano
+    `r.Context()` invece del `context.Background()` catturato a startup
+    (rinominato `startupCtx`, usato solo per `connectDB`/`initSchema`/`seedAdmin`):
+    una richiesta lenta o un client disconnesso ora annulla davvero la query
+    invece di rischiare di esaurire il pool sotto carico. Login: rate limit
+    in-memory per IP chiamante (`loginRateLimitato`/`loginRegistraFallito`,
+    5 tentativi falliti / 5 minuti, chiave da `X-Real-IP` se dietro nginx
+    altrimenti `r.RemoteAddr`) e confronto bcrypt a tempo costante anche per
+    username inesistenti (`dummyHash`), che prima rivelava via timing quali
+    username esistessero. Nuovi `GET`/`DELETE /api/auth/users`
+    (`listUsers`/`deleteUser` in `auth.go`, protetti come gli altri endpoint
+    admin): prima un account si poteva solo creare, mai vedere o revocare —
+    `deleteUser` rifiuta di eliminare l'ultimo utente rimasto. `POST
+    /api/fogli` valida che `chiave` abbia un mese reale (01-12, non solo il
+    formato `\d{4}-\d{2}`) e che `url` inizi per `http://`/`https://`; la
+    pagina admin (`public/admin/index.html`) renderizza comunque un link
+    ai fogli solo se lo schema è http(s), come difesa in profondità per righe
+    scritte prima di questo controllo. `docker-entrypoint.sh`: il backend
+    gira in un loop di riavvio (backoff fisso 2s) invece che restare morto in
+    permanenza dopo un crash successivo a un avvio riuscito — nessun
+    `HEALTHCHECK` Docker sul container intero, di proposito: farebbe
+    riavviare anche nginx per un backend mal configurato, contraddicendo la
+    scelta (sopra) di lasciare nginx a servire i file statici anche a
+    backend giù.
+  - **Non incluso in questo giro**: aggiornamento delle dipendenze Flutter
+    con versioni più recenti disponibili (`file_picker`, `share_plus`,
+    `package_info_plus`, `intl`, `uuid`, `flutter_lints`) — rimandato di
+    proposito, bump non banali (alcuni major) da fare con test dedicati, non
+    in mezzo a un giro di bug fix.
 
 ---
 
