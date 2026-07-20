@@ -24,6 +24,12 @@ class _TurnoDetailState extends State<TurnoDetail> {
   Turno? _turno;
   List<Servizio> _servizi = [];
   bool _loading = true;
+  String? _errore;
+  // Disabilita le frecce di riordino durante l'operazione: senza questa
+  // guardia, tap multipli rapidi sulla stessa freccia prima che _carica()
+  // sia tornata fanno partire più spostaServizio in sequenza con indici
+  // calcolati sullo stato "vecchio" della lista, invertendo l'ordine atteso.
+  bool _riordinando = false;
 
   @override
   void initState() {
@@ -32,9 +38,13 @@ class _TurnoDetailState extends State<TurnoDetail> {
   }
 
   Future<void> _carica() async {
-    final t = await getTurnoById(widget.turnoId);
-    final s = await getServizi(widget.turnoId);
-    if (mounted) setState(() { _turno = t; _servizi = s; _loading = false; });
+    try {
+      final t = await getTurnoById(widget.turnoId);
+      final s = await getServizi(widget.turnoId);
+      if (mounted) setState(() { _turno = t; _servizi = s; _loading = false; _errore = null; });
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _errore = e.toString(); });
+    }
   }
 
   Future<void> _eliminaTurno() async {
@@ -49,21 +59,63 @@ class _TurnoDetailState extends State<TurnoDetail> {
         ],
       ),
     );
-    if (ok == true && mounted) {
+    if (ok != true || !mounted) return;
+    try {
       await deleteTurno(widget.turnoId);
       if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante l\'eliminazione: $e')),
+        );
+      }
     }
   }
 
+  /// Chiede conferma prima di eliminare: stessa protezione già in uso per
+  /// turno/assistenza, mancava qui — un tap impreciso sul menu a tre puntini
+  /// cancellava il servizio senza possibilità di annullare.
   Future<void> _eliminaServizio(Servizio s) async {
-    await deleteServizio(s.id, widget.turnoId);
-    _carica();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elimina servizio'),
+        content: const Text('Eliminare questo servizio?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina', style: TextStyle(color: kPrimary))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await deleteServizio(s.id, widget.turnoId);
+      _carica();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante l\'eliminazione: $e')),
+        );
+      }
+    }
   }
 
   /// Sposta un servizio su o giù di una posizione e ricarica la lista.
   Future<void> _sposta(int from, int to) async {
-    await spostaServizio(widget.turnoId, from, to);
-    _carica();
+    if (_riordinando) return;
+    setState(() => _riordinando = true);
+    try {
+      await spostaServizio(widget.turnoId, from, to);
+      await _carica();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante il riordino: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _riordinando = false);
+    }
   }
 
   /// Modifica rapida delle sole note in un editor a schermo intero (le note
@@ -80,13 +132,22 @@ class _TurnoDetailState extends State<TurnoDetail> {
     if (nuovoTesto == null) return;
     final map = t.toMap();
     map['note'] = nuovoTesto.isEmpty ? null : nuovoTesto;
-    await saveTurno(Turno.fromMap(map));
-    _carica();
+    try {
+      await saveTurno(Turno.fromMap(map));
+      _carica();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante il salvataggio: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_errore != null) return Scaffold(body: Center(child: Text('Errore: $_errore')));
     if (_turno == null) return const Scaffold(body: Center(child: Text('Turno non trovato')));
     final anag = context.watch<AnagraficheProvider>();
     final t = _turno!;
@@ -162,8 +223,8 @@ class _TurnoDetailState extends State<TurnoDetail> {
                 _carica();
               },
               onDelete: () => _eliminaServizio(s),
-              onSu: i > 0 ? () => _sposta(i, i - 1) : null,
-              onGiu: i < _servizi.length - 1 ? () => _sposta(i, i + 1) : null,
+              onSu: (!_riordinando && i > 0) ? () => _sposta(i, i - 1) : null,
+              onGiu: (!_riordinando && i < _servizi.length - 1) ? () => _sposta(i, i + 1) : null,
             );
           }),
         ],

@@ -35,6 +35,7 @@ class _TurnoFormState extends State<TurnoForm> {
   bool _loading = true;
   bool _saving = false;
   String? _existingId;
+  String? _erroreCaricamento;
 
   // Equipaggio
   String? _eq1Autista, _eq1Cs, _eq1Terzo, _eq1Quarto, _eq1Central;
@@ -59,32 +60,36 @@ class _TurnoFormState extends State<TurnoForm> {
   /// Il check `mounted` dopo l'await previene eccezioni se il widget
   /// viene smontato mentre la query è in corso (es. l'utente preme Back).
   Future<void> _caricaDati() async {
-    if (widget.turnoId != null) {
-      final t = await getTurnoById(widget.turnoId!);
-      if (t != null && mounted) {
-        setState(() {
-          _existingId = t.id;
-          _associazioneId = t.associazioneId;
-          _tipologieSel = List.of(t.tipologie);
-          _data = DateTime.tryParse(t.data) ?? DateTime.now();
-          _dataCtrl.text = t.data;
-          _oreCtrl.text = t.ore != null ? formatOre(t.ore) : '';
-          _descrizioneCtrl.text = t.descrizione ?? '';
-          _noteCtrl.text = t.note ?? '';
-          _eq1Autista = t.eq1AutistaId;
-          _eq1Cs = t.eq1CsId;
-          _eq1Terzo = t.eq1TerzoId;
-          _eq1Quarto = t.eq1QuartoId;
-          _eq1Central = t.eq1CentralinistaId;
-          _eq2Autista = t.eq2AutistaId;
-          _eq2Cs = t.eq2CsId;
-          _eq2Terzo = t.eq2TerzoId;
-          _eq2Quarto = t.eq2QuartoId;
-          _eq2Central = t.eq2CentralinistaId;
-        });
+    try {
+      if (widget.turnoId != null) {
+        final t = await getTurnoById(widget.turnoId!);
+        if (t != null && mounted) {
+          setState(() {
+            _existingId = t.id;
+            _associazioneId = t.associazioneId;
+            _tipologieSel = List.of(t.tipologie);
+            _data = DateTime.tryParse(t.data) ?? DateTime.now();
+            _dataCtrl.text = t.data;
+            _oreCtrl.text = t.ore != null ? formatOre(t.ore) : '';
+            _descrizioneCtrl.text = t.descrizione ?? '';
+            _noteCtrl.text = t.note ?? '';
+            _eq1Autista = t.eq1AutistaId;
+            _eq1Cs = t.eq1CsId;
+            _eq1Terzo = t.eq1TerzoId;
+            _eq1Quarto = t.eq1QuartoId;
+            _eq1Central = t.eq1CentralinistaId;
+            _eq2Autista = t.eq2AutistaId;
+            _eq2Cs = t.eq2CsId;
+            _eq2Terzo = t.eq2TerzoId;
+            _eq2Quarto = t.eq2QuartoId;
+            _eq2Central = t.eq2CentralinistaId;
+          });
+        }
       }
+      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _erroreCaricamento = e.toString(); });
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   /// Salva il turno nel DB usando l'id esistente (modifica) o un UUID nuovo (create).
@@ -143,6 +148,9 @@ class _TurnoFormState extends State<TurnoForm> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_erroreCaricamento != null) {
+      return Scaffold(body: Center(child: Text('Errore: $_erroreCaricamento')));
+    }
     final anag = context.watch<AnagraficheProvider>();
 
     return Scaffold(
@@ -200,9 +208,10 @@ class _TurnoFormState extends State<TurnoForm> {
                   // ore digitate sparivano senza alcun avviso.
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
-                    return parseOre(v) == null
-                        ? 'Formato non valido (es. 8, 8,5 o 8h 30m)'
-                        : null;
+                    final ore = parseOre(v);
+                    if (ore == null) return 'Formato non valido (es. 8, 8,5 o 8h 30m)';
+                    if (ore < 0) return 'Le ore non possono essere negative';
+                    return null;
                   },
                 ),
               ),

@@ -123,8 +123,16 @@ class _SezionePersone extends StatelessWidget {
       final c = cognCtrl.text.trim();
       final n = nomeCtrl.text.trim();
       if (c.isNotEmpty && n.isNotEmpty) {
-        await savePersona(c, n, id: p?.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
+        try {
+          await savePersona(c, n, id: p?.id);
+          if (context.mounted) context.read<AnagraficheProvider>().carica();
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Errore durante il salvataggio: $e')),
+            );
+          }
+        }
       }
     }
   }
@@ -277,7 +285,20 @@ class _SezioneOspedali extends StatelessWidget {
       if (n.isNotEmpty) {
         final via = viaCtrl.text.trim();
         final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
-        final id = await saveOspedale(n, citta, id: o?.id, via: via.isEmpty ? null : via);
+        final String id;
+        try {
+          id = await saveOspedale(n, citta, id: o?.id, via: via.isEmpty ? null : via);
+        } catch (e) {
+          if (context.mounted) {
+            final duplicato = e.toString().contains('UNIQUE constraint failed');
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(duplicato
+                  ? 'Esiste già un ospedale con questo nome.'
+                  : 'Errore durante il salvataggio: $e'),
+            ));
+          }
+          return;
+        }
         if (!context.mounted) return;
         context.read<AnagraficheProvider>().carica();
         // Lat/lng/regione inseriti a mano hanno priorità sul geocoding
@@ -733,6 +754,17 @@ Future<void> _dialogNomeEColore(
     ),
   );
   if (ok == true && ctrl.text.trim().isNotEmpty) {
-    await onSalva(ctrl.text.trim(), coloreSelezionato);
+    try {
+      await onSalva(ctrl.text.trim(), coloreSelezionato);
+    } catch (e) {
+      if (context.mounted) {
+        final duplicato = e.toString().contains('UNIQUE constraint failed');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(duplicato
+              ? 'Esiste già un elemento con questo nome.'
+              : 'Errore durante il salvataggio: $e'),
+        ));
+      }
+    }
   }
 }

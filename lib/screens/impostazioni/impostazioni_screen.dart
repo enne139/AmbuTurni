@@ -113,18 +113,24 @@ class _SezioneBackupState extends State<_SezioneBackup> {
     if (ok != true || !mounted) return;
 
     setState(() => _busy = true);
-    final msg = await importBackup();
-    if (!mounted) return;
-    setState(() => _busy = false);
-
-    // Ricarica tutti i provider dopo l'import.
-    if (mounted) {
+    try {
+      final msg = await importBackup();
+      if (!mounted) return;
+      // Ricarica tutti i provider dopo l'import.
       context.read<AnagraficheProvider>().carica();
       context.read<TurniProvider>().ricarica();
       context.read<AssistenzeProvider>().ricarica();
       context.read<StatisticheProvider>().ricarica();
       context.read<ToolsProvider>().carica();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore import: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

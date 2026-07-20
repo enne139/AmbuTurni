@@ -21,6 +21,7 @@ class AssistenzaDetail extends StatefulWidget {
 class _AssistenzaDetailState extends State<AssistenzaDetail> {
   Assistenza? _a;
   bool _loading = true;
+  String? _errore;
 
   @override
   void initState() {
@@ -29,8 +30,12 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
   }
 
   Future<void> _carica() async {
-    final a = await getAssistenzaById(widget.assistenzaId);
-    if (mounted) setState(() { _a = a; _loading = false; });
+    try {
+      final a = await getAssistenzaById(widget.assistenzaId);
+      if (mounted) setState(() { _a = a; _loading = false; _errore = null; });
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _errore = e.toString(); });
+    }
   }
 
   Future<void> _elimina() async {
@@ -45,9 +50,16 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
         ],
       ),
     );
-    if (ok == true && mounted) {
+    if (ok != true || !mounted) return;
+    try {
       await deleteAssistenza(widget.assistenzaId);
       if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante l\'eliminazione: $e')),
+        );
+      }
     }
   }
 
@@ -63,13 +75,22 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
     if (nuovoTesto == null) return;
     final map = a.toMap();
     map['note'] = nuovoTesto.isEmpty ? null : nuovoTesto;
-    await saveAssistenza(Assistenza.fromMap(map));
-    _carica();
+    try {
+      await saveAssistenza(Assistenza.fromMap(map));
+      _carica();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante il salvataggio: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_errore != null) return Scaffold(body: Center(child: Text('Errore: $_errore')));
     if (_a == null) return const Scaffold(body: Center(child: Text('Assistenza non trovata')));
     final anag = context.watch<AnagraficheProvider>();
     final a = _a!;

@@ -68,13 +68,24 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
 
   /// Variazione rapida della quantità (+/- in lista): aggiorna prima lo stato
   /// locale per una risposta immediata, poi persiste sul DB in background.
+  /// Se la scrittura fallisce, la riga torna al valore precedente invece di
+  /// restare con una quantità mai davvero salvata.
   Future<void> _variaQuantita(MaterialeUsato mu, int delta) async {
     final nuova = mu.quantita + delta;
     if (nuova < 1) return;
     final idx = _lista.indexWhere((m) => m.id == mu.id);
     if (idx == -1) return;
     setState(() => _lista[idx] = mu.copyWith(quantita: nuova));
-    await aggiornaQuantitaMaterialeUsato(mu.id, nuova);
+    try {
+      await aggiornaQuantitaMaterialeUsato(mu.id, nuova);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _lista[idx] = mu);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante il salvataggio: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -145,7 +156,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 20),
                         decoration: BoxDecoration(
-                          color: kPrimary.withOpacity(0.8),
+                          color: kPrimary.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.delete, color: Colors.white),
@@ -168,9 +179,9 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                               constraints: const BoxConstraints(minWidth: 48),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                               decoration: BoxDecoration(
-                                color: kPrimary.withOpacity(0.15),
+                                color: kPrimary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: kPrimary.withOpacity(0.4)),
+                                border: Border.all(color: kPrimary.withValues(alpha: 0.4)),
                               ),
                               alignment: Alignment.center,
                               child: Text(mu.quantitaLabel,

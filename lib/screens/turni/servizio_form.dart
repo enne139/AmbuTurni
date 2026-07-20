@@ -25,6 +25,7 @@ class _ServizioFormState extends State<ServizioForm> {
   bool _loading = true;
   bool _saving = false;
   String? _existingId;
+  String? _erroreCaricamento;
 
   @override
   void initState() {
@@ -37,20 +38,24 @@ class _ServizioFormState extends State<ServizioForm> {
   /// Rilegge tutti i servizi del turno e filtra per ID: più semplice che
   /// aggiungere una getServizioById dedicata per un caso così raro.
   Future<void> _caricaDati() async {
-    if (widget.servizioId != null) {
-      final servizi = await getServizi(widget.turnoId);
-      final s = servizi.where((s) => s.id == widget.servizioId).firstOrNull;
-      if (s != null && mounted) {
-        setState(() {
-          _existingId = s.id;
-          _codiceChiamata = s.codiceChiamata;
-          _codiceUscita = s.codiceUscita;
-          _ospedaleId = s.ospedaleId;
-          _descCtrl.text = s.descrizione ?? '';
-        });
+    try {
+      if (widget.servizioId != null) {
+        final servizi = await getServizi(widget.turnoId);
+        final s = servizi.where((s) => s.id == widget.servizioId).firstOrNull;
+        if (s != null && mounted) {
+          setState(() {
+            _existingId = s.id;
+            _codiceChiamata = s.codiceChiamata;
+            _codiceUscita = s.codiceUscita;
+            _ospedaleId = s.ospedaleId;
+            _descCtrl.text = s.descrizione ?? '';
+          });
+        }
       }
+      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _erroreCaricamento = e.toString(); });
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _salva() async {
@@ -64,8 +69,17 @@ class _ServizioFormState extends State<ServizioForm> {
       descrizione: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       ordine: widget.ordine,
     );
-    await saveServizio(s);
-    if (mounted) Navigator.pop(context, true);
+    try {
+      await saveServizio(s);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante il salvataggio: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -77,6 +91,9 @@ class _ServizioFormState extends State<ServizioForm> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_erroreCaricamento != null) {
+      return Scaffold(body: Center(child: Text('Errore: $_erroreCaricamento')));
+    }
     final anag = context.watch<AnagraficheProvider>();
 
     return Scaffold(
@@ -113,7 +130,7 @@ class _ServizioFormState extends State<ServizioForm> {
                     children: codiciChiamata.map((c) => ChoiceChip(
                       label: Text(c),
                       selected: _codiceChiamata == c,
-                      selectedColor: getCodiceColor(c).withOpacity(0.3),
+                      selectedColor: getCodiceColor(c).withValues(alpha: 0.3),
                       labelStyle: TextStyle(color: _codiceChiamata == c ? getCodiceColor(c) : Colors.white60),
                       onSelected: (sel) => setState(() => _codiceChiamata = sel ? c : null),
                     )).toList(),
@@ -128,7 +145,7 @@ class _ServizioFormState extends State<ServizioForm> {
                     children: codiciUscita.map((c) => ChoiceChip(
                       label: Text(c),
                       selected: _codiceUscita == c,
-                      selectedColor: getCodiceColor(c).withOpacity(0.3),
+                      selectedColor: getCodiceColor(c).withValues(alpha: 0.3),
                       labelStyle: TextStyle(color: _codiceUscita == c ? getCodiceColor(c) : Colors.white60),
                       onSelected: (sel) => setState(() => _codiceUscita = sel ? c : null),
                     )).toList(),

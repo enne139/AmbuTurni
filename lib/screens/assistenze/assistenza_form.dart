@@ -31,6 +31,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
   bool _loading = true;
   bool _saving = false;
   String? _existingId;
+  String? _erroreCaricamento;
 
   String? _eq1Autista, _eq1Cs, _eq1Terzo, _eq1Quarto, _eq1Central;
   String? _eq2Autista, _eq2Cs, _eq2Terzo, _eq2Quarto, _eq2Central;
@@ -53,31 +54,35 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
   /// `mounted` check dopo l'await: se l'utente preme Back prima che la query finisca
   /// il widget non è più nell'albero e setState lancerebbe un'eccezione.
   Future<void> _caricaDati() async {
-    if (widget.assistenzaId != null) {
-      final a = await getAssistenzaById(widget.assistenzaId!);
-      if (a != null && mounted) {
-        setState(() {
-          _existingId = a.id;
-          _associazioneId = a.associazioneId;
-          _data = DateTime.tryParse(a.data) ?? DateTime.now();
-          _dataCtrl.text = a.data;
-          _oreCtrl.text = a.ore != null ? formatOre(a.ore) : '';
-          _descrizioneCtrl.text = a.descrizione ?? '';
-          _noteCtrl.text = a.note ?? '';
-          _eq1Autista = a.eq1AutistaId;
-          _eq1Cs = a.eq1CsId;
-          _eq1Terzo = a.eq1TerzoId;
-          _eq1Quarto = a.eq1QuartoId;
-          _eq1Central = a.eq1CentralinistaId;
-          _eq2Autista = a.eq2AutistaId;
-          _eq2Cs = a.eq2CsId;
-          _eq2Terzo = a.eq2TerzoId;
-          _eq2Quarto = a.eq2QuartoId;
-          _eq2Central = a.eq2CentralinistaId;
-        });
+    try {
+      if (widget.assistenzaId != null) {
+        final a = await getAssistenzaById(widget.assistenzaId!);
+        if (a != null && mounted) {
+          setState(() {
+            _existingId = a.id;
+            _associazioneId = a.associazioneId;
+            _data = DateTime.tryParse(a.data) ?? DateTime.now();
+            _dataCtrl.text = a.data;
+            _oreCtrl.text = a.ore != null ? formatOre(a.ore) : '';
+            _descrizioneCtrl.text = a.descrizione ?? '';
+            _noteCtrl.text = a.note ?? '';
+            _eq1Autista = a.eq1AutistaId;
+            _eq1Cs = a.eq1CsId;
+            _eq1Terzo = a.eq1TerzoId;
+            _eq1Quarto = a.eq1QuartoId;
+            _eq1Central = a.eq1CentralinistaId;
+            _eq2Autista = a.eq2AutistaId;
+            _eq2Cs = a.eq2CsId;
+            _eq2Terzo = a.eq2TerzoId;
+            _eq2Quarto = a.eq2QuartoId;
+            _eq2Central = a.eq2CentralinistaId;
+          });
+        }
       }
+      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _erroreCaricamento = e.toString(); });
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _scegliData() async {
@@ -151,6 +156,9 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_erroreCaricamento != null) {
+      return Scaffold(body: Center(child: Text('Errore: $_erroreCaricamento')));
+    }
     final anag = context.watch<AnagraficheProvider>();
 
     return Scaffold(
@@ -198,9 +206,10 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
                   // diventava silenziosamente ore = null (ore perse al salvataggio).
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
-                    return parseOre(v) == null
-                        ? 'Formato non valido (es. 8, 8,5 o 8h 30m)'
-                        : null;
+                    final ore = parseOre(v);
+                    if (ore == null) return 'Formato non valido (es. 8, 8,5 o 8h 30m)';
+                    if (ore < 0) return 'Le ore non possono essere negative';
+                    return null;
                   },
                 ),
               ),
