@@ -1210,11 +1210,35 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     riavviare anche nginx per un backend mal configurato, contraddicendo la
     scelta (sopra) di lasciare nginx a servire i file statici anche a
     backend giù.
-  - **Non incluso in questo giro**: aggiornamento delle dipendenze Flutter
-    con versioni più recenti disponibili (`file_picker`, `share_plus`,
-    `package_info_plus`, `intl`, `uuid`, `flutter_lints`) — rimandato di
-    proposito, bump non banali (alcuni major) da fare con test dedicati, non
-    in mezzo a un giro di bug fix.
+- **Aggiornamento dipendenze Flutter (2026-07-20), incluse le major**: fatto
+  in una sessione dedicata separata dal giro di bug fix sopra (rimandato lì
+  di proposito). `sqlite3` (^3.1.2→^3.5.0), `intl` (^0.19.0→^0.20.3), `uuid`
+  (^4.4.0→^4.6.0), `flutter_markdown_plus` (^1.0.7→^1.0.12) e `flutter_lints`
+  (^4.0.0→^6.0.0, nessun nuovo lint scattato: il set raccomandato v6 sembra
+  anzi più permissivo su alcuni `prefer_const_constructors`) sono bump senza
+  sorprese. `file_picker` ^8.0.7→^11.0.2 (non la 12.0.0-beta, evitata di
+  proposito per una dipendenza dell'unico percorso di restore dei dati) ha
+  **cambiato l'intera API pubblica**: `FilePicker` non è più un singleton
+  (`FilePicker.platform.pickFiles(...)`) ma una classe con soli metodi
+  static (`FilePicker.pickFiles(...)`/`FilePicker.saveFile(...)`) — aggiornati
+  i tre punti d'uso in `backup_file_io.dart`/`backup_file_web.dart`.
+  - **`package_info_plus` e `share_plus` restano fermi** (^9.0.1/^12.0.2,
+    non le rispettive major ^10.x/^13.x) per un vincolo scoperto durante
+    l'update, non ovvio dai soli numeri di versione: **`package_info_plus`
+    ≥10.1.0 e `share_plus` ≥13.1.0 richiedono entrambi `win32` ^6.x, ma
+    nessuna versione stabile di `file_picker` fino all'11.x incluso lo
+    supporta** (tutte fisse su `win32` ^5.9.0 — solo la 12.0.0-beta è
+    passata a ^6.x). Le tre dipendenze non sono risolvibili insieme oltre
+    questo punto senza accettare la beta. Scelta: priorità a `file_picker`
+    (bump reale 8→11, tocca l'import backup) sugli altri due, il cui bump
+    sarebbe stato di impatto pratico minimo (solo lettura versione app e
+    normale manutenzione) — `pub get` fallisce con un errore esplicito se in
+    futuro si prova a spingerli oltre senza prima risolvere `file_picker`.
+  - **Verificato**: `flutter analyze` (0 errori), `flutter test` (136/136),
+    `flutter build windows --debug` (compila, l'app si avvia). Non testato a
+    mano il click-through di export/import backup su un file reale — da
+    fare prima della prossima release, area toccata dal cambio di API di
+    `file_picker`.
 
 ---
 

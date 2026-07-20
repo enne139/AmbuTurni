@@ -24,7 +24,7 @@ dependencies:
   sqflite: ^2.3.3
   sqflite_common_ffi: ^2.4.2
   sqflite_common_ffi_web: ^1.1.2
-  sqlite3: ^3.1.2
+  sqlite3: ^3.5.0
   path: ^1.9.0
 
   # Percorsi di sistema (Documents, cache…)
@@ -34,20 +34,26 @@ dependencies:
   provider: ^6.1.2
 
   # Formattazione date
-  intl: ^0.19.0
+  intl: ^0.20.3
 
   # Generazione UUID per gli id locali
-  uuid: ^4.4.0
+  uuid: ^4.6.0
 
   # Condivisione file (export backup). Bump da ^9.0.0 a ^12.0.2 richiesto da
   # sqflite_common_ffi_web (dipende da package:web >=1.0.0, incompatibile con
   # web ^0.5.0 di share_plus 9.x): la versione web-only "SQLite in WASM" del
   # DB porta con sé un aggiornamento a cascata di questa dipendenza non
-  # collegata, altrimenti pub non risolve.
+  # collegata, altrimenti pub non risolve. Ferma a ^12.0.2 (non ^13.x): stesso
+  # motivo di package_info_plus sopra — share_plus >=13.1.0 richiede win32
+  # ^6.x, incompatibile su Windows con qualunque file_picker stabile.
   share_plus: ^12.0.2
 
-  # Selezione file (import backup)
-  file_picker: ^8.0.7
+  # Selezione file (import backup). ^11.0.2: ultima stabile, non la 12.x
+  # (in beta al momento del bump, evitata di proposito per una dipendenza
+  # usata nell'unico percorso di restore dei dati) — è la dipendenza che
+  # tiene indietro win32 su Windows, vedi i commenti su package_info_plus e
+  # share_plus sopra.
+  file_picker: ^11.0.2
 
   # HTTP per la sincronizzazione col backend
   http: ^1.2.1
@@ -57,7 +63,7 @@ dependencies:
 
   # Rendering markdown nelle note (fork mantenuto: flutter_markdown ufficiale
   # è discontinued dal team Flutter)
-  flutter_markdown_plus: ^1.0.7
+  flutter_markdown_plus: ^1.0.12
 
   # Lettura XLSX (tool Piano turni: foglio Google dei turni dell'associazione)
   excel: ^4.0.6
@@ -68,7 +74,13 @@ dependencies:
   add_2_calendar: ^3.1.1
 
   # Versione app compilata (X.Y.Z+N) letta dalla piattaforma, per mostrarla
-  # in Impostazioni senza duplicarla a mano fuori da pubspec.yaml.
+  # in Impostazioni senza duplicarla a mano fuori da pubspec.yaml. Ferma a
+  # ^9.0.1: la 10.x richiede win32 ^6.x, incompatibile con qualunque
+  # file_picker stabile (fino all'11.x incluso, tutti su win32 ^5.9.0) su
+  # Windows — l'unico modo per avere entrambe le major aggiornate sarebbe
+  # accettare la beta 12.0.0 di file_picker, scartata di proposito per una
+  # dipendenza critica per il backup. Impatto pratico minimo: qui serve solo
+  # a leggere la versione per Impostazioni.
   package_info_plus: ^9.0.1
 
   # Mappa del tool Lista ospedali: tile OpenStreetMap, nessuna API key
@@ -86,7 +98,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
 
 flutter:

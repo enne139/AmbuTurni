@@ -25,7 +25,7 @@ Future<String?> salvaFilePiattaforma(
 /// scelto. Null se l'utente annulla la selezione. Sul web file_picker
 /// restituisce solo i bytes (mai un path reale), da qui `withData: true`.
 Future<String?> leggiBackupScelto() async {
-  final result = await FilePicker.platform.pickFiles(
+  final result = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['json'],
     withData: true,

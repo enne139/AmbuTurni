@@ -15,7 +15,7 @@ import '../utils/platform_check.dart';
 Future<String?> salvaFilePiattaforma(
     String contenuto, String nomeFile, String shareText) async {
   if (isDesktop) {
-    final outputPath = await FilePicker.platform.saveFile(
+    final outputPath = await FilePicker.saveFile(
       dialogTitle: 'Salva file',
       fileName: nomeFile,
       type: FileType.custom,
@@ -52,7 +52,7 @@ Future<String?> salvaFilePiattaforma(
 /// Apre il file picker e legge il contenuto testuale del backup scelto.
 /// Null se l'utente annulla la selezione.
 Future<String?> leggiBackupScelto() async {
-  final result = await FilePicker.platform.pickFiles(
+  final result = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['json'],
   );
