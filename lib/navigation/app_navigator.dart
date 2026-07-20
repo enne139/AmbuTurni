@@ -123,7 +123,7 @@ class _AppNavigatorState extends State<AppNavigator> {
                 'del telefono.',
           ],
         _TabId.tools => [
-            'Altri strumenti: materiali usati, magazzino, lista ospedali con mappa e navigatore.',
+            'Altri strumenti: materiali usati, lista ospedali con mappa e navigatore.',
           ],
         _TabId.impostazioni => [
             'Backup dei dati, tool da mostrare in Tools e scelte di navigazione — anche per '

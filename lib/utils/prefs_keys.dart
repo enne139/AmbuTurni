@@ -11,16 +11,9 @@ const kPrefPianoTurniUltimaRicerca = 'piano_turni_ultima_ricerca';
 // Non va nel backup: le cache sono locali al device e non vengono esportate.
 const kPrefPianoTurniUltimoMese = 'piano_turni_ultimo_mese';
 
-// Chiavi del tool Magazzino Verde (URL del server e chiave API del device).
-// Anche loro condivise col backup, per la stessa ragione: senza, un restore
-// su un device nuovo costringerebbe a recuperare URL e chiave a mano.
-const kPrefMagazzinoUrl = 'magazzino_url';
-const kPrefMagazzinoApiKey = 'magazzino_api_key';
-
 // Indirizzo del backend condiviso ospedali (tool Lista ospedali): assente =
-// si usa kBackendUrlDefault, un dominio unico gestito centralmente (non
-// serve configurazione come per Magazzino Verde, che non ha un default
-// universale). Sovrascrivibile per puntare a un backend locale/di test.
+// si usa kBackendUrlDefault, un dominio unico gestito centralmente.
+// Sovrascrivibile per puntare a un backend locale/di test.
 const kPrefBackendUrl = 'backend_url';
 const kBackendUrlDefault = 'https://ambuturni.maratuck.com/';
 
@@ -52,9 +45,8 @@ const kPrefPianoTurniInNavbar = 'piano_turni_in_navbar';
 
 // Elenco (List<String>) degli ID dei tool attivi in Impostazioni → Tools
 // attivi, vedi utils/tools_config.dart. Assente = mai salvato: si applicano
-// i default del catalogo (attivoDiDefault), non tutti abilitati (es. il
-// Magazzino Verde parte disattivato). Una volta salvato riflette esattamente
-// le scelte dell'utente, incluso nel backup come le altre preferenze.
+// i default del catalogo (attivoDiDefault). Una volta salvato riflette
+// esattamente le scelte dell'utente, incluso nel backup come le altre preferenze.
 const kPrefToolsAttivi = 'tools_attivi';
 // Elenco (List<String>) degli ID di tool già "visti" da questo device (vedi
 // ToolsProvider.carica): un id del catalogo assente da qui è un tool nuovo,

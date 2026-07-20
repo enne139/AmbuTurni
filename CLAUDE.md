@@ -64,7 +64,6 @@
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Lettura XLSX (Piano turni) | `excel` |
 | Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
-| Scansione barcode/QR (Magazzino) | `mobile_scanner` (Android/iOS/web; il FAB Scansiona non esiste su desktop nativo) |
 | Mappa (Lista ospedali) | `flutter_map` + `latlong2`, tile OpenStreetMap, nessuna API key (funziona anche su Windows/web) |
 | Geocoding indirizzi (Lista ospedali) | Nominatim (OpenStreetMap), nessuna API key, chiamato solo alla creazione/modifica di un ospedale |
 | Apertura navigatore esterno (Lista ospedali) | `url_launcher`, link universale Google Maps |
@@ -86,8 +85,6 @@ lib/
 ├── utils/
 │   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
 │   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
-│   ├── magazzino_api.dart         client dell'API JSON del gestionale Magazzino Verde
-│   │                               (Dart puro, testato con MockClient)
 │   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
 │   ├── piano_cache.dart           cache dei piani decodificati: solo export condizionale
 │   │                               (vedi Piattaforma web), impl. in piano_cache_io.dart
@@ -101,10 +98,8 @@ lib/
 │   ├── backend_api.dart           client Dart puro del backend condiviso ospedali (backend/,
 │   │                               Go): GET /api/ospedali?citta=, testato con MockClient
 │   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
-│   │                               (Piano turni + Magazzino Verde + Tools attivi + indirizzo
-│   │                               del backend condiviso ospedali + sincronizzazione fogli turni)
-│   ├── scanner_errors.dart        messaggio d'errore fotocamera per mobile_scanner,
-│   │                               condiviso tra scanner_barcode_screen e conta_screen
+│   │                               (Piano turni + Tools attivi + indirizzo del backend
+│   │                               condiviso ospedali + sincronizzazione fogli turni)
 │   └── tools_config.dart          catalogo dei tool disattivabili (id, titolo, icona,
 │                                   attivoDiDefault): fonte unica per ToolsScreen e
 │                                   Impostazioni → Tools attivi
@@ -157,23 +152,17 @@ lib/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
     │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni,
-    │   │                               Magazzino Verde), filtrato dai tool attivi (ToolsProvider);
+    │   │                               Lista ospedali), filtrato dai tool attivi (ToolsProvider);
     │   │                               nasconde Piano turni se spostato in navbar (NavigazioneProvider)
     │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni;
     │   │                               sincronizza in sottofondo i fogli salvati sul backend
     │   │                               condiviso (kPrefSyncFogliAttivo, default attivo)
-    │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
-    │   │                               esterno Magazzino Verde (API JSON con chiave)
     │   ├── lista_ospedali_screen.dart cerca ospedali per nome/via/città/regione, raggruppati
     │   │                               per regione, pulsante Naviga (Google Maps o Waze) e
     │   │                               vista mappa con tutti gli ospedali geocodificati
     │   │                               (flutter_map + OSM); scarica ospedali per città o
     │   │                               regione dal backend condiviso (backend_api.dart) — la
     │   │                               configurazione del server è in Impostazioni
-    │   ├── scanner_barcode_screen.dart scanner barcode/QR a schermo intero (mobile_scanner),
-    │   │                               pop col codice letto; aperto solo dietro !isDesktop
-    │   ├── conta_screen.dart          contatore rapido indipendente dall'API: manuale
-    │   │                               (pulsanti grandi +1/-1) o a scansione continua
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
@@ -372,93 +361,24 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   Cache illeggibile/valori sconosciuti = cache assente (si riscarica);
   rimuovere un foglio dai salvati elimina anche il suo file. Il pulsante
   ricarica resta non-silenzioso: feedback esplicito con lo spinner.
-- **Tool "Magazzino Verde"** (`magazzino_screen.dart` +
-  `utils/magazzino_api.dart`): si collega al gestionale di magazzino esterno
-  dell'utente (progetto Go separato, stessa istanza Gitea del backend) via la
-  sua API JSON (`/api/v1`, header `X-API-Key`). Client Dart puro come
-  `piano_mensile.dart`, unit-testato con `MockClient` di
-  `package:http/testing` (nessun server vero nei test); usa la lista
-  materiali, la POST movimenti per ID e la GET per codice a barre (solo come
-  fallback della scansione, vedi bullet successivo — nella ricerca testuale
-  i codici si confrontano sulla lista già scaricata, si possono digitare le
-  cifre del barcode). UI: lista giacenze con evidenza rossa
-  "sotto scorta" (giacenza <= soglia di allerta, stesso criterio della home
-  web del gestionale) e chip-filtro col conteggio; tap su un materiale →
-  bottom sheet carico/scarico con stepper/campo quantità. La POST parte
-  dallo sheet, che si chiude solo a successo (un errore resta visibile
-  accanto ai pulsanti) restituendo il materiale aggiornato dalla risposta
-  201: si aggiorna la sola riga toccata, senza ricaricare la lista, e il
-  verso mostrato nello snackbar è dedotto dalla giacenza prima/dopo (dato
-  confermato dal server). Configurazione URL+chiave API in SharedPreferences
-  (`kPrefMagazzino*` in `prefs_keys.dart`), inclusa nella sezione
-  `preferenze` del backup — chiave API compresa, scelta deliberata: il
-  backup completo serve al trasferimento su device nuovo e senza chiave il
-  tool resterebbe scollegato — senza bump del formato (ogni chiave della
-  sezione è opzionale, i backup vecchi restano validi). Limite noto su web:
-  la chiamata dal browser richiede che il server esponga gli header CORS —
-  vincolo lato server, non aggirabile dal client Flutter.
-- **Magazzino → scansione barcode/QR su mobile e web**
-  (`scanner_barcode_screen.dart`, package `mobile_scanner`): FAB "Scansiona"
-  nella schermata Magazzino su Android/iOS **e** web, dietro `!isDesktop`
-  (il plugin non ha canale per desktop nativo — a differenza di
-  add_2_calendar nel Piano turni, che sul web non ha alternativa e resta
-  mobile-only). Lo scanner è una schermata generica che fa pop col primo
-  codice letto (guard anti-pop-multipli: `onDetect` arriva a raffica finché
-  il codice resta inquadrato), con torcia in AppBar (nascosta su web con
-  `kIsWeb`: `toggleTorch()` lancia `UnsupportedError` lì, i video track del
-  browser non espongono il controllo torcia) e `errorBuilder` per il
-  permesso fotocamera negato, con testo diverso tra le due piattaforme
-  (impostazioni di sistema dell'app su mobile, impostazioni del sito nel
-  browser su web) più un messaggio dedicato per browser non supportato.
-  Il permesso CAMERA NON va aggiunto al manifest Android dell'app: sta nel
-  manifest del plugin e il manifest merger lo porta nell'APK anche in
-  release (verificato nel sorgente del package — non è il caso di INTERNET,
-  che era iniettato dal tooling solo in debug); la richiesta runtime la
-  gestisce il plugin. Sul web la richiesta è quella nativa del browser
-  (`getUserMedia`), che **richiede un contesto sicuro (HTTPS o localhost)**
-  — stesso vincolo già noto del login in produzione (`ENV=production`),
-  nessun requisito nuovo per il deploy; la libreria di decodifica (ZXing)
-  viene caricata da uno script esterno al primo uso (dalla v5 del plugin
-  nessuna configurazione in `index.html` necessaria), quindi la prima
-  scansione su web richiede una connessione di rete funzionante anche col
-  server Magazzino Verde già raggiungibile. Flusso dopo la lettura: match
-  locale sui `codes` della lista già scaricata (immediato), poi
-  `GET /materials/code/{code}` come fallback per materiali/codici associati
-  dopo l'ultimo refresh — il 404 qui non è un guasto ma "codice non
-  associato" (messaggio dedicato, distinto tramite il campo `statusCode` di
-  `MagazzinoApiException`); trovato il materiale si apre direttamente lo
-  sheet carico/scarico (flusso scanner del Raspberry: scansiona →
-  registra). Un materiale arrivato dal fallback e assente dalla lista viene
-  inserito in ordine alfabetico dopo il movimento. mobile_scanner richiede
-  Android SDK Platform 35 installata (la build la scarica da sola).
-- **Magazzino → "Conta"** (`conta_screen.dart`, pulsante `Icons.numbers` in
-  AppBar): contatore rapido scollegato dall'API — nessun materiale
-  selezionato, nessuna giacenza toccata, solo un numero che sale/scende.
-  Sempre raggiungibile anche a server non configurato (`_api == null`),
-  a differenza del resto della schermata. Due modalità, cambiate da un
-  pulsante in AppBar: manuale (due pulsanti grandi +1/-1, pensati per essere
-  premuti anche con i guanti o tenendo in mano delle scatole — il -1 è
-  disabilitato sotto zero, un conteggio fisico non è mai negativo) e
-  scansione (ogni codice a barre/QR inquadrato incrementa di 1, per contare
-  oggetti che passano davanti alla fotocamera). In scansione un cooldown di
-  1200ms tra un conteggio e il successivo evita di contare più volte lo
-  stesso codice se resta a lungo davanti alla fotocamera (`onDetect` arriva
-  a raffica finché è a fuoco) — a differenza dello scanner di lookup del
-  Magazzino, qui la fotocamera resta aperta e si continua a contare finché
-  l'utente non torna alla modalità manuale, quindi non basta il guard "solo
-  la prima lettura". Il pulsante per cambiare modalità è nascosto su
-  desktop nativo (`isDesktop`, mobile_scanner non ha canale lì): la
-  modalità manuale invece funziona ovunque, quindi il contatore resta
-  sempre raggiungibile. Il messaggio d'errore fotocamera (permesso negato,
-  browser non supportato) è condiviso con `scanner_barcode_screen.dart`
-  tramite `utils/scanner_errors.dart` invece di duplicarlo.
+- **Tool "Magazzino Verde" rimosso** (2026-07): collegava un gestionale di
+  magazzino esterno dell'utente (giacenze/movimenti via API JSON, scanner
+  barcode/QR con `mobile_scanner`, contatore rapido "Conta" scollegato
+  dall'API) — tolto su richiesta esplicita, l'associazione non lo usa più.
+  Rimossi `magazzino_screen.dart`, `conta_screen.dart`,
+  `scanner_barcode_screen.dart`, `utils/magazzino_api.dart`,
+  `utils/scanner_errors.dart`, la dipendenza `mobile_scanner`, le chiavi
+  `kPrefMagazzino*` (anche dalla sezione `preferenze` del backup) e la voce
+  dal catalogo tool (`tools_config.dart`/`kToolMagazzino`). Il backend Go
+  condiviso non è toccato: non ha mai avuto endpoint per il magazzino (solo
+  ospedali/fogli/materiali).
 - **Impostazioni → Tools attivi** (`_SezioneToolsAttivi`, `ToolsProvider`,
   `utils/tools_config.dart`): switch per attivare/disattivare i tool
-  mostrati nella tab Tools. Il Magazzino Verde parte **disattivato di
-  default** (`attivoDiDefault: false` nel catalogo): si collega a un server
-  esterno da configurare, non è utile finché non lo si imposta — meglio non
-  ingombrare la lista finché non lo si attiva esplicitamente; gli altri
-  tool sono attivi di default. Catalogo (id, titolo, sottotitolo, icona,
+  mostrati nella tab Tools, tutti attivi di default. `attivoDiDefault` in
+  `ToolInfo` resta comunque generico (non hardcoded a `true`): un tool
+  futuro collegato a un servizio esterno da configurare potrà ripartire
+  disattivato, come faceva il Magazzino Verde prima della rimozione.
+  Catalogo (id, titolo, sottotitolo, icona,
   attivoDiDefault) unico in `tools_config.dart`, usato sia da
   `ToolsScreen` (filtra `kToolsDisponibili` sugli id attivi, mappa
   id→schermata di destinazione tenuta separata perché Impostazioni non ne
@@ -513,7 +433,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   distinte ma correlate — quale pagina si apre all'avvio (Attività o Tools)
   e un solo interruttore per nascondere insieme le tab Attività (turni +
   assistenze) e Statistiche, per chi usa l'app solo per gli altri tool (es.
-  solo Lista ospedali/Magazzino Verde). Un solo switch per entrambe le tab,
+  solo Lista ospedali). Un solo switch per entrambe le tab,
   non due separati: le Statistiche aggregano proprio i dati di
   turni/assistenze, senza Attività non avrebbero nulla da mostrare — a
   differenza delle anagrafiche (bullet sopra), qui la richiesta esplicita
@@ -884,10 +804,9 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     è stato rimosso, `docker-compose.yml` non usa più `SYNC_IMAGE`.
   - **Client: indirizzo del backend configurabile, con un default
     condiviso** (`kPrefBackendUrl`/`kBackendUrlDefault` in
-    `utils/prefs_keys.dart`, `https://ambuturni.maratuck.com/`): a
-    differenza del Magazzino Verde (nessun default universale possibile, un
-    server per associazione) qui c'è un'unica istanza gestita centralmente,
-    quindi il tool funziona da subito senza configurazione. Il dialog di
+    `utils/prefs_keys.dart`, `https://ambuturni.maratuck.com/`): un'unica
+    istanza gestita centralmente, quindi il tool funziona da subito senza
+    configurazione. Il dialog di
     configurazione (`_ConfigServerDialog`, in `impostazioni_screen.dart` —
     vedi bullet sotto sullo spostamento) **verifica prima di salvare**: il
     pulsante principale chiama `BackendApi.verificaConnessione` (GET
@@ -908,7 +827,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     funzione condivisa dell'import di backup (`upsertOspedali` in
     `db/helpers.dart`, estratta da lì per questo riuso — stessa logica, due
     sorgenti diverse: file JSON o rete). `BackendApi` (`utils/backend_api.dart`)
-    è Dart puro e testato con `MockClient` come `magazzino_api.dart`.
+    è Dart puro e testato con `MockClient`.
   - **Configurazione del backend spostata in Impostazioni**: l'indirizzo
     del server viveva dietro l'icona ingranaggio di
     Lista ospedali, ma non è specifico di quel tool (lo riusano anche Piano
@@ -1099,8 +1018,8 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   tutti gli ospedali geocodificati, toggle lista/mappa persistito come in
   turni/assistenze (chiave locale nella schermata, non nel backup, stesso
   pattern di `_kVistaCalendarioKey`). Attivo di default (`attivoDiDefault:
-  true`): non richiede alcuna configurazione, a differenza del Magazzino Verde.
-  Tre decisioni "nessuna API key", coerenti con Piano turni/Magazzino Verde:
+  true`): non richiede alcuna configurazione. Tre decisioni "nessuna API
+  key", coerenti con Piano turni:
   - **Naviga → link universali, non intent/scheme nativi**: Google Maps
     (`https://www.google.com/maps/search/?api=1&query=...`) e Waze
     (`https://waze.com/ul?...&navigate=yes`, coordinate se disponibili
@@ -1115,10 +1034,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   - **Mappa in-app con `flutter_map`** (tile OpenStreetMap, `RichAttributionWidget`
     con l'attribuzione richiesta dalla policy OSM): mostra solo gli ospedali
     con `lat`/`lng` valorizzate; funziona anche su Windows/web perché non è
-    un plugin nativo (a differenza di mobile_scanner/add_2_calendar), solo
-    rendering + richieste HTTP delle tile.
+    un plugin nativo (a differenza di add_2_calendar), solo rendering +
+    richieste HTTP delle tile.
   - **Geocoding automatico via Nominatim** (`GeocodingApi.geocodifica`, Dart
-    puro e testato con `MockClient` come `magazzino_api.dart`): risolve
+    puro e testato con `MockClient`): risolve
     `via, città` in coordinate con uno User-Agent identificativo (richiesto
     dalla policy del servizio) e non lancia mai eccezioni — è un
     arricchimento best-effort per la mappa, non deve mai bloccare il
@@ -1213,10 +1132,6 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   ruolo, aggiunta del turno al calendario di sistema). Sincronizza in
   sottofondo i fogli salvati sul backend condiviso (merge additivo,
   disattivabile in Impostazioni → Backend condiviso).
-- ✅ **Tools → Magazzino Verde**: giacenze e movimenti carico/scarico dal
-  gestionale di magazzino esterno (API JSON con chiave, evidenza sotto
-  scorta, scansione barcode/QR su mobile e web, contatore rapido manuale
-  o a scansione scollegato dall'API).
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
   vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
   Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente
@@ -1240,7 +1155,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 157 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 136 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

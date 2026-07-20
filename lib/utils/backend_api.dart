@@ -1,8 +1,8 @@
 // Client del backend condiviso ospedali (backend/, Go): un'unica istanza
 // gestita centralmente (default in utils/prefs_keys.dart, kBackendUrlDefault)
 // da cui i client scaricano l'elenco ospedali filtrato per città. Dart puro
-// (niente import Flutter), come magazzino_api.dart/geocoding_api.dart, per
-// essere unit-testabile con un http.Client finto (MockClient).
+// (niente import Flutter), come geocoding_api.dart, per essere unit-testabile
+// con un http.Client finto (MockClient).
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -41,8 +41,7 @@ class BackendApi {
         _client = client ?? http.Client();
 
   /// Normalizza l'URL configurato: senza schema si assume https, si tolgono
-  /// gli slash finali per poter concatenare il path dell'endpoint (stesso
-  /// pattern di MagazzinoApi.normalizzaUrl).
+  /// gli slash finali per poter concatenare il path dell'endpoint.
   static String normalizzaUrl(String url) {
     var u = url.trim();
     if (u.isEmpty) return u;

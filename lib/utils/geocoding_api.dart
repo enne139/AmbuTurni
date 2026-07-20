@@ -2,8 +2,8 @@
 // indirizzo testuale in lat/lng con Nominatim (OpenStreetMap), l'unico
 // servizio di geocoding gratuito senza API key — stessa scelta "no key" del
 // tile server della mappa. Dart puro (niente import Flutter), come
-// magazzino_api.dart e piano_mensile.dart, per essere unit-testabile con
-// un http.Client finto (MockClient).
+// piano_mensile.dart, per essere unit-testabile con un http.Client finto
+// (MockClient).
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;

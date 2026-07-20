@@ -1,7 +1,7 @@
 // Test del client di geocoding (lib/utils/geocoding_api.dart). Il server
-// Nominatim viene simulato con MockClient (package:http/testing), come in
-// magazzino_api_test.dart: si verifica la richiesta (URL, header) e il
-// parsing, senza contattare un servizio vero.
+// Nominatim viene simulato con MockClient (package:http/testing): si
+// verifica la richiesta (URL, header) e il parsing, senza contattare un
+// servizio vero.
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;

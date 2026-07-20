@@ -147,7 +147,7 @@ class AssistenzeProvider extends ChangeNotifier {
   }
 }
 
-/// Provider per quali tool (Materiali usati, Piano turni, Magazzino Verde...)
+/// Provider per quali tool (Materiali usati, Piano turni, Lista ospedali...)
 /// sono attivi nella tab Tools, scelti da Impostazioni → Tools attivi.
 /// Stesso motivo di StatisticheProvider: ToolsScreen e ImpostazioniScreen
 /// restano entrambe montate nell'IndexedStack di AppNavigator, quindi uno
@@ -162,7 +162,7 @@ class ToolsProvider extends ChangeNotifier {
   bool attivo(String id) => _attivi.contains(id);
 
   /// Se la preferenza non è mai stata salvata si applicano i default del
-  /// catalogo (kToolsDisponibili): il Magazzino Verde parte disattivato.
+  /// catalogo (kToolsDisponibili).
   /// Un tool presente nel catalogo ma assente da kPrefToolsConosciuti (mai
   /// proposto prima su questo device, es. un tool aggiunto in un
   /// aggiornamento successivo) prende anche lui il proprio default invece di

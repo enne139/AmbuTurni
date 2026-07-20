@@ -67,17 +67,14 @@ dependencies:
   # evento del calendario via intent, senza permessi runtime.
   add_2_calendar: ^3.1.1
 
-  # Scansione barcode/QR (tool Magazzino Verde). Android/iOS/web.
-  mobile_scanner: ^7.2.0
-
   # Versione app compilata (X.Y.Z+N) letta dalla piattaforma, per mostrarla
   # in Impostazioni senza duplicarla a mano fuori da pubspec.yaml.
   package_info_plus: ^9.0.1
 
   # Mappa del tool Lista ospedali: tile OpenStreetMap, nessuna API key
-  # (stessa scelta "no key" di Piano turni/Magazzino Verde). Funziona anche
-  # su Windows/web: a differenza di mobile_scanner/add_2_calendar non serve
-  # un plugin nativo, solo rendering + richieste HTTP delle tile.
+  # (stessa scelta "no key" di Piano turni). Funziona anche su Windows/web:
+  # a differenza di add_2_calendar non serve un plugin nativo, solo
+  # rendering + richieste HTTP delle tile.
   flutter_map: ^8.3.1
   latlong2: ^0.10.1
 

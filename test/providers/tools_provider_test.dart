@@ -40,7 +40,7 @@ void main() {
       expect(provider.attivo(kToolListaOspedali), isTrue);
       // Le scelte esplicite sui tool già noti restano rispettate.
       expect(provider.attivo(kToolMaterialiUsati), isTrue);
-      expect(provider.attivo(kToolMagazzino), isFalse);
+      expect(provider.attivo(kToolPianoTurni), isFalse);
     });
 
     test('un tool già noto e disattivato esplicitamente resta disattivato anche a caricamenti successivi',

@@ -202,7 +202,7 @@ class _SezioneBackupState extends State<_SezioneBackup> {
 /// Pagina principale mostrata all'avvio (Attività, Tools o Piano turni),
 /// interruttore per disattivare del tutto le tab Attività (turni +
 /// assistenze) e Statistiche insieme (per chi usa l'app solo per gli altri
-/// tool, es. solo Magazzino Verde/Lista ospedali), interruttore per
+/// tool, es. solo Lista ospedali), interruttore per
 /// spostare il tool Piano turni dalla tab Tools a una voce propria in
 /// navbar (imposta anche Piano turni come pagina principale) e pulsante per
 /// rivedere a piacere il tutorial di navigazione (TutorialProvider,
@@ -327,9 +327,7 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
 // ---------------------------------------------------------------------------
 
 /// Switch per attivare/disattivare i tool mostrati nella tab Tools
-/// (ToolsProvider): il Magazzino Verde parte disattivato di default (si
-/// collega a un server esterno da configurare), gli altri sono attivi.
-/// Collassata di default come le sezioni anagrafiche: non è
+/// (ToolsProvider). Collassata di default come le sezioni anagrafiche: non è
 /// qualcosa che si tocca spesso, non deve occupare spazio in cima alla
 /// schermata a ogni apertura.
 class _SezioneToolsAttivi extends StatefulWidget {

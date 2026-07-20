@@ -1,6 +1,6 @@
 // Test del client del backend condiviso ospedali (lib/utils/backend_api.dart).
-// Il server viene simulato con MockClient (package:http/testing), come in
-// magazzino_api_test.dart: si verifica la richiesta (URL, query) e il parsing.
+// Il server viene simulato con MockClient (package:http/testing): si
+// verifica la richiesta (URL, query) e il parsing.
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;

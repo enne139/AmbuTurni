@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 // cambiarli romperebbe la preferenza già scelta sui device esistenti.
 const kToolMaterialiUsati = 'materiali_usati';
 const kToolPianoTurni = 'piano_turni';
-const kToolMagazzino = 'magazzino';
 const kToolListaOspedali = 'lista_ospedali';
 
 /// Metadati di un tool per la card in Tools e lo switch in Impostazioni:
@@ -16,9 +15,9 @@ class ToolInfo {
   final String titolo;
   final String sottotitolo;
   final IconData icon;
-  // Il Magazzino Verde parte disattivato: si collega a un server esterno
-  // configurato dall'utente, non è utile finché non lo si imposta — meglio
-  // non ingombrare la lista Tools finché non lo si attiva esplicitamente.
+  // Un tool collegato a un servizio esterno da configurare (nessun default
+  // universale) può partire disattivato per non ingombrare la lista Tools
+  // finché l'utente non lo attiva esplicitamente.
   final bool attivoDiDefault;
 
   const ToolInfo({
@@ -42,13 +41,6 @@ const kToolsDisponibili = [
     titolo: 'Piano turni',
     sottotitolo: 'Equipaggi e buchi dal foglio Google dei turni',
     icon: Icons.event_busy_outlined,
-  ),
-  ToolInfo(
-    id: kToolMagazzino,
-    titolo: 'Magazzino Verde',
-    sottotitolo: 'Giacenze e movimenti dal gestionale di magazzino',
-    icon: Icons.warehouse_outlined,
-    attivoDiDefault: false,
   ),
   ToolInfo(
     id: kToolListaOspedali,
