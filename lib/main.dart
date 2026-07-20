@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'db/database.dart';
 import 'navigation/app_navigator.dart';
@@ -35,6 +36,19 @@ class AmbuTurniApp extends StatelessWidget {
         title: 'AmbuTurni',
         debugShowCheckedModeBanner: false,
         theme: buildDarkTheme(),
+        // Solo per i widget Material nativi (es. showDatePicker in
+        // turno_form.dart/assistenza_form.dart): il resto dell'app non usa
+        // flutter_localizations, tutte le stringhe sono già fisse in
+        // italiano (vedi CLAUDE.md). locale fissato a 'it' invece di seguire
+        // quella del sistema, coerente col resto dell'app che non segue mai
+        // la lingua del device.
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('it')],
+        locale: const Locale('it'),
         home: const AppNavigator(),
       ),
     );

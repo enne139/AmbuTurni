@@ -10,6 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Localizzazione dei widget Material nativi (es. showDatePicker): senza,
+  # il selettore data mostra mesi/giorni e pulsanti "OK"/"CANCEL" in inglese
+  # anche se tutto il resto dell'app è testo fisso in italiano — l'unico
+  # punto dove la mancanza di flutter_localizations si vedeva davvero.
+  flutter_localizations:
+    sdk: flutter
+
   # SQLite locale (nativo su Android, FFI su Windows/desktop, WASM su web).
   # sqflite_common_ffi bump da ^2.3.3 (2.3.5) a ^2.4.2: la 2.3.5 importa
   # `package:sqlite3/open.dart`, rimosso in sqlite3 3.x — compilava (e
@@ -33,8 +40,9 @@ dependencies:
   # State management semplice con ChangeNotifier
   provider: ^6.1.2
 
-  # Formattazione date
-  intl: ^0.20.3
+  # Formattazione date. Vincolata a ^0.20.2 (non ^0.20.3): flutter_localizations
+  # in questa versione di Flutter pinna intl a esattamente 0.20.2.
+  intl: ^0.20.2
 
   # Generazione UUID per gli id locali
   uuid: ^4.6.0

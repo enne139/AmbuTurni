@@ -69,6 +69,7 @@
 | Apertura navigatore esterno (Lista ospedali) | `url_launcher`, link universale Google Maps |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Versione app a runtime | `package_info_plus` (legge X.Y.Z+N dalla piattaforma, mostrata in Impostazioni) |
+| Localizzazione widget nativi | `flutter_localizations` (SDK), solo per `showDatePicker`: `locale` fisso `it`, il resto dell'app resta testo italiano hardcoded |
 | Build | `flutter build apk` oppure workflow Gitea |
 
 Web (Chrome/Edge, `flutter run -d chrome` / `flutter build web`): DB via
@@ -553,8 +554,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   serve solo una griglia mese con marker colorati (pallini per associazione) e
   l'elenco del giorno selezionato — table_calendar & co. non giustificano la
   dipendenza (stessa politica di byId* vs package collection). Nomi di mesi e
-  giorni hardcoded in italiano: l'app non usa flutter_localizations e tutte le
-  stringhe sono già fisse in italiano. Il giorno selezionato è stato della
+  giorni hardcoded in italiano: tutte le stringhe di questo widget sono già
+  fisse in italiano indipendentemente da `flutter_localizations` (aggiunta
+  poi solo per i widget Material nativi, vedi bullet dedicato più sotto). Il
+  giorno selezionato è stato della
   lista (non del calendario) perché il FAB lo usa per precompilare
   `dataIniziale` del form; la vista scelta (lista/calendario) persiste in
   shared_preferences, con chiave separata per turni e assistenze. La ricerca
@@ -1239,6 +1242,26 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     mano il click-through di export/import backup su un file reale — da
     fare prima della prossima release, area toccata dal cambio di API di
     `file_picker`.
+- **`flutter_localizations` aggiunta (2026-07-20), solo per i widget Material
+  nativi**: `showDatePicker` (selezione data in `turno_form.dart`/
+  `assistenza_form.dart`) è l'unico punto dell'app che usa un widget
+  Material standard invece di testo/UI custom, e senza
+  `localizationsDelegates` mostrava mesi/giorni e i pulsanti OK/Cancel in
+  inglese — stonato in un'app altrimenti interamente in italiano (vedi
+  bullet sopra sul calendario custom, dove l'italiano era già hardcoded a
+  prescindere). `MaterialApp` ora dichiara i tre delegate globali
+  (`GlobalMaterialLocalizations`/`GlobalWidgetsLocalizations`/
+  `GlobalCupertinoLocalizations`) e **`locale` fissato a `Locale('it')`**
+  (non la lingua di sistema): coerente col resto dell'app, che non ha mai
+  seguito la lingua del device. `flutter_localizations` è nell'SDK Flutter
+  stesso (`sdk: flutter`, nessuna versione da scegliere), ma pinna `intl` a
+  una versione esatta della release Flutter in uso (qui `0.20.2`, non
+  `^0.20.3` come dopo l'ultimo bump dipendenze) — il vincolo in
+  `pubspec.yaml` è stato ristretto di conseguenza, altrimenti `pub get`
+  fallisce. Nessun impatto sul resto dell'app (nessun'altra schermata usa
+  widget Material localizzabili) e nessuna nuova stringa da tradurre: il
+  pacchetto localizza solo i widget standard di Flutter, non introduce un
+  sistema di localizzazione da estendere alle stringhe dell'app.
 
 ---
 
