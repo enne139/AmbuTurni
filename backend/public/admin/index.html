@@ -65,6 +65,8 @@
       <input id="f-via" />
       <label for="f-citta">Città</label>
       <input id="f-citta" />
+      <label for="f-regione">Regione</label>
+      <input id="f-regione" />
       <div class="row">
         <div>
           <label for="f-lat">Latitudine</label>
@@ -99,12 +101,63 @@
         <strong>Elenco ospedali</strong>
         <span id="conteggio-ospedali" style="color:#ffffffb3; font-size:13px;"></span>
       </div>
-      <input id="f-cerca" placeholder="Cerca per nome, via o città..." oninput="filtraTabella()" style="margin-top:8px;" />
+      <input id="f-cerca" placeholder="Cerca per nome, via, città o regione..." oninput="filtraTabella()" style="margin-top:8px;" />
       <table>
         <thead>
-          <tr><th>Nome</th><th>Via</th><th>Città</th><th>Lat</th><th>Lng</th><th></th></tr>
+          <tr><th>Nome</th><th>Via</th><th>Città</th><th>Regione</th><th>Lat</th><th>Lng</th><th></th></tr>
         </thead>
         <tbody id="tabella-ospedali"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="header-row">
+        <strong>Fogli turni</strong>
+      </div>
+      <p style="color:#ffffffb3; font-size:13px; margin: 8px 0 12px;">
+        Link ai fogli Google Sheets del piano turni mensile: ogni client
+        configurato su questo backend li scarica automaticamente (se
+        l'impostazione "Sincronizza fogli turni" è attiva, di default sì).
+      </p>
+      <div class="row">
+        <div>
+          <label for="fg-chiave">Mese (aaaa-mm)</label>
+          <input id="fg-chiave" placeholder="2026-07" />
+        </div>
+        <div style="flex: 2;">
+          <label for="fg-url">Link del foglio</label>
+          <input id="fg-url" />
+        </div>
+      </div>
+      <button onclick="salvaFoglio()">Salva</button>
+      <div class="errore" id="errore-foglio"></div>
+      <table>
+        <thead>
+          <tr><th>Mese</th><th>Link</th><th></th></tr>
+        </thead>
+        <tbody id="tabella-fogli"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="header-row">
+        <strong>Materiali</strong>
+      </div>
+      <p style="color:#ffffffb3; font-size:13px; margin: 8px 0 12px;">
+        Catalogo condiviso dei nomi materiali (Tools → Materiali usati): un
+        client può scaricarlo per popolare il proprio catalogo su un device
+        nuovo.
+      </p>
+      <div class="row">
+        <input id="mt-nome" placeholder="Nome materiale" />
+      </div>
+      <button onclick="aggiungiMateriale()">Aggiungi</button>
+      <div class="errore" id="errore-materiale"></div>
+      <table>
+        <thead>
+          <tr><th>Nome</th><th></th></tr>
+        </thead>
+        <tbody id="tabella-materiali"></tbody>
       </table>
     </div>
   </div>
@@ -161,6 +214,7 @@ async function carica() {
   const resp = await fetch('/api/ospedali');
   ospedaliCache = await resp.json();
   filtraTabella();
+  await Promise.all([caricaFogli(), caricaMateriali()]);
 }
 
 function filtraTabella() {
@@ -168,7 +222,8 @@ function filtraTabella() {
   const filtrati = !q ? ospedaliCache : ospedaliCache.filter((o) =>
     (o.nome || '').toLowerCase().includes(q) ||
     (o.via || '').toLowerCase().includes(q) ||
-    (o.citta || '').toLowerCase().includes(q)
+    (o.citta || '').toLowerCase().includes(q) ||
+    (o.regione || '').toLowerCase().includes(q)
   );
   renderTabella(filtrati);
   document.getElementById('conteggio-ospedali').textContent =
@@ -184,6 +239,7 @@ function renderTabella(lista) {
       <td>${escapeHtml(o.nome)}</td>
       <td>${escapeHtml(o.via ?? '')}</td>
       <td>${escapeHtml(o.citta ?? '')}</td>
+      <td>${escapeHtml(o.regione ?? '')}</td>
       <td>${o.lat ?? ''}</td>
       <td>${o.lng ?? ''}</td>
       <td>
@@ -205,6 +261,7 @@ function modificaForm(o) {
   document.getElementById('f-nome').value = o.nome ?? '';
   document.getElementById('f-via').value = o.via ?? '';
   document.getElementById('f-citta').value = o.citta ?? '';
+  document.getElementById('f-regione').value = o.regione ?? '';
   document.getElementById('f-lat').value = o.lat ?? '';
   document.getElementById('f-lng').value = o.lng ?? '';
   document.getElementById('errore-form').textContent = '';
@@ -214,7 +271,7 @@ function modificaForm(o) {
 
 function annullaModifica() {
   editingId = null;
-  for (const id of ['f-nome', 'f-via', 'f-citta', 'f-lat', 'f-lng']) {
+  for (const id of ['f-nome', 'f-via', 'f-citta', 'f-regione', 'f-lat', 'f-lng']) {
     document.getElementById(id).value = '';
   }
   document.getElementById('errore-form').textContent = '';
@@ -238,6 +295,7 @@ async function salva() {
     nome: document.getElementById('f-nome').value.trim(),
     via: document.getElementById('f-via').value.trim() || null,
     citta: document.getElementById('f-citta').value.trim() || null,
+    regione: document.getElementById('f-regione').value.trim() || null,
     lat: latTxt ? Number(latTxt) : null,
     lng: lngTxt ? Number(lngTxt) : null,
   };
@@ -292,6 +350,106 @@ async function elimina(id) {
     headers: { Authorization: `Bearer ${token()}` },
   });
   await carica();
+}
+
+// --- Fogli turni ---
+// Un solo form chiave+url: niente modalità modifica separata, salvare di
+// nuovo la stessa chiave (aaaa-mm) la aggiorna (upsert lato server).
+
+async function caricaFogli() {
+  const resp = await fetch('/api/fogli');
+  const fogli = await resp.json();
+  const corpo = document.getElementById('tabella-fogli');
+  corpo.innerHTML = '';
+  for (const f of fogli) {
+    const riga = document.createElement('tr');
+    riga.innerHTML = `
+      <td>${escapeHtml(f.chiave)}</td>
+      <td style="max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+        <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" style="color:#1e88e5;">${escapeHtml(f.url)}</a>
+      </td>
+      <td><button class="danger small">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => eliminaFoglio(f.chiave);
+    corpo.appendChild(riga);
+  }
+}
+
+async function salvaFoglio() {
+  const erroreEl = document.getElementById('errore-foglio');
+  erroreEl.textContent = '';
+  const chiave = document.getElementById('fg-chiave').value.trim();
+  const url = document.getElementById('fg-url').value.trim();
+  try {
+    const resp = await fetch('/api/fogli', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ chiave, url }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    document.getElementById('fg-chiave').value = '';
+    document.getElementById('fg-url').value = '';
+    await caricaFogli();
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+async function eliminaFoglio(chiave) {
+  if (!confirm(`Eliminare il foglio "${chiave}"?`)) return;
+  await fetch(`/api/fogli/${encodeURIComponent(chiave)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token()}` },
+  });
+  await caricaFogli();
+}
+
+// --- Materiali ---
+
+async function caricaMateriali() {
+  const resp = await fetch('/api/materiali');
+  const materiali = await resp.json();
+  const corpo = document.getElementById('tabella-materiali');
+  corpo.innerHTML = '';
+  for (const m of materiali) {
+    const riga = document.createElement('tr');
+    riga.innerHTML = `
+      <td>${escapeHtml(m.nome)}</td>
+      <td><button class="danger small">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => eliminaMateriale(m.id);
+    corpo.appendChild(riga);
+  }
+}
+
+async function aggiungiMateriale() {
+  const erroreEl = document.getElementById('errore-materiale');
+  erroreEl.textContent = '';
+  const nome = document.getElementById('mt-nome').value.trim();
+  if (!nome) return;
+  try {
+    const resp = await fetch('/api/materiali', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ nome }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    document.getElementById('mt-nome').value = '';
+    await caricaMateriali();
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+async function eliminaMateriale(id) {
+  if (!confirm('Eliminare questo materiale?')) return;
+  await fetch(`/api/materiali/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token()}` },
+  });
+  await caricaMateriali();
 }
 
 function escapeHtml(s) {

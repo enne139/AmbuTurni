@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -92,11 +93,13 @@ func main() {
 	// --- OSPEDALI ---
 
 	// Pubblica: i client (app AmbuTurni) scaricano l'elenco per popolare Lista
-	// ospedali, senza bisogno di credenziali. ?citta= filtra (case-insensitive,
-	// match esatto); senza il parametro restituisce tutto l'elenco.
+	// ospedali, senza bisogno di credenziali. ?citta= o ?regione= filtrano
+	// (case-insensitive, match esatto; citta ha priorità se entrambi passati);
+	// senza parametri restituisce tutto l'elenco.
 	mux.HandleFunc("GET /api/ospedali", func(w http.ResponseWriter, r *http.Request) {
 		citta := strings.TrimSpace(r.URL.Query().Get("citta"))
-		lista, err := listOspedali(ctx, pool, citta)
+		regione := strings.TrimSpace(r.URL.Query().Get("regione"))
+		lista, err := listOspedali(ctx, pool, citta, regione)
 		if err != nil {
 			log.Printf("[ospedali] errore lista: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -117,14 +120,27 @@ func main() {
 		writeJSON(w, http.StatusOK, lista)
 	})
 
+	// Pubblica: le regioni che hanno almeno un ospedale, stesso scopo di
+	// /api/citta ma per il raggruppamento/download per regione lato client.
+	mux.HandleFunc("GET /api/regioni", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listRegioni(ctx, pool)
+		if err != nil {
+			log.Printf("[ospedali] errore lista regioni: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, lista)
+	})
+
 	// Protette: solo dalla pagina admin, dopo login.
 	mux.HandleFunc("POST /api/ospedali", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Nome  string   `json:"nome"`
-			Via   *string  `json:"via"`
-			Citta *string  `json:"citta"`
-			Lat   *float64 `json:"lat"`
-			Lng   *float64 `json:"lng"`
+			Nome    string   `json:"nome"`
+			Via     *string  `json:"via"`
+			Citta   *string  `json:"citta"`
+			Lat     *float64 `json:"lat"`
+			Lng     *float64 `json:"lng"`
+			Regione *string  `json:"regione"`
 		}
 		if !readJSON(w, r, &body) {
 			return
@@ -134,7 +150,7 @@ func main() {
 			writeError(w, http.StatusBadRequest, "nome richiesto")
 			return
 		}
-		creato, err := createOspedale(ctx, pool, body.Nome, body.Via, body.Citta, body.Lat, body.Lng)
+		creato, err := createOspedale(ctx, pool, body.Nome, body.Via, body.Citta, body.Regione, body.Lat, body.Lng)
 		if err != nil {
 			log.Printf("[ospedali] errore creazione: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -147,11 +163,12 @@ func main() {
 	// stesso form dell'aggiunta). Sostituisce tutti i campi, come il POST.
 	mux.HandleFunc("PUT /api/ospedali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Nome  string   `json:"nome"`
-			Via   *string  `json:"via"`
-			Citta *string  `json:"citta"`
-			Lat   *float64 `json:"lat"`
-			Lng   *float64 `json:"lng"`
+			Nome    string   `json:"nome"`
+			Via     *string  `json:"via"`
+			Citta   *string  `json:"citta"`
+			Lat     *float64 `json:"lat"`
+			Lng     *float64 `json:"lng"`
+			Regione *string  `json:"regione"`
 		}
 		if !readJSON(w, r, &body) {
 			return
@@ -161,7 +178,7 @@ func main() {
 			writeError(w, http.StatusBadRequest, "nome richiesto")
 			return
 		}
-		aggiornato, err := updateOspedale(ctx, pool, r.PathValue("id"), body.Nome, body.Via, body.Citta, body.Lat, body.Lng)
+		aggiornato, err := updateOspedale(ctx, pool, r.PathValue("id"), body.Nome, body.Via, body.Citta, body.Regione, body.Lat, body.Lng)
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "Ospedale non trovato")
 			return
@@ -215,6 +232,163 @@ func main() {
 		creati, aggiornati, scartati, err := upsertOspedali(ctx, pool, righe)
 		if err != nil {
 			log.Printf("[ospedali] errore import: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]int{
+			"creati": creati, "aggiornati": aggiornati, "scartati": scartati,
+		})
+	}))
+
+	// --- FOGLI TURNI ---
+	// Link ai fogli Google Sheets del piano turni mensile (tool "Piano
+	// turni"): lettura pubblica (il client li scarica automaticamente se
+	// l'impostazione "Sincronizza fogli turni" è attiva, di default sì),
+	// scrittura solo da admin — stesso schema di fiducia di /api/ospedali,
+	// niente scrittura lato client (che non ha alcun login).
+
+	mux.HandleFunc("GET /api/fogli", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listFogli(ctx, pool)
+		if err != nil {
+			log.Printf("[fogli] errore lista: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, lista)
+	})
+
+	mux.HandleFunc("POST /api/fogli", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Chiave, Url string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		body.Chiave = strings.TrimSpace(body.Chiave)
+		body.Url = strings.TrimSpace(body.Url)
+		if body.Chiave == "" || body.Url == "" {
+			writeError(w, http.StatusBadRequest, "chiave e url richiesti")
+			return
+		}
+		if !regexp.MustCompile(`^\d{4}-\d{2}$`).MatchString(body.Chiave) {
+			writeError(w, http.StatusBadRequest, `chiave deve avere formato "aaaa-mm"`)
+			return
+		}
+		salvato, err := upsertFoglio(ctx, pool, body.Chiave, body.Url)
+		if err != nil {
+			log.Printf("[fogli] errore salvataggio: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, salvato)
+	}))
+
+	mux.HandleFunc("DELETE /api/fogli/{chiave}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		rimosso, err := deleteFoglio(ctx, pool, r.PathValue("chiave"))
+		if err != nil {
+			log.Printf("[fogli] errore eliminazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !rimosso {
+			writeError(w, http.StatusNotFound, "Foglio non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
+	// --- MATERIALI ---
+	// Catalogo condiviso dei nomi materiali (Tools → Materiali usati): stesso
+	// schema pubblico-lettura/admin-scrittura degli ospedali, usato dal
+	// client per popolare il catalogo locale su un device nuovo.
+
+	mux.HandleFunc("GET /api/materiali", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listMateriali(ctx, pool)
+		if err != nil {
+			log.Printf("[materiali] errore lista: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, lista)
+	})
+
+	mux.HandleFunc("POST /api/materiali", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Nome string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		body.Nome = strings.TrimSpace(body.Nome)
+		if body.Nome == "" {
+			writeError(w, http.StatusBadRequest, "nome richiesto")
+			return
+		}
+		creato, err := createMateriale(ctx, pool, body.Nome)
+		if err != nil {
+			log.Printf("[materiali] errore creazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusCreated, creato)
+	}))
+
+	mux.HandleFunc("PUT /api/materiali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Nome string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		body.Nome = strings.TrimSpace(body.Nome)
+		if body.Nome == "" {
+			writeError(w, http.StatusBadRequest, "nome richiesto")
+			return
+		}
+		aggiornato, err := updateMateriale(ctx, pool, r.PathValue("id"), body.Nome)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Materiale non trovato")
+			return
+		}
+		if err != nil {
+			log.Printf("[materiali] errore aggiornamento: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, aggiornato)
+	}))
+
+	mux.HandleFunc("DELETE /api/materiali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		rimosso, err := deleteMateriale(ctx, pool, r.PathValue("id"))
+		if err != nil {
+			log.Printf("[materiali] errore eliminazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !rimosso {
+			writeError(w, http.StatusNotFound, "Materiale non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
+	// Import massivo: stessa logica di /api/ospedali/import, upsert per nome.
+	mux.HandleFunc("POST /api/materiali/import", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "corpo della richiesta non valido")
+			return
+		}
+		var righe []MaterialeInput
+		if err := json.Unmarshal(raw, &righe); err != nil {
+			var wrapper struct {
+				Materiali []MaterialeInput `json:"materiali"`
+			}
+			if err2 := json.Unmarshal(raw, &wrapper); err2 != nil || wrapper.Materiali == nil {
+				writeError(w, http.StatusBadRequest,
+					`formato non valido: atteso un elenco di materiali o {"materiali": [...]}`)
+				return
+			}
+			righe = wrapper.Materiali
+		}
+		creati, aggiornati, scartati, err := upsertMateriali(ctx, pool, righe)
+		if err != nil {
+			log.Printf("[materiali] errore import: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
 			return
 		}

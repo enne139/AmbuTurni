@@ -10,18 +10,19 @@ import (
 )
 
 // OspedaleInput è il formato di una riga in ingresso per l'import massivo
-// (POST /api/ospedali/import): stesso nome/via/citta/lat/lng usato in
+// (POST /api/ospedali/import): stesso nome/via/citta/lat/lng/regione usato in
 // esportOspedali/importOspedali lato client (db/backup.dart) — un file
 // esportato dall'app si importa qui senza alcuna trasformazione.
 type OspedaleInput struct {
-	Nome  string   `json:"nome"`
-	Via   *string  `json:"via"`
-	Citta *string  `json:"citta"`
-	Lat   *float64 `json:"lat"`
-	Lng   *float64 `json:"lng"`
+	Nome    string   `json:"nome"`
+	Via     *string  `json:"via"`
+	Citta   *string  `json:"citta"`
+	Lat     *float64 `json:"lat"`
+	Lng     *float64 `json:"lng"`
+	Regione *string  `json:"regione"`
 }
 
-// Ospedale rispecchia il formato nome/via/citta/lat/lng già usato
+// Ospedale rispecchia il formato nome/via/citta/lat/lng/regione già usato
 // dall'export/import JSON dell'app Flutter (db/backup.dart): i client
 // possono fare l'upsert per nome sulla risposta di GET /ospedali senza
 // alcuna trasformazione.
@@ -32,20 +33,28 @@ type Ospedale struct {
 	Citta     *string   `json:"citta"`
 	Lat       *float64  `json:"lat"`
 	Lng       *float64  `json:"lng"`
+	Regione   *string   `json:"regione"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-const colonneOspedale = "id, nome, via, citta, lat, lng, created_at, updated_at"
+const colonneOspedale = "id, nome, via, citta, lat, lng, regione, created_at, updated_at"
 
-// listOspedali restituisce l'elenco, filtrato per città (case-insensitive,
-// match esatto) se [citta] non è vuota.
-func listOspedali(ctx context.Context, pool *pgxpool.Pool, citta string) ([]Ospedale, error) {
+// listOspedali restituisce l'elenco, filtrato (case-insensitive, match
+// esatto) per città se [citta] non è vuota, altrimenti per regione se
+// [regione] non è vuota; se entrambe sono vuote restituisce tutto.
+// Città ha priorità su regione se per errore fossero passate insieme (un
+// filtro più specifico che uno più ampio, non c'è un caso d'uso per l'AND).
+func listOspedali(ctx context.Context, pool *pgxpool.Pool, citta, regione string) ([]Ospedale, error) {
 	query := "SELECT " + colonneOspedale + " FROM ospedali ORDER BY citta ASC NULLS LAST, nome ASC"
 	args := []any{}
-	if citta != "" {
+	switch {
+	case citta != "":
 		query = "SELECT " + colonneOspedale + " FROM ospedali WHERE lower(citta) = lower($1) ORDER BY nome ASC"
 		args = append(args, citta)
+	case regione != "":
+		query = "SELECT " + colonneOspedale + " FROM ospedali WHERE lower(regione) = lower($1) ORDER BY citta ASC NULLS LAST, nome ASC"
+		args = append(args, regione)
 	}
 	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
@@ -56,7 +65,7 @@ func listOspedali(ctx context.Context, pool *pgxpool.Pool, citta string) ([]Ospe
 	lista := []Ospedale{}
 	for rows.Next() {
 		var o Ospedale
-		if err := rows.Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := rows.Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.Regione, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, err
 		}
 		lista = append(lista, o)
@@ -92,13 +101,37 @@ func listCitta(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	return citta, rows.Err()
 }
 
+// listRegioni: stessa logica di listCitta ma sulla colonna regione — usata
+// dal client per raggruppare la lista ospedali per regione e per popolare
+// l'elenco selezionabile di "Scarica ospedali per regione".
+func listRegioni(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT DISTINCT ON (lower(regione)) regione FROM ospedali
+		 WHERE regione IS NOT NULL AND regione <> ''
+		 ORDER BY lower(regione), regione`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	regioni := []string{}
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+		regioni = append(regioni, r)
+	}
+	return regioni, rows.Err()
+}
+
 // createOspedale inserisce un ospedale e restituisce la riga creata.
-func createOspedale(ctx context.Context, pool *pgxpool.Pool, nome string, via, citta *string, lat, lng *float64) (Ospedale, error) {
+func createOspedale(ctx context.Context, pool *pgxpool.Pool, nome string, via, citta, regione *string, lat, lng *float64) (Ospedale, error) {
 	var o Ospedale
 	err := pool.QueryRow(ctx,
-		"INSERT INTO ospedali (id, nome, via, citta, lat, lng) VALUES ($1,$2,$3,$4,$5,$6) RETURNING "+colonneOspedale,
-		uuid.NewString(), nome, via, citta, lat, lng,
-	).Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.CreatedAt, &o.UpdatedAt)
+		"INSERT INTO ospedali (id, nome, via, citta, lat, lng, regione) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "+colonneOspedale,
+		uuid.NewString(), nome, via, citta, lat, lng, regione,
+	).Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.Regione, &o.CreatedAt, &o.UpdatedAt)
 	return o, err
 }
 
@@ -106,13 +139,13 @@ func createOspedale(ctx context.Context, pool *pgxpool.Pool, nome string, via, c
 // restituisce la riga aggiornata. Se [id] non esiste restituisce
 // pgx.ErrNoRows (RETURNING su un UPDATE che non tocca righe non produce
 // risultati, Scan lo riporta così) — il chiamante lo traduce in 404.
-func updateOspedale(ctx context.Context, pool *pgxpool.Pool, id, nome string, via, citta *string, lat, lng *float64) (Ospedale, error) {
+func updateOspedale(ctx context.Context, pool *pgxpool.Pool, id, nome string, via, citta, regione *string, lat, lng *float64) (Ospedale, error) {
 	var o Ospedale
 	err := pool.QueryRow(ctx,
-		`UPDATE ospedali SET nome=$1, via=$2, citta=$3, lat=$4, lng=$5, updated_at=now()
-		 WHERE id=$6 RETURNING `+colonneOspedale,
-		nome, via, citta, lat, lng, id,
-	).Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.CreatedAt, &o.UpdatedAt)
+		`UPDATE ospedali SET nome=$1, via=$2, citta=$3, lat=$4, lng=$5, regione=$6, updated_at=now()
+		 WHERE id=$7 RETURNING `+colonneOspedale,
+		nome, via, citta, lat, lng, regione, id,
+	).Scan(&o.ID, &o.Nome, &o.Via, &o.Citta, &o.Lat, &o.Lng, &o.Regione, &o.CreatedAt, &o.UpdatedAt)
 	return o, err
 }
 
@@ -157,8 +190,8 @@ func upsertOspedali(ctx context.Context, pool *pgxpool.Pool, righe []OspedaleInp
 		}
 		if id, ok := esistenti[nome]; ok {
 			if _, err = tx.Exec(ctx,
-				"UPDATE ospedali SET via=$1, citta=$2, lat=$3, lng=$4, updated_at=now() WHERE id=$5",
-				r.Via, r.Citta, r.Lat, r.Lng, id,
+				"UPDATE ospedali SET via=$1, citta=$2, lat=$3, lng=$4, regione=$5, updated_at=now() WHERE id=$6",
+				r.Via, r.Citta, r.Lat, r.Lng, r.Regione, id,
 			); err != nil {
 				return 0, 0, 0, err
 			}
@@ -166,8 +199,8 @@ func upsertOspedali(ctx context.Context, pool *pgxpool.Pool, righe []OspedaleInp
 		} else {
 			id := uuid.NewString()
 			if _, err = tx.Exec(ctx,
-				"INSERT INTO ospedali (id, nome, via, citta, lat, lng) VALUES ($1,$2,$3,$4,$5,$6)",
-				id, nome, r.Via, r.Citta, r.Lat, r.Lng,
+				"INSERT INTO ospedali (id, nome, via, citta, lat, lng, regione) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+				id, nome, r.Via, r.Citta, r.Lat, r.Lng, r.Regione,
 			); err != nil {
 				return 0, 0, 0, err
 			}

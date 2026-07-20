@@ -27,9 +27,20 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 
 // initSchema crea le tabelle se non esistono.
 //   - users: credenziali (password con hash bcrypt) per il login all'interfaccia admin.
-//   - ospedali: elenco condiviso ospedali (nome, via, città, coordinate), lo
-//     stesso formato nome/via/citta/lat/lng usato dall'export/import JSON
-//     dell'app Flutter — i client lo scaricano filtrato per città.
+//   - ospedali: elenco condiviso ospedali (nome, via, città, coordinate,
+//     regione), lo stesso formato usato dall'export/import JSON dell'app
+//     Flutter — i client lo scaricano filtrato per città o per regione.
+//   - fogli_turni: link ai fogli Google Sheets del piano turni mensile,
+//     salvati sul backend così ogni client configurato su questa istanza può
+//     scaricarli automaticamente invece di doverli conoscere a mano (vedi
+//     CLAUDE.md, tool Piano turni).
+//   - materiali: catalogo condiviso dei nomi materiali (Tools → Materiali
+//     usati), scaricabile per popolare il catalogo locale su un device nuovo.
+//
+// `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
+// migrazioni (assente qui, a differenza del client Flutter): un solo campo
+// aggiunto a una tabella già esistente non giustifica la complessità, e
+// Postgres supporta nativamente la forma idempotente.
 func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS users (
@@ -48,8 +59,24 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
+		ALTER TABLE ospedali ADD COLUMN IF NOT EXISTS regione TEXT;
 
 		CREATE INDEX IF NOT EXISTS idx_ospedali_citta ON ospedali (citta);
+		CREATE INDEX IF NOT EXISTS idx_ospedali_regione ON ospedali (regione);
+
+		CREATE TABLE IF NOT EXISTS fogli_turni (
+			chiave TEXT PRIMARY KEY,
+			url TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		CREATE TABLE IF NOT EXISTS materiali (
+			id TEXT PRIMARY KEY,
+			nome TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
 	`)
 	return err
 }
