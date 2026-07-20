@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../db/helpers.dart';
 import '../../db/models.dart';
+import '../../utils/backend_api.dart';
+import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
 import 'materiale_usato_form.dart';
 import 'materiali_screen.dart';
@@ -18,6 +21,7 @@ class MaterialiUsatiScreen extends StatefulWidget {
 class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
   List<MaterialeUsato> _lista = [];
   bool _loading = true;
+  bool _scaricando = false;
 
   @override
   void initState() {
@@ -28,6 +32,37 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
   Future<void> _carica() async {
     final lista = await getMaterialiUsati();
     if (mounted) setState(() { _lista = lista; _loading = false; });
+  }
+
+  /// Stessa sincronizzazione del catalogo di materiali_screen.dart
+  /// (`_scaricaDalBackend`), raggiungibile anche da qui: la schermata più
+  /// usata durante il turno è questa, non "Gestisci materiali" — prima,
+  /// per aggiornare il catalogo condiviso (es. un materiale nuovo aggiunto
+  /// da un altro volontario), bisognava passare da "Gestisci materiali"
+  /// anche solo per far comparire un nome nuovo nel MaterialePicker del
+  /// form di utilizzo.
+  Future<void> _scaricaDalBackend() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final baseUrl = prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
+    setState(() => _scaricando = true);
+    try {
+      final righe = await BackendApi(baseUrl: baseUrl).getMateriali();
+      final esito = await upsertMateriali(righe);
+      if (!mounted) return;
+      final avviso = esito.scartati == 0 ? '' : ' (${esito.scartati} scartati)';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${esito.creati} nuovi materiali dal backend condiviso.$avviso'),
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(messaggioErroreBackend(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _scaricando = false);
+    }
   }
 
   Future<void> _ripristina(MaterialeUsato mu) async {
@@ -94,6 +129,19 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
       appBar: AppBar(
         title: const Text('Materiali usati'),
         actions: [
+          if (_scaricando)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.cloud_download_outlined),
+              tooltip: 'Scarica dal backend condiviso',
+              onPressed: _scaricaDalBackend,
+            ),
           IconButton(
             icon: const Icon(Icons.edit_note),
             tooltip: 'Gestisci materiali',

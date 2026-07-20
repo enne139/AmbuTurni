@@ -167,7 +167,9 @@ lib/
     │   │                               regione dal backend condiviso (backend_api.dart) — la
     │   │                               configurazione del server è in Impostazioni
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
-    │   │                               swipe elimina, ripristina (singolo/tutto)
+    │   │                               swipe elimina, ripristina (singolo/tutto); pulsante per
+    │   │                               scaricare il catalogo dal backend condiviso (come in
+    │   │                               materiali_screen.dart, raggiungibile anche da qui)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
     │   ├── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
     │   │                               (doppioni case-insensitive bloccati: niente UNIQUE sul nome);
@@ -905,7 +907,15 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     `db/helpers.dart` (match case-insensitive come il `MaterialePicker`,
     nessun aggiornamento sui match — un materiale ha solo il nome) e un
     pulsante "Scarica dal backend condiviso" nell'AppBar di
-    `materiali_screen.dart`.
+    `materiali_screen.dart`, duplicato identico (stessa funzione, stesso
+    upsert) anche in `materiali_usati_screen.dart`: è la schermata usata
+    più spesso durante il turno, prima per aggiornare il catalogo (es. un
+    materiale nuovo aggiunto da un altro volontario) bisognava passare da
+    "Gestisci materiali" solo per farlo comparire nel `MaterialePicker` del
+    form di utilizzo. Lì non ricarica la lista utilizzi dopo il download
+    (a differenza di `materiali_screen.dart`): il sync tocca solo il
+    catalogo dei nomi, non gli utilizzi già registrati mostrati in quella
+    schermata.
   - **Pagina admin ridisegnata (2026-07-20)**: era un'unica pagina con tutte
     le sezioni impilate (login, form ospedale, import, tabella ospedali,
     fogli, materiali) — sempre più lunga da scorrere man mano che si
