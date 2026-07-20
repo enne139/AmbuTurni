@@ -898,6 +898,56 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     nessun aggiornamento sui match — un materiale ha solo il nome) e un
     pulsante "Scarica dal backend condiviso" nell'AppBar di
     `materiali_screen.dart`.
+  - **Pagina admin ridisegnata (2026-07-20)**: era un'unica pagina con tutte
+    le sezioni impilate (login, form ospedale, import, tabella ospedali,
+    fogli, materiali) — sempre più lunga da scorrere man mano che si
+    aggiungevano sezioni, e la sezione "Utenti" non è mai esistita in UI
+    nonostante `GET`/`POST`/`DELETE /api/auth/users` esistano lato backend
+    (creabili solo via `curl`). Restano HTML+JS vanilla, nessun framework
+    (stessa scelta di sempre per una form di poche schermate) ma:
+    **navigazione a tab** (Ospedali/Fogli turni/Materiali/Utenti, sola CSS
+    `display` toggle — i dati di tutte le sezioni si caricano insieme in
+    `carica()` come prima, cambiare tab non fa nuove richieste); **nuova
+    sezione Utenti** (crea/elenca/elimina, usa gli endpoint già esistenti;
+    l'errore "non è possibile eliminare l'unico utente admin rimasto" del
+    backend arriva già leggibile); **stati vuoto/caricamento** nelle tabelle
+    (`renderTabellaGenerica`, condivisa dalle quattro sezioni) invece di una
+    tabella bianca senza spiegazione; **toast di conferma** per le azioni
+    riuscite (`toast()`, si autodistruggono dopo ~3s) — prima solo gli
+    errori avevano un feedback, un salvataggio ok si vedeva solo dal form
+    che si svuotava; **login con Enter** (form vero invece di un
+    `onclick` sul pulsante). Verificato end-to-end con
+    `docker compose up --build` + `curl` replicando le stesse chiamate che
+    fa la pagina (login, CRUD ospedali, CRUD utenti incluso il rifiuto di
+    eliminare l'ultimo, validazione mese/URL dei fogli) e controllo statico
+    di sintassi JS/bilanciamento tag/funzioni `onclick` referenziate — non
+    un click-through reale nel browser (nessun modo di interagire con una
+    GUI da qui).
+  - **Export/import per ospedali, fogli turni e materiali (2026-07-20)**:
+    ospedali aveva già l'import (upsert per nome, `POST /api/ospedali/import`)
+    ma non l'export; fogli turni e materiali non avevano né l'uno né l'altro
+    dalla pagina admin — solo un form "una riga alla volta". L'**export è
+    puramente client-side**: nessun nuovo endpoint serve, i dati sono già in
+    `ospedaliCache`/`fogliCache`/`materialiCache` (le stesse variabili che
+    riempiono le tabelle) — `scaricaJson()` li scarica come file `.json` via
+    Blob + `<a download>`, senza passare dal server. Ogni categoria esporta
+    lo stesso formato che il suo endpoint di import si aspetta (array o
+    `{"chiave": [...]}`), quindi un file esportato da qui si reimporta qui,
+    su un'altra istanza, o — per ospedali — dall'app stessa (stesso formato
+    di `exportOspedali`/`importOspedali` lato client). Per **materiali**
+    l'import lato backend esisteva già (`POST /api/materiali/import`, mai
+    esposto in UI); per **fogli turni** mancava anche lato backend: aggiunta
+    `upsertFogli` in `fogli.go` (stessa struttura di
+    `upsertOspedali`/`upsertMateriali`, upsert per chiave dentro una
+    transazione) e `POST /api/fogli/import`, con le stesse validazioni già
+    in vigore per il form singolo (mese 01-12, url http/https — righe non
+    valide scartate e contate, non bloccano l'intero import). I tre flussi
+    di import condividono `importaFileGenerico()` lato pagina admin
+    (endpoint/elemento errore/funzione di ricarica come parametri) invece di
+    triplicare la stessa logica fetch-e-mostra-esito. Verificato con
+    `docker compose` + `curl`: import con wrapper e con array puro, righe
+    scartate per formato invalido, upsert (stessa chiave reimportata con url
+    diverso → aggiornata non duplicata).
   - **Nessuno scoping multi-associazione sul backend**: ospedali, fogli
     turni e materiali condividono lo stesso schema "un'unica istanza,
     tabella piatta" già scelto per gli ospedali — chi vuole dati isolati

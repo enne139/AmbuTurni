@@ -345,6 +345,35 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
+	// Import massivo: stessa logica di /api/ospedali/import, upsert per chiave.
+	mux.HandleFunc("POST /api/fogli/import", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		raw, ok := readBodyLimited(w, r, maxImportBodyBytes)
+		if !ok {
+			return
+		}
+		var righe []FoglioInput
+		if err := json.Unmarshal(raw, &righe); err != nil {
+			var wrapper struct {
+				Fogli []FoglioInput `json:"fogli"`
+			}
+			if err2 := json.Unmarshal(raw, &wrapper); err2 != nil || wrapper.Fogli == nil {
+				writeError(w, http.StatusBadRequest,
+					`formato non valido: atteso un elenco di fogli o {"fogli": [...]}`)
+				return
+			}
+			righe = wrapper.Fogli
+		}
+		creati, aggiornati, scartati, err := upsertFogli(r.Context(), pool, righe)
+		if err != nil {
+			log.Printf("[fogli] errore import: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]int{
+			"creati": creati, "aggiornati": aggiornati, "scartati": scartati,
+		})
+	}))
+
 	// --- MATERIALI ---
 	// Catalogo condiviso dei nomi materiali (Tools → Materiali usati): stesso
 	// schema pubblico-lettura/admin-scrittura degli ospedali, usato dal

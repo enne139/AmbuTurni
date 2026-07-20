@@ -3,20 +3,26 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AmbuTurni — Ospedali (admin)</title>
+<title>AmbuTurni — Admin</title>
 <style>
   :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 24px; min-height: 100vh; box-sizing: border-box;
+    margin: 0; padding: 0; min-height: 100vh;
     background: #1a1a2e; color: #fff;
-    font: 15px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  h1 { font-size: 20px; margin: 0 0 20px; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 20px 20px 60px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .sottotitolo { color: #ffffff8a; font-size: 13px; margin: 4px 0 0; }
+
   .card {
     background: #16213e; border: 1px solid #2a2a4e; border-radius: 12px;
-    padding: 20px; max-width: 720px; margin: 0 auto 20px;
+    padding: 20px; margin: 0 0 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
   }
   label { display: block; font-size: 13px; color: #ffffffb3; margin: 12px 0 4px; }
+  label:first-child { margin-top: 0; }
   input {
     width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px;
     border: 1px solid #2a2a4e; background: #1a1a2e; color: #fff; font-size: 15px;
@@ -27,140 +33,292 @@
   button {
     margin-top: 16px; padding: 10px 16px; border: none; border-radius: 8px;
     background: #e94560; color: #fff; font-size: 15px; cursor: pointer;
+    transition: opacity .15s ease;
   }
-  button:hover { opacity: .9; }
+  button:hover { opacity: .88; }
+  button:disabled { opacity: .5; cursor: default; }
   button.secondary { background: transparent; border: 1px solid #ffffff3d; color: #fff; }
   button.danger { background: #cf6679; }
   button.info { background: #1e88e5; }
-  button.small { padding: 6px 10px; margin: 0 6px 0 0; font-size: 13px; }
+  button.small { padding: 6px 10px; margin: 8px 6px 0 0; font-size: 13px; }
   .errore { color: #cf6679; font-size: 13px; margin-top: 10px; min-height: 1em; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2a2a4e; font-size: 14px; }
+
+  .table-scroll { overflow-x: auto; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2a2a4e; font-size: 14px; white-space: nowrap; }
   th { color: #ffffffb3; font-weight: 600; }
+  tbody tr:hover td { background: #ffffff08; }
+  .stato-vuoto, .stato-caricamento {
+    color: #ffffff66; font-size: 13px; padding: 18px 4px; text-align: center; white-space: normal;
+  }
+
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+  /* Login: card centrata, nessuna barra/tab. */
+  #app-login {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  #app-login .card { width: 100%; max-width: 380px; margin: 0; }
+  #app-login h1 { text-align: center; }
+  #app-login .sottotitolo { text-align: center; }
+
   #app-gestione { display: none; }
-  .header-row { display: flex; justify-content: space-between; align-items: center; }
+  .topbar {
+    position: sticky; top: 0; z-index: 10; background: #1a1a2e;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid #2a2a4e;
+  }
+  .tabs {
+    display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid #2a2a4e;
+    overflow-x: auto;
+  }
+  .tab {
+    background: none; border: none; color: #ffffff99; margin: 0; padding: 12px 14px;
+    font-size: 14px; cursor: pointer; border-radius: 0; white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  .tab:hover { opacity: 1; color: #fff; }
+  .tab.active { color: #e94560; border-bottom-color: #e94560; font-weight: 600; }
+  .panel { display: none; padding: 20px; }
+  .panel.active { display: block; }
+
+  .toast-host { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: #16213e; border: 1px solid #2a2a4e; border-left: 3px solid #4caf50;
+    padding: 12px 16px; border-radius: 8px; font-size: 14px; max-width: 320px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.errore-toast { border-left-color: #cf6679; }
 </style>
 </head>
 <body>
-  <h1>AmbuTurni — Ospedali (admin)</h1>
 
   <div class="card" id="app-login">
-    <label for="username">Utente</label>
-    <input id="username" autocomplete="username" />
-    <label for="password">Password</label>
-    <input id="password" type="password" autocomplete="current-password" />
-    <button onclick="accedi()">Accedi</button>
-    <div class="errore" id="errore-login"></div>
+    <div>
+      <h1>AmbuTurni</h1>
+      <p class="sottotitolo">Accesso amministrazione</p>
+      <form onsubmit="event.preventDefault(); accedi();">
+        <label for="username">Utente</label>
+        <input id="username" autocomplete="username" autofocus />
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" />
+        <button type="submit">Accedi</button>
+      </form>
+      <div class="errore" id="errore-login"></div>
+    </div>
   </div>
 
   <div id="app-gestione">
-    <div class="card">
-      <div class="header-row">
-        <strong id="titolo-form">Aggiungi ospedale</strong>
-        <button class="secondary" onclick="esci()">Esci</button>
+    <div class="topbar">
+      <div>
+        <h1>AmbuTurni — Admin</h1>
+        <p class="sottotitolo">Ospedali, fogli turni, materiali e utenti condivisi</p>
       </div>
-      <label for="f-nome">Nome</label>
-      <input id="f-nome" />
-      <label for="f-via">Via</label>
-      <input id="f-via" />
-      <label for="f-citta">Città</label>
-      <input id="f-citta" />
-      <label for="f-regione">Regione</label>
-      <input id="f-regione" />
-      <div class="row">
-        <div>
-          <label for="f-lat">Latitudine</label>
-          <input id="f-lat" />
-        </div>
-        <div>
-          <label for="f-lng">Longitudine</label>
-          <input id="f-lng" />
-        </div>
-      </div>
-      <div class="row">
-        <button id="btn-salva" onclick="salva()">Aggiungi</button>
-        <button id="btn-annulla" class="secondary" onclick="annullaModifica()" style="display:none;">Annulla modifica</button>
-      </div>
-      <div class="errore" id="errore-form"></div>
+      <button class="secondary" onclick="esci()" style="margin-top:0;">Esci</button>
     </div>
 
-    <div class="card">
-      <strong>Importa da file</strong>
-      <p style="color:#ffffffb3; font-size:13px; margin: 8px 0 4px;">
-        Un file JSON con un elenco di ospedali (nome, via, città, lat, lng) —
-        lo stesso formato che l'app esporta da Impostazioni → Ospedali →
-        Esporta. Un ospedale già presente con lo stesso nome viene
-        aggiornato, uno nuovo viene creato; gli altri restano invariati.
-      </p>
-      <input id="f-import" type="file" accept="application/json,.json" onchange="importaFile(this)" />
-      <div class="errore" id="esito-import"></div>
-    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="ospedali" onclick="mostraTab('ospedali')">Ospedali</button>
+      <button class="tab" data-tab="fogli" onclick="mostraTab('fogli')">Fogli turni</button>
+      <button class="tab" data-tab="materiali" onclick="mostraTab('materiali')">Materiali</button>
+      <button class="tab" data-tab="utenti" onclick="mostraTab('utenti')">Utenti</button>
+    </nav>
 
-    <div class="card">
-      <div class="header-row">
-        <strong>Elenco ospedali</strong>
-        <span id="conteggio-ospedali" style="color:#ffffffb3; font-size:13px;"></span>
-      </div>
-      <input id="f-cerca" placeholder="Cerca per nome, via, città o regione..." oninput="filtraTabella()" style="margin-top:8px;" />
-      <table>
-        <thead>
-          <tr><th>Nome</th><th>Via</th><th>Città</th><th>Regione</th><th>Lat</th><th>Lng</th><th></th></tr>
-        </thead>
-        <tbody id="tabella-ospedali"></tbody>
-      </table>
-    </div>
+    <div class="wrap" style="padding-top:0;">
 
-    <div class="card">
-      <div class="header-row">
-        <strong>Fogli turni</strong>
-      </div>
-      <p style="color:#ffffffb3; font-size:13px; margin: 8px 0 12px;">
-        Link ai fogli Google Sheets del piano turni mensile: ogni client
-        configurato su questo backend li scarica automaticamente (se
-        l'impostazione "Sincronizza fogli turni" è attiva, di default sì).
-      </p>
-      <div class="row">
-        <div>
-          <label for="fg-chiave">Mese (aaaa-mm)</label>
-          <input id="fg-chiave" placeholder="2026-07" />
+      <!-- Ospedali ------------------------------------------------------ -->
+      <section class="panel active" data-panel="ospedali">
+        <div class="card">
+          <div class="header-row">
+            <strong id="titolo-form">Aggiungi ospedale</strong>
+          </div>
+          <label for="f-nome">Nome</label>
+          <input id="f-nome" />
+          <label for="f-via">Via</label>
+          <input id="f-via" />
+          <label for="f-citta">Città</label>
+          <input id="f-citta" />
+          <label for="f-regione">Regione</label>
+          <input id="f-regione" />
+          <div class="row">
+            <div>
+              <label for="f-lat">Latitudine</label>
+              <input id="f-lat" />
+            </div>
+            <div>
+              <label for="f-lng">Longitudine</label>
+              <input id="f-lng" />
+            </div>
+          </div>
+          <div class="row">
+            <button id="btn-salva" onclick="salva()">Aggiungi</button>
+            <button id="btn-annulla" class="secondary" onclick="annullaModifica()" style="display:none;">Annulla modifica</button>
+          </div>
+          <div class="errore" id="errore-form"></div>
         </div>
-        <div style="flex: 2;">
-          <label for="fg-url">Link del foglio</label>
-          <input id="fg-url" />
-        </div>
-      </div>
-      <button onclick="salvaFoglio()">Salva</button>
-      <div class="errore" id="errore-foglio"></div>
-      <table>
-        <thead>
-          <tr><th>Mese</th><th>Link</th><th></th></tr>
-        </thead>
-        <tbody id="tabella-fogli"></tbody>
-      </table>
-    </div>
 
-    <div class="card">
-      <div class="header-row">
-        <strong>Materiali</strong>
-      </div>
-      <p style="color:#ffffffb3; font-size:13px; margin: 8px 0 12px;">
-        Catalogo condiviso dei nomi materiali (Tools → Materiali usati): un
-        client può scaricarlo per popolare il proprio catalogo su un device
-        nuovo.
-      </p>
-      <div class="row">
-        <input id="mt-nome" placeholder="Nome materiale" />
-      </div>
-      <button onclick="aggiungiMateriale()">Aggiungi</button>
-      <div class="errore" id="errore-materiale"></div>
-      <table>
-        <thead>
-          <tr><th>Nome</th><th></th></tr>
-        </thead>
-        <tbody id="tabella-materiali"></tbody>
-      </table>
+        <div class="card">
+          <strong>Importa da file</strong>
+          <p class="sottotitolo" style="margin: 8px 0 4px;">
+            Un file JSON con un elenco di ospedali (nome, via, città, lat, lng) —
+            lo stesso formato che l'app esporta da Impostazioni → Ospedali →
+            Esporta. Un ospedale già presente con lo stesso nome viene
+            aggiornato, uno nuovo viene creato; gli altri restano invariati.
+          </p>
+          <input id="f-import" type="file" accept="application/json,.json" onchange="importaFile(this)" />
+          <div class="errore" id="esito-import"></div>
+        </div>
+
+        <div class="card">
+          <div class="header-row">
+            <strong>Elenco ospedali</strong>
+            <span style="display:flex; align-items:center; gap:12px;">
+              <span id="conteggio-ospedali" class="sottotitolo"></span>
+              <button class="secondary small" style="margin:0;" onclick="esportaOspedali()">Esporta</button>
+            </span>
+          </div>
+          <input id="f-cerca" placeholder="Cerca per nome, via, città o regione..." oninput="filtraTabella()" style="margin-top:8px;" />
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Nome</th><th>Via</th><th>Città</th><th>Regione</th><th>Lat</th><th>Lng</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-ospedali"><tr><td colspan="7"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fogli turni ----------------------------------------------------- -->
+      <section class="panel" data-panel="fogli">
+        <div class="card">
+          <strong>Fogli turni</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Link ai fogli Google Sheets del piano turni mensile: ogni client
+            configurato su questo backend li scarica automaticamente (se
+            l'impostazione "Sincronizza fogli turni" è attiva, di default sì).
+          </p>
+          <div class="row">
+            <div>
+              <label for="fg-chiave">Mese (aaaa-mm)</label>
+              <input id="fg-chiave" placeholder="2026-07" />
+            </div>
+            <div style="flex: 2;">
+              <label for="fg-url">Link del foglio</label>
+              <input id="fg-url" placeholder="https://..." />
+            </div>
+          </div>
+          <button onclick="salvaFoglio()">Salva</button>
+          <div class="errore" id="errore-foglio"></div>
+        </div>
+
+        <div class="card">
+          <strong>Importa da file</strong>
+          <p class="sottotitolo" style="margin: 8px 0 4px;">
+            Un file JSON con un elenco di fogli (chiave "aaaa-mm" e link) —
+            lo stesso formato prodotto da "Esporta" qui sotto. Un mese già
+            presente viene aggiornato, uno nuovo viene creato.
+          </p>
+          <input id="fg-import" type="file" accept="application/json,.json" onchange="importaFogli(this)" />
+          <div class="errore" id="esito-import-fogli"></div>
+        </div>
+
+        <div class="card">
+          <div class="header-row">
+            <strong>Elenco fogli</strong>
+            <button class="secondary small" style="margin:0;" onclick="esportaFogli()">Esporta</button>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Mese</th><th>Link</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-fogli"><tr><td colspan="3"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Materiali --------------------------------------------------- -->
+      <section class="panel" data-panel="materiali">
+        <div class="card">
+          <strong>Materiali</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Catalogo condiviso dei nomi materiali (Tools → Materiali usati): un
+            client può scaricarlo per popolare il proprio catalogo su un device
+            nuovo.
+          </p>
+          <div class="row">
+            <input id="mt-nome" placeholder="Nome materiale" />
+          </div>
+          <button onclick="aggiungiMateriale()">Aggiungi</button>
+          <div class="errore" id="errore-materiale"></div>
+        </div>
+
+        <div class="card">
+          <strong>Importa da file</strong>
+          <p class="sottotitolo" style="margin: 8px 0 4px;">
+            Un file JSON con un elenco di materiali (solo il nome) — lo
+            stesso formato prodotto da "Esporta" qui sotto. Un nome già
+            presente resta invariato, uno nuovo viene creato.
+          </p>
+          <input id="mt-import" type="file" accept="application/json,.json" onchange="importaMateriali(this)" />
+          <div class="errore" id="esito-import-materiali"></div>
+        </div>
+
+        <div class="card">
+          <div class="header-row">
+            <strong>Catalogo materiali</strong>
+            <button class="secondary small" style="margin:0;" onclick="esportaMateriali()">Esporta</button>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Nome</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-materiali"><tr><td colspan="2"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Utenti -------------------------------------------------------- -->
+      <section class="panel" data-panel="utenti">
+        <div class="card">
+          <strong>Utenti admin</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Chi può accedere a questa pagina. Serve almeno un utente sempre:
+            non è possibile eliminare l'ultimo rimasto.
+          </p>
+          <div class="row">
+            <div>
+              <label for="ut-username">Utente</label>
+              <input id="ut-username" autocomplete="off" />
+            </div>
+            <div>
+              <label for="ut-password">Password</label>
+              <input id="ut-password" type="password" autocomplete="new-password" />
+            </div>
+          </div>
+          <button onclick="aggiungiUtente()">Crea utente</button>
+          <div class="errore" id="errore-utente"></div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Utente</th><th>Creato il</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-utenti"><tr><td colspan="3"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
+
+  <div class="toast-host" id="toast-host"></div>
 
 <script>
 // Pagina statica vanilla (nessun framework): il token JWT vive in
@@ -172,8 +330,104 @@ const TOKEN_KEY = 'ambuturni_admin_token';
 function token() { return sessionStorage.getItem(TOKEN_KEY); }
 
 function mostraGestione(mostra) {
-  document.getElementById('app-login').style.display = mostra ? 'none' : 'block';
+  document.getElementById('app-login').style.display = mostra ? 'none' : 'flex';
   document.getElementById('app-gestione').style.display = mostra ? 'block' : 'none';
+}
+
+// --- Tab (le 4 sezioni sono tutte caricate insieme in carica(): passare
+// da una all'altra è solo un toggle di visibilità, nessuna nuova richiesta). ---
+function mostraTab(nome) {
+  for (const tab of document.querySelectorAll('.tab')) {
+    tab.classList.toggle('active', tab.dataset.tab === nome);
+  }
+  for (const panel of document.querySelectorAll('.panel')) {
+    panel.classList.toggle('active', panel.dataset.panel === nome);
+  }
+}
+
+// --- Toast: conferma visibile per le azioni riuscite (prima solo gli
+// errori avevano un feedback, un salvataggio ok si vedeva solo dal form
+// che si svuotava). Si accumulano in toast-host e si tolgono da sole. ---
+function toast(messaggio, ok = true) {
+  const host = document.getElementById('toast-host');
+  const el = document.createElement('div');
+  el.className = 'toast' + (ok ? '' : ' errore-toast');
+  el.textContent = messaggio;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 250);
+  }, 3200);
+}
+
+// Riempie tbody[corpoId] con le righe di [elementi] via [renderRiga], o
+// mostra [testoVuoto] se la lista è vuota — stessa gestione in ogni
+// sezione invece di ripetere il caso "lista vuota" quattro volte.
+function renderTabellaGenerica(corpoId, colonne, elementi, renderRiga, testoVuoto) {
+  const corpo = document.getElementById(corpoId);
+  corpo.innerHTML = '';
+  if (elementi.length === 0) {
+    corpo.innerHTML = `<tr><td colspan="${colonne}"><div class="stato-vuoto">${testoVuoto}</div></td></tr>`;
+    return;
+  }
+  for (const el of elementi) corpo.appendChild(renderRiga(el));
+}
+
+// --- Export/import generico -------------------------------------------
+// Le tre entità con catalogo condiviso (ospedali, fogli, materiali)
+// esportano/importano lo stesso formato JSON del rispettivo endpoint
+// pubblico/di import: un file esportato da qui è reimportabile qui, in
+// un'altra istanza, o (per ospedali/materiali) dall'app stessa.
+
+function scaricaJson(dati, nomeFile) {
+  const blob = new Blob([JSON.stringify(dati, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeFile;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Rilasciato dopo il click, non subito: alcuni browser abortiscono il
+  // download se l'URL sparisce nello stesso tick in cui parte.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function nomeFileConData(prefisso) {
+  const d = new Date();
+  const due = (n) => String(n).padStart(2, '0');
+  return `ambuturni_${prefisso}_${d.getFullYear()}${due(d.getMonth() + 1)}${due(d.getDate())}.json`;
+}
+
+// Upload generico per i tre endpoint .../import: solo endpoint/esitoElId/
+// ricaricaFn cambiano da un caso all'altro, il resto (lettura file, POST del
+// testo così com'è, messaggio di esito, reset dell'input) è identico.
+async function importaFileGenerico(input, endpoint, esitoElId, ricaricaFn) {
+  const esitoEl = document.getElementById(esitoElId);
+  esitoEl.style.color = '#cf6679';
+  esitoEl.textContent = '';
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const testo = await file.text();
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: testo,
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di importazione');
+    esitoEl.style.color = '#4caf50';
+    const scartatiTxt = dati.scartati ? `, ${dati.scartati} scartati` : '';
+    esitoEl.textContent = `Import completato: ${dati.creati} nuovi, ${dati.aggiornati} aggiornati${scartatiTxt}.`;
+    await ricaricaFn();
+    toast('Import completato.');
+  } catch (e) {
+    esitoEl.textContent = e.message;
+  } finally {
+    input.value = '';
+  }
 }
 
 async function accedi() {
@@ -214,7 +468,7 @@ async function carica() {
   const resp = await fetch('/api/ospedali');
   ospedaliCache = await resp.json();
   filtraTabella();
-  await Promise.all([caricaFogli(), caricaMateriali()]);
+  await Promise.all([caricaFogli(), caricaMateriali(), caricaUtenti()]);
 }
 
 function filtraTabella() {
@@ -231,9 +485,7 @@ function filtraTabella() {
 }
 
 function renderTabella(lista) {
-  const corpo = document.getElementById('tabella-ospedali');
-  corpo.innerHTML = '';
-  for (const o of lista) {
+  renderTabellaGenerica('tabella-ospedali', 7, lista, (o) => {
     const riga = document.createElement('tr');
     riga.innerHTML = `
       <td>${escapeHtml(o.nome)}</td>
@@ -250,8 +502,8 @@ function renderTabella(lista) {
     const [btnModifica, btnElimina] = riga.querySelectorAll('button');
     btnModifica.onclick = () => modificaForm(o);
     btnElimina.onclick = () => elimina(o.id);
-    corpo.appendChild(riga);
-  }
+    return riga;
+  }, ospedaliCache.length === 0 ? 'Nessun ospedale in elenco.' : 'Nessun risultato per la ricerca.');
 }
 
 // Precompila il form coi valori di [o] e lo mette in modalità modifica:
@@ -266,6 +518,7 @@ function modificaForm(o) {
   document.getElementById('f-lng').value = o.lng ?? '';
   document.getElementById('errore-form').textContent = '';
   aggiornaModalitaForm();
+  mostraTab('ospedali');
   document.getElementById('f-nome').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -299,6 +552,7 @@ async function salva() {
     lat: latTxt ? Number(latTxt) : null,
     lng: lngTxt ? Number(lngTxt) : null,
   };
+  const eraModifica = !!editingId;
   try {
     const url = editingId ? `/api/ospedali/${encodeURIComponent(editingId)}` : '/api/ospedali';
     const resp = await fetch(url, {
@@ -310,37 +564,26 @@ async function salva() {
     if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
     annullaModifica();
     await carica();
+    toast(eraModifica ? 'Ospedale aggiornato.' : 'Ospedale aggiunto.');
   } catch (e) {
     erroreEl.textContent = e.message;
   }
 }
 
-async function importaFile(input) {
-  const esitoEl = document.getElementById('esito-import');
-  esitoEl.style.color = '#cf6679';
-  esitoEl.textContent = '';
-  const file = input.files[0];
-  if (!file) return;
-  try {
-    // Il file è già JSON: si inoltra il testo così com'è, senza
-    // riparsarlo/ristringificarlo lato browser.
-    const testo = await file.text();
-    const resp = await fetch('/api/ospedali/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-      body: testo,
-    });
-    const dati = await resp.json();
-    if (!resp.ok) throw new Error(dati.error || 'Errore di importazione');
-    esitoEl.style.color = '#4caf50';
-    const scartatiTxt = dati.scartati ? `, ${dati.scartati} scartati` : '';
-    esitoEl.textContent = `Import completato: ${dati.creati} nuovi, ${dati.aggiornati} aggiornati${scartatiTxt}.`;
-    await carica();
-  } catch (e) {
-    esitoEl.textContent = e.message;
-  } finally {
-    input.value = '';
-  }
+function importaFile(input) {
+  return importaFileGenerico(input, '/api/ospedali/import', 'esito-import', carica);
+}
+
+// Esporta nome/via/città/lat/lng/regione (non id/timestamp interni, non
+// servono per un reimport): stesso formato che l'app Flutter produce dal
+// proprio Impostazioni → Ospedali → Esporta, quindi il file è
+// intercambiabile in entrambe le direzioni.
+function esportaOspedali() {
+  const righe = ospedaliCache.map((o) => ({
+    nome: o.nome, via: o.via ?? null, citta: o.citta ?? null,
+    lat: o.lat ?? null, lng: o.lng ?? null, regione: o.regione ?? null,
+  }));
+  scaricaJson({ ospedali: righe }, nomeFileConData('ospedali'));
 }
 
 async function elimina(id) {
@@ -350,18 +593,22 @@ async function elimina(id) {
     headers: { Authorization: `Bearer ${token()}` },
   });
   await carica();
+  toast('Ospedale eliminato.');
 }
 
 // --- Fogli turni ---
 // Un solo form chiave+url: niente modalità modifica separata, salvare di
 // nuovo la stessa chiave (aaaa-mm) la aggiorna (upsert lato server).
 
+// Cache dell'elenco scaricato, come ospedaliCache: serve a esportaFogli()
+// per non dover rifare una fetch solo per riottenere gli stessi dati appena
+// mostrati in tabella.
+let fogliCache = [];
+
 async function caricaFogli() {
   const resp = await fetch('/api/fogli');
-  const fogli = await resp.json();
-  const corpo = document.getElementById('tabella-fogli');
-  corpo.innerHTML = '';
-  for (const f of fogli) {
+  fogliCache = await resp.json();
+  renderTabellaGenerica('tabella-fogli', 3, fogliCache, (f) => {
     const riga = document.createElement('tr');
     // Solo http(s) diventa un link cliccabile: il backend valida lo schema
     // sui salvataggi nuovi (POST /api/fogli), ma una riga scritta prima di
@@ -374,14 +621,23 @@ async function caricaFogli() {
       : escapeHtml(f.url);
     riga.innerHTML = `
       <td>${escapeHtml(f.chiave)}</td>
-      <td style="max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+      <td style="max-width:320px; overflow:hidden; text-overflow:ellipsis;">
         ${cellaUrl}
       </td>
       <td><button class="danger small">Elimina</button></td>
     `;
     riga.querySelector('button').onclick = () => eliminaFoglio(f.chiave);
-    corpo.appendChild(riga);
-  }
+    return riga;
+  }, 'Nessun foglio salvato.');
+}
+
+function esportaFogli() {
+  const righe = fogliCache.map((f) => ({ chiave: f.chiave, url: f.url }));
+  scaricaJson({ fogli: righe }, nomeFileConData('fogli_turni'));
+}
+
+function importaFogli(input) {
+  return importaFileGenerico(input, '/api/fogli/import', 'esito-import-fogli', caricaFogli);
 }
 
 async function salvaFoglio() {
@@ -400,6 +656,7 @@ async function salvaFoglio() {
     document.getElementById('fg-chiave').value = '';
     document.getElementById('fg-url').value = '';
     await caricaFogli();
+    toast('Foglio salvato.');
   } catch (e) {
     erroreEl.textContent = e.message;
   }
@@ -412,24 +669,35 @@ async function eliminaFoglio(chiave) {
     headers: { Authorization: `Bearer ${token()}` },
   });
   await caricaFogli();
+  toast('Foglio eliminato.');
 }
 
 // --- Materiali ---
 
+// Cache dell'elenco scaricato, come ospedaliCache/fogliCache.
+let materialiCache = [];
+
 async function caricaMateriali() {
   const resp = await fetch('/api/materiali');
-  const materiali = await resp.json();
-  const corpo = document.getElementById('tabella-materiali');
-  corpo.innerHTML = '';
-  for (const m of materiali) {
+  materialiCache = await resp.json();
+  renderTabellaGenerica('tabella-materiali', 2, materialiCache, (m) => {
     const riga = document.createElement('tr');
     riga.innerHTML = `
       <td>${escapeHtml(m.nome)}</td>
       <td><button class="danger small">Elimina</button></td>
     `;
     riga.querySelector('button').onclick = () => eliminaMateriale(m.id);
-    corpo.appendChild(riga);
-  }
+    return riga;
+  }, 'Nessun materiale nel catalogo.');
+}
+
+function esportaMateriali() {
+  const righe = materialiCache.map((m) => ({ nome: m.nome }));
+  scaricaJson({ materiali: righe }, nomeFileConData('materiali'));
+}
+
+function importaMateriali(input) {
+  return importaFileGenerico(input, '/api/materiali/import', 'esito-import-materiali', caricaMateriali);
 }
 
 async function aggiungiMateriale() {
@@ -447,6 +715,7 @@ async function aggiungiMateriale() {
     if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
     document.getElementById('mt-nome').value = '';
     await caricaMateriali();
+    toast('Materiale aggiunto.');
   } catch (e) {
     erroreEl.textContent = e.message;
   }
@@ -459,6 +728,70 @@ async function eliminaMateriale(id) {
     headers: { Authorization: `Bearer ${token()}` },
   });
   await caricaMateriali();
+  toast('Materiale eliminato.');
+}
+
+// --- Utenti admin ---
+// GET pubblica ai soli admin autenticati (come tutto il resto qui);
+// deleteUser lato server rifiuta di eliminare l'ultimo utente rimasto,
+// l'errore del server (400 con messaggio) arriva già leggibile.
+
+async function caricaUtenti() {
+  const resp = await fetch('/api/auth/users', { headers: { Authorization: `Bearer ${token()}` } });
+  const utenti = await resp.json();
+  renderTabellaGenerica('tabella-utenti', 3, utenti, (u) => {
+    const riga = document.createElement('tr');
+    const creato = u.createdAt ? new Date(u.createdAt).toLocaleDateString('it-IT') : '—';
+    riga.innerHTML = `
+      <td>${escapeHtml(u.username)}</td>
+      <td>${creato}</td>
+      <td><button class="danger small">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => eliminaUtente(u.username);
+    return riga;
+  }, 'Nessun utente.');
+}
+
+async function aggiungiUtente() {
+  const erroreEl = document.getElementById('errore-utente');
+  erroreEl.textContent = '';
+  const username = document.getElementById('ut-username').value.trim();
+  const password = document.getElementById('ut-password').value;
+  if (!username || !password) {
+    erroreEl.textContent = 'Utente e password sono richiesti.';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/auth/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ username, password }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di creazione');
+    document.getElementById('ut-username').value = '';
+    document.getElementById('ut-password').value = '';
+    await caricaUtenti();
+    toast('Utente creato.');
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+async function eliminaUtente(username) {
+  if (!confirm(`Eliminare l'utente "${username}"?`)) return;
+  try {
+    const resp = await fetch(`/api/auth/users/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token()}` },
+    });
+    const dati = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dati.error || 'Errore di eliminazione');
+    await caricaUtenti();
+    toast('Utente eliminato.');
+  } catch (e) {
+    toast(e.message, false);
+  }
 }
 
 function escapeHtml(s) {
@@ -471,6 +804,8 @@ function escapeHtml(s) {
 if (token()) {
   mostraGestione(true);
   carica();
+} else {
+  mostraGestione(false);
 }
 </script>
 </body>

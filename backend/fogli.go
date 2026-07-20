@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -63,4 +64,74 @@ func deleteFoglio(ctx context.Context, pool *pgxpool.Pool, chiave string) (bool,
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+// FoglioInput è il formato di una riga in ingresso per l'import massivo
+// (POST /api/fogli/import): stesso chiave/url della risposta di GET /api/fogli,
+// così un file esportato da questa stessa istanza si reimporta senza
+// trasformazioni (stesso principio di OspedaleInput/MaterialeInput).
+type FoglioInput struct {
+	Chiave string `json:"chiave"`
+	Url    string `json:"url"`
+}
+
+// upsertFogli importa in blocco una lista di fogli, upsert per chiave dentro
+// un'unica transazione — stessa struttura di upsertOspedali/upsertMateriali,
+// anche se qui `chiave` ha già un vincolo UNIQUE reale (è la chiave primaria
+// della tabella): la SELECT preliminare resta comunque per coerenza con le
+// altre due funzioni gemelle, non per necessità. Righe con chiave fuori
+// formato "aaaa-mm" (mese 01-12, chiaveMeseValida in main.go) o url non
+// http(s) vengono scartate invece di far fallire l'intero import, stessa
+// regola già applicata a POST /api/fogli.
+func upsertFogli(ctx context.Context, pool *pgxpool.Pool, righe []FoglioInput) (creati, aggiornati, scartati int, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	esistenti := map[string]bool{}
+	rows, err := tx.Query(ctx, "SELECT chiave FROM fogli_turni")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	for rows.Next() {
+		var chiave string
+		if err := rows.Scan(&chiave); err != nil {
+			rows.Close()
+			return 0, 0, 0, err
+		}
+		esistenti[chiave] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, 0, 0, err
+	}
+
+	for _, r := range righe {
+		chiave := strings.TrimSpace(r.Chiave)
+		url := strings.TrimSpace(r.Url)
+		if !chiaveMeseValida(chiave) || url == "" ||
+			(!strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://")) {
+			scartati++
+			continue
+		}
+		if esistenti[chiave] {
+			if _, err = tx.Exec(ctx, "UPDATE fogli_turni SET url=$1, updated_at=now() WHERE chiave=$2", url, chiave); err != nil {
+				return 0, 0, 0, err
+			}
+			aggiornati++
+		} else {
+			if _, err = tx.Exec(ctx, "INSERT INTO fogli_turni (chiave, url) VALUES ($1,$2)", chiave, url); err != nil {
+				return 0, 0, 0, err
+			}
+			esistenti[chiave] = true
+			creati++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, 0, err
+	}
+	return creati, aggiornati, scartati, nil
 }
