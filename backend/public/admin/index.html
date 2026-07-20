@@ -363,10 +363,19 @@ async function caricaFogli() {
   corpo.innerHTML = '';
   for (const f of fogli) {
     const riga = document.createElement('tr');
+    // Solo http(s) diventa un link cliccabile: il backend valida lo schema
+    // sui salvataggi nuovi (POST /api/fogli), ma una riga scritta prima di
+    // quel controllo (o inserita direttamente nel DB) potrebbe ancora avere
+    // uno schema diverso — renderla comunque come href sarebbe un self-XSS
+    // al click per chi guarda questa pagina da admin.
+    const urlSicuro = /^https?:\/\//i.test(f.url);
+    const cellaUrl = urlSicuro
+      ? `<a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" style="color:#1e88e5;">${escapeHtml(f.url)}</a>`
+      : escapeHtml(f.url);
     riga.innerHTML = `
       <td>${escapeHtml(f.chiave)}</td>
       <td style="max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-        <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" style="color:#1e88e5;">${escapeHtml(f.url)}</a>
+        ${cellaUrl}
       </td>
       <td><button class="danger small">Elimina</button></td>
     `;

@@ -5,28 +5,33 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
 func main() {
-	ctx := context.Background()
+	// Va prima di qualunque altra cosa: un server che parte con un JWT_SECRET
+	// non configurato firmerebbe token admin con un segreto noto pubblicamente
+	// (questo stesso repository).
+	checkJwtSecret()
 
-	pool, err := connectDB(ctx)
+	startupCtx := context.Background()
+
+	pool, err := connectDB(startupCtx)
 	if err != nil {
 		log.Fatalf("[db] connessione fallita: %v", err)
 	}
 	defer pool.Close()
 
-	if err := initSchema(ctx, pool); err != nil {
+	if err := initSchema(startupCtx, pool); err != nil {
 		log.Fatalf("[db] inizializzazione schema fallita: %v", err)
 	}
-	if err := seedAdmin(ctx, pool); err != nil {
+	if err := seedAdmin(startupCtx, pool); err != nil {
 		log.Fatalf("[auth] seed admin fallito: %v", err)
 	}
 
@@ -41,6 +46,10 @@ func main() {
 	// reale scoperto testando in locale: verificaConnessione falliva sempre
 	// perché nessuna rotta rispondeva su /api/health). nginx.conf fa un
 	// semplice pass-through di /api/ (nessun prefisso da togliere).
+	//
+	// Ogni handler usa r.Context() (non uno startupCtx catturato): senza,
+	// una richiesta lenta o un client disconnesso non annullerebbe mai la
+	// query, con il rischio di esaurire il pool di connessioni sotto carico.
 
 	// Healthcheck (usato anche da docker-compose / monitoraggio).
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +59,14 @@ func main() {
 	// --- AUTENTICAZIONE (solo per la pagina admin) ---
 
 	// Login: restituisce un token JWT da usare come Bearer per aggiungere/eliminare ospedali.
+	// Rate-limited per IP (loginRateLimitato/loginRegistraFallito in auth.go):
+	// senza, un bruteforce della password admin non aveva alcun freno.
 	mux.HandleFunc("POST /api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		chiave := clientIP(r)
+		if loginRateLimitato(chiave) {
+			writeError(w, http.StatusTooManyRequests, "troppi tentativi falliti, riprova tra qualche minuto")
+			return
+		}
 		var body struct{ Username, Password string }
 		if !readJSON(w, r, &body) {
 			return
@@ -59,16 +75,18 @@ func main() {
 			writeError(w, http.StatusBadRequest, "username e password richiesti")
 			return
 		}
-		token, err := login(ctx, pool, body.Username, body.Password)
+		token, err := login(r.Context(), pool, body.Username, body.Password)
 		if err != nil {
 			log.Printf("[auth] errore login: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
 			return
 		}
 		if token == "" {
+			loginRegistraFallito(chiave)
 			writeError(w, http.StatusUnauthorized, "Credenziali non valide")
 			return
 		}
+		loginResettaTentativi(chiave)
 		writeJSON(w, http.StatusOK, map[string]string{"token": token})
 	})
 
@@ -82,12 +100,39 @@ func main() {
 			writeError(w, http.StatusBadRequest, "username e password richiesti")
 			return
 		}
-		if err := createUser(ctx, pool, body.Username, body.Password); err != nil {
+		if err := createUser(r.Context(), pool, body.Username, body.Password); err != nil {
 			log.Printf("[auth] errore creazione utente: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
 			return
 		}
 		writeJSON(w, http.StatusCreated, map[string]bool{"ok": true})
+	}))
+
+	// Elenco e revoca degli utenti admin: prima si potevano solo creare, mai
+	// vedere o eliminare (un account compromesso o non più usato restava
+	// valido per sempre, l'unico modo per "spegnerlo" era ruotare JWT_SECRET,
+	// disconnettendo anche gli admin legittimi).
+	mux.HandleFunc("GET /api/auth/users", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		utenti, err := listUsers(r.Context(), pool)
+		if err != nil {
+			log.Printf("[auth] errore lista utenti: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, utenti)
+	}))
+
+	mux.HandleFunc("DELETE /api/auth/users/{username}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		rimosso, err := deleteUser(r.Context(), pool, r.PathValue("username"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !rimosso {
+			writeError(w, http.StatusNotFound, "Utente non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
 	// --- OSPEDALI ---
@@ -99,7 +144,7 @@ func main() {
 	mux.HandleFunc("GET /api/ospedali", func(w http.ResponseWriter, r *http.Request) {
 		citta := strings.TrimSpace(r.URL.Query().Get("citta"))
 		regione := strings.TrimSpace(r.URL.Query().Get("regione"))
-		lista, err := listOspedali(ctx, pool, citta, regione)
+		lista, err := listOspedali(r.Context(), pool, citta, regione)
 		if err != nil {
 			log.Printf("[ospedali] errore lista: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -111,7 +156,7 @@ func main() {
 	// Pubblica: le città che hanno almeno un ospedale, per popolare un
 	// elenco selezionabile lato client invece di far digitare alla cieca.
 	mux.HandleFunc("GET /api/citta", func(w http.ResponseWriter, r *http.Request) {
-		lista, err := listCitta(ctx, pool)
+		lista, err := listCitta(r.Context(), pool)
 		if err != nil {
 			log.Printf("[ospedali] errore lista città: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -123,7 +168,7 @@ func main() {
 	// Pubblica: le regioni che hanno almeno un ospedale, stesso scopo di
 	// /api/citta ma per il raggruppamento/download per regione lato client.
 	mux.HandleFunc("GET /api/regioni", func(w http.ResponseWriter, r *http.Request) {
-		lista, err := listRegioni(ctx, pool)
+		lista, err := listRegioni(r.Context(), pool)
 		if err != nil {
 			log.Printf("[ospedali] errore lista regioni: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -150,7 +195,7 @@ func main() {
 			writeError(w, http.StatusBadRequest, "nome richiesto")
 			return
 		}
-		creato, err := createOspedale(ctx, pool, body.Nome, body.Via, body.Citta, body.Regione, body.Lat, body.Lng)
+		creato, err := createOspedale(r.Context(), pool, body.Nome, body.Via, body.Citta, body.Regione, body.Lat, body.Lng)
 		if err != nil {
 			log.Printf("[ospedali] errore creazione: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -178,7 +223,7 @@ func main() {
 			writeError(w, http.StatusBadRequest, "nome richiesto")
 			return
 		}
-		aggiornato, err := updateOspedale(ctx, pool, r.PathValue("id"), body.Nome, body.Via, body.Citta, body.Regione, body.Lat, body.Lng)
+		aggiornato, err := updateOspedale(r.Context(), pool, r.PathValue("id"), body.Nome, body.Via, body.Citta, body.Regione, body.Lat, body.Lng)
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "Ospedale non trovato")
 			return
@@ -192,7 +237,7 @@ func main() {
 	}))
 
 	mux.HandleFunc("DELETE /api/ospedali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		rimosso, err := deleteOspedale(ctx, pool, r.PathValue("id"))
+		rimosso, err := deleteOspedale(r.Context(), pool, r.PathValue("id"))
 		if err != nil {
 			log.Printf("[ospedali] errore eliminazione: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -211,10 +256,8 @@ func main() {
 	// {"ospedali": [...]} — lo stesso formato che l'app esporta da
 	// Impostazioni → Ospedali → Esporta, importabile qui senza trasformazioni.
 	mux.HandleFunc("POST /api/ospedali/import", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "corpo della richiesta non valido")
+		raw, ok := readBodyLimited(w, r, maxImportBodyBytes)
+		if !ok {
 			return
 		}
 		var righe []OspedaleInput
@@ -229,7 +272,7 @@ func main() {
 			}
 			righe = wrapper.Ospedali
 		}
-		creati, aggiornati, scartati, err := upsertOspedali(ctx, pool, righe)
+		creati, aggiornati, scartati, err := upsertOspedali(r.Context(), pool, righe)
 		if err != nil {
 			log.Printf("[ospedali] errore import: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -248,7 +291,7 @@ func main() {
 	// niente scrittura lato client (che non ha alcun login).
 
 	mux.HandleFunc("GET /api/fogli", func(w http.ResponseWriter, r *http.Request) {
-		lista, err := listFogli(ctx, pool)
+		lista, err := listFogli(r.Context(), pool)
 		if err != nil {
 			log.Printf("[fogli] errore lista: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -268,11 +311,18 @@ func main() {
 			writeError(w, http.StatusBadRequest, "chiave e url richiesti")
 			return
 		}
-		if !regexp.MustCompile(`^\d{4}-\d{2}$`).MatchString(body.Chiave) {
-			writeError(w, http.StatusBadRequest, `chiave deve avere formato "aaaa-mm"`)
+		if !chiaveMeseValida(body.Chiave) {
+			writeError(w, http.StatusBadRequest, `chiave deve avere formato "aaaa-mm" con mm tra 01 e 12`)
 			return
 		}
-		salvato, err := upsertFoglio(ctx, pool, body.Chiave, body.Url)
+		// Solo http(s): la pagina admin inserisce questo URL come href di un
+		// link cliccabile senza validarne lo schema — uno schema diverso
+		// (es. "javascript:") sarebbe un self-XSS eseguito al click.
+		if !strings.HasPrefix(body.Url, "http://") && !strings.HasPrefix(body.Url, "https://") {
+			writeError(w, http.StatusBadRequest, "url deve iniziare con http:// o https://")
+			return
+		}
+		salvato, err := upsertFoglio(r.Context(), pool, body.Chiave, body.Url)
 		if err != nil {
 			log.Printf("[fogli] errore salvataggio: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -282,7 +332,7 @@ func main() {
 	}))
 
 	mux.HandleFunc("DELETE /api/fogli/{chiave}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		rimosso, err := deleteFoglio(ctx, pool, r.PathValue("chiave"))
+		rimosso, err := deleteFoglio(r.Context(), pool, r.PathValue("chiave"))
 		if err != nil {
 			log.Printf("[fogli] errore eliminazione: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -301,7 +351,7 @@ func main() {
 	// client per popolare il catalogo locale su un device nuovo.
 
 	mux.HandleFunc("GET /api/materiali", func(w http.ResponseWriter, r *http.Request) {
-		lista, err := listMateriali(ctx, pool)
+		lista, err := listMateriali(r.Context(), pool)
 		if err != nil {
 			log.Printf("[materiali] errore lista: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -320,7 +370,7 @@ func main() {
 			writeError(w, http.StatusBadRequest, "nome richiesto")
 			return
 		}
-		creato, err := createMateriale(ctx, pool, body.Nome)
+		creato, err := createMateriale(r.Context(), pool, body.Nome)
 		if err != nil {
 			log.Printf("[materiali] errore creazione: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -339,7 +389,7 @@ func main() {
 			writeError(w, http.StatusBadRequest, "nome richiesto")
 			return
 		}
-		aggiornato, err := updateMateriale(ctx, pool, r.PathValue("id"), body.Nome)
+		aggiornato, err := updateMateriale(r.Context(), pool, r.PathValue("id"), body.Nome)
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "Materiale non trovato")
 			return
@@ -353,7 +403,7 @@ func main() {
 	}))
 
 	mux.HandleFunc("DELETE /api/materiali/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		rimosso, err := deleteMateriale(ctx, pool, r.PathValue("id"))
+		rimosso, err := deleteMateriale(r.Context(), pool, r.PathValue("id"))
 		if err != nil {
 			log.Printf("[materiali] errore eliminazione: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -368,10 +418,8 @@ func main() {
 
 	// Import massivo: stessa logica di /api/ospedali/import, upsert per nome.
 	mux.HandleFunc("POST /api/materiali/import", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "corpo della richiesta non valido")
+		raw, ok := readBodyLimited(w, r, maxImportBodyBytes)
+		if !ok {
 			return
 		}
 		var righe []MaterialeInput
@@ -386,7 +434,7 @@ func main() {
 			}
 			righe = wrapper.Materiali
 		}
-		creati, aggiornati, scartati, err := upsertMateriali(ctx, pool, righe)
+		creati, aggiornati, scartati, err := upsertMateriali(r.Context(), pool, righe)
 		if err != nil {
 			log.Printf("[materiali] errore import: %v\n", err)
 			writeError(w, http.StatusInternalServerError, "errore interno")
@@ -408,4 +456,18 @@ func main() {
 	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
 		log.Fatalf("[api] avvio fallito: %v", err)
 	}
+}
+
+var chiaveMeseRe = regexp.MustCompile(`^(\d{4})-(\d{2})$`)
+
+// chiaveMeseValida controlla il formato "aaaa-mm" E che mm sia un mese
+// reale (01-12): la sola regex `^\d{4}-\d{2}$` accettava anche valori come
+// "2026-13", salvati senza errori e poi confusi nell'archivio lato client.
+func chiaveMeseValida(chiave string) bool {
+	m := chiaveMeseRe.FindStringSubmatch(chiave)
+	if m == nil {
+		return false
+	}
+	mese, err := strconv.Atoi(m[2])
+	return err == nil && mese >= 1 && mese <= 12
 }
