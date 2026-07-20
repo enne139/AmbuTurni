@@ -474,6 +474,44 @@ func main() {
 		})
 	}))
 
+	// --- REPOSITORY FORMAZIONE ---
+	// Un solo link condiviso (non una collezione): stesso schema di fiducia
+	// di ospedali/fogli/materiali (lettura pubblica, scrittura solo admin),
+	// ma senza upsert per chiave — c'è un solo valore per tutta l'istanza.
+
+	mux.HandleFunc("GET /api/repository-formazione", func(w http.ResponseWriter, r *http.Request) {
+		rf, err := getRepositoryFormazione(r.Context(), pool)
+		if err != nil {
+			log.Printf("[formazione] errore lettura: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, rf)
+	})
+
+	mux.HandleFunc("POST /api/repository-formazione", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Url string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		body.Url = strings.TrimSpace(body.Url)
+		if body.Url == "" {
+			writeError(w, http.StatusBadRequest, "url richiesto")
+			return
+		}
+		if !strings.HasPrefix(body.Url, "http://") && !strings.HasPrefix(body.Url, "https://") {
+			writeError(w, http.StatusBadRequest, "url deve iniziare con http:// o https://")
+			return
+		}
+		rf, err := setRepositoryFormazione(r.Context(), pool, body.Url)
+		if err != nil {
+			log.Printf("[formazione] errore salvataggio: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, rf)
+	}))
+
 	// --- PAGINA ADMIN ---
 	// Pagina statica (HTML+JS vanilla, nessun framework) per login e gestione
 	// ospedali: chiama le API sopra da browser. Serve al gestore del server,

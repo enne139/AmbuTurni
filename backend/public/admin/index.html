@@ -124,6 +124,7 @@
       <button class="tab" data-tab="fogli" onclick="mostraTab('fogli')">Fogli turni</button>
       <button class="tab" data-tab="materiali" onclick="mostraTab('materiali')">Materiali</button>
       <button class="tab" data-tab="utenti" onclick="mostraTab('utenti')">Utenti</button>
+      <button class="tab" data-tab="formazione" onclick="mostraTab('formazione')">Formazione</button>
     </nav>
 
     <div class="wrap" style="padding-top:0;">
@@ -315,6 +316,23 @@
         </div>
       </section>
 
+      <!-- Repository formazione ---------------------------------------- -->
+      <section class="panel" data-panel="formazione">
+        <div class="card">
+          <strong>Repository formazione</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Un solo link condiviso ai materiali di formazione
+            dell'associazione (es. una cartella Drive): il tool "Repository
+            formazione" nell'app lo apre direttamente nel browser.
+          </p>
+          <label for="rf-url">Link</label>
+          <input id="rf-url" placeholder="https://..." />
+          <button onclick="salvaFormazione()">Salva</button>
+          <div class="errore" id="errore-formazione"></div>
+          <p class="sottotitolo" id="rf-stato" style="margin-top:12px;"></p>
+        </div>
+      </section>
+
     </div>
   </div>
 
@@ -468,7 +486,7 @@ async function carica() {
   const resp = await fetch('/api/ospedali');
   ospedaliCache = await resp.json();
   filtraTabella();
-  await Promise.all([caricaFogli(), caricaMateriali(), caricaUtenti()]);
+  await Promise.all([caricaFogli(), caricaMateriali(), caricaUtenti(), caricaFormazione()]);
 }
 
 function filtraTabella() {
@@ -791,6 +809,39 @@ async function eliminaUtente(username) {
     toast('Utente eliminato.');
   } catch (e) {
     toast(e.message, false);
+  }
+}
+
+// --- Repository formazione ---
+// Un solo valore, non una tabella: il form parte precompilato col link già
+// salvato (se c'è), così "Salva" senza modifiche è un no-op innocuo invece
+// di richiedere di re-incollare il link ogni volta.
+
+async function caricaFormazione() {
+  const resp = await fetch('/api/repository-formazione');
+  const dati = await resp.json();
+  document.getElementById('rf-url').value = dati.url || '';
+  document.getElementById('rf-stato').textContent = dati.url
+    ? `Aggiornato il ${new Date(dati.updated_at).toLocaleString('it-IT')}.`
+    : 'Nessun link impostato: il tool nell\'app mostrerà un avviso finché non ne salvi uno qui.';
+}
+
+async function salvaFormazione() {
+  const erroreEl = document.getElementById('errore-formazione');
+  erroreEl.textContent = '';
+  const url = document.getElementById('rf-url').value.trim();
+  try {
+    const resp = await fetch('/api/repository-formazione', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ url }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    await caricaFormazione();
+    toast('Link salvato.');
+  } catch (e) {
+    erroreEl.textContent = e.message;
   }
 }
 

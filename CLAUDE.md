@@ -153,11 +153,13 @@ lib/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
     │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni,
-    │   │                               Lista ospedali), filtrato dai tool attivi (ToolsProvider);
-    │   │                               nasconde Piano turni se spostato in navbar (NavigazioneProvider)
+    │   │                               Lista ospedali, Repository formazione), filtrato dai tool
+    │   │                               attivi (ToolsProvider); nasconde Piano turni se spostato
+    │   │                               in navbar (NavigazioneProvider)
     │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni;
     │   │                               sincronizza in sottofondo i fogli salvati sul backend
-    │   │                               condiviso (kPrefSyncFogliAttivo, default attivo)
+    │   │                               condiviso (kPrefSyncFogliAttivo, default attivo); pulsante
+    │   │                               per aprire il link del foglio nel browser
     │   ├── lista_ospedali_screen.dart cerca ospedali per nome/via/città/regione, raggruppati
     │   │                               per regione, pulsante Naviga (Google Maps o Waze) e
     │   │                               vista mappa con tutti gli ospedali geocodificati
@@ -167,9 +169,12 @@ lib/
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
-    │   └── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
-    │                                   (doppioni case-insensitive bloccati: niente UNIQUE sul nome);
-    │                                   pulsante per scaricare il catalogo dal backend condiviso
+    │   ├── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
+    │   │                               (doppioni case-insensitive bloccati: niente UNIQUE sul nome);
+    │   │                               pulsante per scaricare il catalogo dal backend condiviso
+    │   └── repository_formazione_screen.dart apre nel browser l'unico link condiviso ai
+    │                                   materiali di formazione (impostato solo dalla pagina admin
+    │                                   del backend condiviso, non configurabile qui)
     └── impostazioni/
         └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
@@ -178,10 +183,13 @@ lib/
                                       persone/ospedali/tipologie) sono in screens/anagrafiche/
 
 backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome, via,
-                                     città, regione, coordinate), dei link ai fogli turni mensili
-                                     e del catalogo materiali, + pagina admin statica; NON è un
-                                     backend di sincronizzazione, vedi Decisioni tecniche.
-                                     ospedali.go/fogli.go/materiali.go: CRUD di ciascuna risorsa.
+                                     città, regione, coordinate), dei link ai fogli turni mensili,
+                                     del catalogo materiali e del link al repository di formazione,
+                                     + pagina admin statica; NON è un backend di sincronizzazione,
+                                     vedi Decisioni tecniche.
+                                     ospedali.go/fogli.go/materiali.go/formazione.go: CRUD (o
+                                     lettura/scrittura per formazione.go, un solo valore) di
+                                     ciascuna risorsa.
                                      backend/Dockerfile + docker-compose.yml sono solo per
                                      sviluppo locale (`docker compose up --build`) — in
                                      produzione il binario è incorporato nell'immagine web
@@ -948,9 +956,37 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     `docker compose` + `curl`: import con wrapper e con array puro, righe
     scartate per formato invalido, upsert (stessa chiave reimportata con url
     diverso → aggiornata non duplicata).
+  - **Repository formazione**: un solo link condiviso (non una collezione)
+    ai materiali di formazione dell'associazione — a differenza di
+    ospedali/fogli/materiali non serve un elenco, solo "qual è il link
+    attuale". Tabella `repository_formazione` con una riga singola forzata
+    da `CHECK (id = 1)` (stesso idioma Postgres usato altrove per un
+    singleton, invece di una tabella chiave-valore generica: nessun altro
+    caso d'uso oggi la giustificherebbe). `GET /api/repository-formazione`
+    pubblica (restituisce `url` vuoto se non ancora configurato, non un
+    errore: è uno stato legittimo prima del primo salvataggio admin),
+    `POST` protetta con la stessa validazione schema http(s) già in uso per
+    i fogli turni. Pagina admin: nuova scheda "Formazione", un form a un
+    solo campo che si precompila col link già salvato (upsert, non
+    creazione). Lato client, tool "Repository formazione"
+    (`repository_formazione_screen.dart`): **non un redirect invisibile**
+    — apre il browser in automatico al primo caricamento riuscito (una sola
+    volta, `_apertoAutomaticamente`, altrimenti un "Riprova" dopo un errore
+    di rete riaprirebbe il browser una seconda volta senza che l'utente
+    l'abbia chiesto) ma resta una schermata con stato vero: messaggio
+    dedicato se il link non è ancora configurato, messaggio con "Riprova"
+    se il server non risponde, pulsante "Apri di nuovo" altrimenti — così
+    chi nega il popup del browser o lo chiude per sbaglio non resta bloccato
+    su una schermata bianca senza spiegazione.
+  - **Piano turni → pulsante "Apri il foglio nel browser"**: apre col
+    browser esterno (`url_launcher`, già una dipendenza per Lista ospedali)
+    il link del foglio Google così come incollato dall'utente (`_urlCtrl`),
+    non l'endpoint `export?format=xlsx` usato internamente per scaricare i
+    dati — quel link porta a un file, non alla pagina del foglio.
   - **Nessuno scoping multi-associazione sul backend**: ospedali, fogli
-    turni e materiali condividono lo stesso schema "un'unica istanza,
-    tabella piatta" già scelto per gli ospedali — chi vuole dati isolati
+    turni, materiali e il link di formazione condividono lo stesso schema
+    "un'unica istanza, tabella piatta" già scelto per gli ospedali — chi
+    vuole dati isolati
     per la propria associazione fa girare la propria istanza del backend
     (indirizzo configurabile, vedi sopra) invece di condividere quella
     centralizzata di default. Se in futuro più associazioni dovessero
@@ -1354,6 +1390,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   (Impostazioni → Ospedali), upsert per nome, senza toccare il resto dei
   dati. Ospedali scaricabili per città o per regione anche dal backend
   condiviso (`backend/`).
+- ✅ **Tools → Repository formazione**: apre nel browser l'unico link
+  condiviso ai materiali di formazione, impostato dalla pagina admin del
+  backend condiviso.
 - ✅ **Impostazioni → Backend condiviso**: indirizzo del server (spostato da
   Lista ospedali) e interruttore per la sincronizzazione automatica dei
   fogli turni (default attivo).
@@ -1369,7 +1408,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 136 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 140 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

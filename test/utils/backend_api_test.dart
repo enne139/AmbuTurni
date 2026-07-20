@@ -218,6 +218,36 @@ void main() {
     });
   });
 
+  group('getRepositoryFormazione', () {
+    test('chiama GET /api/repository-formazione e restituisce l\'url', () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json({'url': 'https://esempio.it/formazione', 'updated_at': '2026-07-20T10:00:00Z'}, 200),
+        richieste,
+      );
+      expect(await api.getRepositoryFormazione(), 'https://esempio.it/formazione');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/repository-formazione');
+    });
+
+    test('url assente o vuoto restituisce null (mai configurato)', () async {
+      final api = _api(_json({'url': ''}, 200), []);
+      expect(await api.getRepositoryFormazione(), isNull);
+    });
+
+    test('risposta non-oggetto lancia BackendApiException', () async {
+      final api = _api(_json([], 200), []);
+      expect(() => api.getRepositoryFormazione(), throwsA(isA<BackendApiException>()));
+    });
+
+    test('errore HTTP riporta il messaggio del server', () async {
+      final api = _api(_json({'error': 'fuori servizio'}, 500), []);
+      expect(
+        () => api.getRepositoryFormazione(),
+        throwsA(isA<BackendApiException>().having((e) => e.message, 'message', contains('fuori servizio'))),
+      );
+    });
+  });
+
   group('messaggioErroreBackend', () {
     test('le eccezioni API passano il loro messaggio', () {
       expect(messaggioErroreBackend(const BackendApiException('ciao')), 'ciao');

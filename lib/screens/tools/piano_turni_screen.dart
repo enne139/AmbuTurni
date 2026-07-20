@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../db/backup_file.dart';
 import '../../utils/backend_api.dart';
@@ -335,6 +336,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 onPressed: _apriFogliSalvati,
               ),
             IconButton(
+              icon: const Icon(Icons.open_in_new),
+              tooltip: 'Apri il foglio nel browser',
+              onPressed: _apriFoglioNelBrowser,
+            ),
+            IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Cambia foglio',
               // Campo URL svuotato: qui si arriva per incollare il foglio di
@@ -470,6 +476,21 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
         (prefs) => prefs.setStringList(kPrefPianoTurniFogliRimossi, _fogliRimossi.toList()));
     // Senza il link il piano non è più raggiungibile: la sua cache è inutile.
     eliminaPianoDaCache(chiave);
+  }
+
+  /// Apre il link del foglio (quello incollato dall'utente, non l'endpoint
+  /// export usato internamente per scaricare l'XLSX) nel browser esterno:
+  /// serve a chi vuole guardare/modificare il foglio Google direttamente,
+  /// non solo consultare il piano già decodificato nell'app.
+  Future<void> _apriFoglioNelBrowser() async {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty) return;
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossibile aprire il link.')),
+      );
+    }
   }
 
   /// Bottom sheet coi mesi salvati, per cambiare foglio senza passare dal form.

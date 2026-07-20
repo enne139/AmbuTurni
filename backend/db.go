@@ -36,6 +36,9 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 //     CLAUDE.md, tool Piano turni).
 //   - materiali: catalogo condiviso dei nomi materiali (Tools → Materiali
 //     usati), scaricabile per popolare il catalogo locale su un device nuovo.
+//   - repository_formazione: un solo link condiviso (non una collezione) ai
+//     materiali di formazione dell'associazione, aperto nel browser dal
+//     tool "Repository formazione". Riga singola forzata dal CHECK (id = 1).
 //
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
 // migrazioni (assente qui, a differenza del client Flutter): un solo campo
@@ -76,6 +79,13 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			nome TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		CREATE TABLE IF NOT EXISTS repository_formazione (
+			id INTEGER PRIMARY KEY DEFAULT 1,
+			url TEXT NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			CHECK (id = 1)
 		);
 	`)
 	return err

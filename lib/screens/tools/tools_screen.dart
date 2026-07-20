@@ -6,6 +6,7 @@ import '../../utils/tools_config.dart';
 import 'lista_ospedali_screen.dart';
 import 'materiali_usati_screen.dart';
 import 'piano_turni_screen.dart';
+import 'repository_formazione_screen.dart';
 
 // Schermata di destinazione per ogni tool del catalogo (utils/tools_config.dart).
 // Mappa separata dai metadati: questi widget non servono a Impostazioni,
@@ -14,6 +15,7 @@ final Map<String, WidgetBuilder> _destinazioni = {
   kToolMaterialiUsati: (_) => const MaterialiUsatiScreen(),
   kToolPianoTurni: (_) => const PianoTurniScreen(),
   kToolListaOspedali: (_) => const ListaOspedaliScreen(),
+  kToolRepositoryFormazione: (_) => const RepositoryFormazioneScreen(),
 };
 
 /// Elenco degli strumenti extra dell'app (fuori dal flusso turni/assistenze).

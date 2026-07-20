@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 const kToolMaterialiUsati = 'materiali_usati';
 const kToolPianoTurni = 'piano_turni';
 const kToolListaOspedali = 'lista_ospedali';
+const kToolRepositoryFormazione = 'repository_formazione';
 
 /// Metadati di un tool per la card in Tools e lo switch in Impostazioni:
 /// un'unica fonte così le due schermate restano coerenti (stesso titolo,
@@ -47,5 +48,11 @@ const kToolsDisponibili = [
     titolo: 'Lista ospedali',
     sottotitolo: 'Cerca, indirizzo, naviga e mappa degli ospedali',
     icon: Icons.local_hospital_outlined,
+  ),
+  ToolInfo(
+    id: kToolRepositoryFormazione,
+    titolo: 'Repository formazione',
+    sottotitolo: 'Apri i materiali di formazione dell\'associazione',
+    icon: Icons.school_outlined,
   ),
 ];

@@ -136,6 +136,21 @@ class BackendApi {
     return decoded.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
   }
 
+  /// GET /api/repository-formazione — l'unico link condiviso ai materiali
+  /// di formazione (tool "Repository formazione"), impostato dalla pagina
+  /// admin. Restituisce null se non è mai stato configurato: non è un
+  /// errore, è uno stato legittimo finché un admin non lo imposta.
+  Future<String?> getRepositoryFormazione() async {
+    final resp = await _client.get(Uri.parse('$baseUrl/api/repository-formazione')).timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = _decodeJson(resp);
+    if (decoded is! Map) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    final url = decoded['url'];
+    return (url is String && url.isNotEmpty) ? url : null;
+  }
+
   /// Decodifica il body come JSON, incapsulando un body non-JSON (es. pagina
   /// d'errore di un proxy/CDN davanti al backend con uno status 200) in
   /// un'eccezione tipizzata invece di lasciar propagare la FormatException
