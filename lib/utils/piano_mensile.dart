@@ -272,6 +272,13 @@ PianoMensile parsePianoMensile(List<int> bytes) {
   }
 
   final (anno, mese) = _dataInizio(excel.tables[fogli.first]!);
+  // Giorni reali del mese individuato da B2 (28-31): un giorno oltre questo
+  // limite (es. un refuso nel nome scheda, "MAR 31" in un mese di 30 giorni)
+  // va scartato qui, non solo nella griglia del calendario — altrimenti
+  // resta comunque raggiungibile da cercaNome/giorniInServizio e
+  // DateTime(anno, mese, giorno) si normalizza silenziosamente su un altro
+  // giorno/mese.
+  final giorniNelMese = DateTime(anno, mese + 1, 0).day;
 
   final slots = <SlotPiano>[];
   // Contatore dei blocchi unico per tutto il file, NON per scheda: un giorno
@@ -281,7 +288,7 @@ PianoMensile parsePianoMensile(List<int> bytes) {
   var blocco = 0;
   for (final nome in fogli) {
     final giorno = _numeroGiorno(nome);
-    if (giorno == null || giorno < 1 || giorno > 31) continue;
+    if (giorno == null || giorno < 1 || giorno > giorniNelMese) continue;
     final diurno = nome.toUpperCase().contains('DIURNO');
     blocco = _parseFoglio(excel.tables[nome]!, giorno, diurno, blocco, slots);
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/foundation.dart' show compute;
@@ -71,6 +72,10 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   Set<RuoloPiano> _ruoliEsclusi = {};
   // Archivio dei fogli salvati: chiave "aaaa-mm" (ordinabile), valore URL.
   Map<String, String> _fogliSalvati = {};
+  // Chiavi rimosse esplicitamente dall'utente: escluse dal merge additivo
+  // della sincronizzazione automatica, altrimenti un foglio ancora presente
+  // sul backend "resusciterebbe" alla riapertura successiva.
+  Set<String> _fogliRimossi = {};
   // Nome dell'ultima ricerca volontario: i giorni in cui compare hanno un
   // segnalino sul calendario. Persiste tra i riavvii (tipicamente si cerca
   // sempre il proprio nome: i segnalini mostrano i propri turni a colpo
@@ -109,6 +114,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     if (!mounted) return;
     setState(() {
       _fogliSalvati = fogli;
+      _fogliRimossi = (prefs.getStringList(kPrefPianoTurniFogliRimossi) ?? const []).toSet();
       _nomeCercato = prefs.getString(kPrefPianoTurniUltimaRicerca) ?? '';
       _ruoliEsclusi = esclusi
           .map((n) => RuoloPiano.values.where((r) => r.name == n).firstOrNull)
@@ -153,7 +159,8 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       if (!mounted || remoti.isEmpty) return;
       final nuovi = {
         for (final entry in remoti.entries)
-          if (!_fogliSalvati.containsKey(entry.key)) entry.key: entry.value
+          if (!_fogliSalvati.containsKey(entry.key) && !_fogliRimossi.contains(entry.key))
+            entry.key: entry.value
       };
       if (nuovi.isEmpty) return;
       setState(() => _fogliSalvati = {..._fogliSalvati, ...nuovi});
@@ -214,8 +221,10 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     try {
       // Stesso trucco del tool HTML: l'endpoint export del foglio restituisce
       // l'XLSX completo senza bisogno di API key (foglio condiviso con link).
-      final resp = await http.get(Uri.parse(
-          'https://docs.google.com/spreadsheets/d/$sheetId/export?format=xlsx'));
+      final resp = await http
+          .get(Uri.parse(
+              'https://docs.google.com/spreadsheets/d/$sheetId/export?format=xlsx'))
+          .timeout(const Duration(seconds: 20));
       if (resp.statusCode != 200) {
         throw FormatException(
             'Il server ha risposto ${resp.statusCode}: verifica che il foglio '
@@ -230,6 +239,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       // Cache su file: alla prossima apertura questo piano compare subito.
       await salvaPianoInCache(chiave, piano);
       if (!mounted) return;
+      // Se nel frattempo l'utente ha svuotato/cambiato il campo URL (es.
+      // "Cambia foglio" premuto durante un refresh silenzioso in corso), non
+      // sovrascrivere lo stato: sta componendo un input diverso, non vuole
+      // ritrovarsi il piano appena scaricato al posto del form vuoto.
+      if (_urlCtrl.text.trim() != input) return;
       setState(() {
         // Aggiornamento in sottofondo dello stesso mese: il giorno che
         // l'utente sta guardando non va resettato sotto le sue dita.
@@ -246,6 +260,10 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
         }
       });
       await _salvaFogli();
+    } on TimeoutException {
+      if (mounted) {
+        setState(() => _errore = 'Il download del foglio è scaduto (timeout). Riprova.');
+      }
     } on FormatException catch (e) {
       if (mounted) setState(() => _errore = e.message);
     } catch (e) {
@@ -443,8 +461,13 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
 
   void _eliminaFoglio(String chiave) {
     // Si elimina solo il link salvato, non il foglio Google: niente conferma.
-    setState(() => _fogliSalvati.remove(chiave));
+    setState(() {
+      _fogliSalvati.remove(chiave);
+      _fogliRimossi.add(chiave);
+    });
     _salvaFogli();
+    SharedPreferences.getInstance().then(
+        (prefs) => prefs.setStringList(kPrefPianoTurniFogliRimossi, _fogliRimossi.toList()));
     // Senza il link il piano non è più raggiungibile: la sua cache è inutile.
     eliminaPianoDaCache(chiave);
   }

@@ -10,6 +10,12 @@ const kPrefPianoTurniUltimaRicerca = 'piano_turni_ultima_ricerca';
 // mostrare subito all'apertura, prima che il download aggiorni i dati.
 // Non va nel backup: le cache sono locali al device e non vengono esportate.
 const kPrefPianoTurniUltimoMese = 'piano_turni_ultimo_mese';
+// Chiavi ("aaaa-mm") di fogli rimossi esplicitamente dai salvati: la
+// sincronizzazione automatica dal backend condiviso (merge additivo) non
+// deve "resuscitarli" alla riapertura successiva se il backend li ha
+// ancora. Stato locale al device come kPrefPianoTurniUltimoMese, non va
+// nel backup: su un device nuovo non c'è nulla da ricordare come rimosso.
+const kPrefPianoTurniFogliRimossi = 'piano_turni_fogli_rimossi';
 
 // Indirizzo del backend condiviso ospedali (tool Lista ospedali): assente =
 // si usa kBackendUrlDefault, un dominio unico gestito centralmente.
