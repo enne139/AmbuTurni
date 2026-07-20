@@ -52,11 +52,47 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
   // Primo giorno del mese visualizzato (giorno sempre 1: il resto della
   // griglia si ricava da qui).
   late DateTime _mese;
+  // Elementi raggruppati per data ISO, memoizzato: ricalcolato solo quando
+  // widget.elementi cambia (nuova lista dal provider), non a ogni build —
+  // altrimenti anche un semplice tap su un giorno diverso (stessa lista)
+  // riscandirebbe l'intero storico di turni/assistenze.
+  late Map<String, List<T>> _perGiorno;
 
   @override
   void initState() {
     super.initState();
     _mese = DateTime(widget.giornoSelezionato.year, widget.giornoSelezionato.month, 1);
+    _perGiorno = _raggruppaPerGiorno(widget.elementi);
+  }
+
+  @override
+  void didUpdateWidget(covariant CalendarioMensile<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.elementi != widget.elementi) {
+      _perGiorno = _raggruppaPerGiorno(widget.elementi);
+    }
+    // Se il giorno selezionato cambia di mese da fuori (es. un futuro "salta
+    // al giorno" mentre il calendario resta a schermo, come già avviene nel
+    // Piano turni) il mese mostrato deve seguirlo: senza, la griglia
+    // resterebbe sul vecchio mese mentre la lista sotto mostra già il nuovo
+    // giorno selezionato.
+    if (oldWidget.giornoSelezionato.year != widget.giornoSelezionato.year ||
+        oldWidget.giornoSelezionato.month != widget.giornoSelezionato.month) {
+      _mese = DateTime(widget.giornoSelezionato.year, widget.giornoSelezionato.month, 1);
+    }
+  }
+
+  /// Raggruppa gli elementi per data ISO. substring difensivo: i dati normali
+  /// sono già YYYY-MM-DD, ma un backup legacy importato male potrebbe avere
+  /// un datetime completo — meglio un raggruppamento corretto che un buco.
+  Map<String, List<T>> _raggruppaPerGiorno(List<T> elementi) {
+    final perGiorno = <String, List<T>>{};
+    for (final e in elementi) {
+      final data = widget.dataIso(e);
+      final chiave = data.length > 10 ? data.substring(0, 10) : data;
+      perGiorno.putIfAbsent(chiave, () => []).add(e);
+    }
+    return perGiorno;
   }
 
   void _cambiaMese(int delta) {
@@ -73,24 +109,14 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
 
   @override
   Widget build(BuildContext context) {
-    // Elementi raggruppati per data ISO. substring difensivo: i dati normali
-    // sono già YYYY-MM-DD, ma un backup legacy importato male potrebbe avere
-    // un datetime completo — meglio un raggruppamento corretto che un buco.
-    final perGiorno = <String, List<T>>{};
-    for (final e in widget.elementi) {
-      final data = widget.dataIso(e);
-      final chiave = data.length > 10 ? data.substring(0, 10) : data;
-      perGiorno.putIfAbsent(chiave, () => []).add(e);
-    }
-
     final selIso = dateToIso(widget.giornoSelezionato);
-    final delGiorno = perGiorno[selIso] ?? const [];
+    final delGiorno = _perGiorno[selIso] ?? const [];
 
     return Column(
       children: [
         _intestazioneMese(),
         _rigaGiorniSettimana(),
-        _griglia(perGiorno, selIso),
+        _griglia(_perGiorno, selIso),
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),

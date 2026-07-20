@@ -10,11 +10,21 @@ const List<String> kColorPalette = [
   '#D81B60', '#6D4C41', '#757575',
 ];
 
-/// Converte un colore esadecimale ("#RRGGBB") in Color. Restituisce null se hex è null o malformato.
+/// Converte un colore esadecimale ("#RRGGBB", con o senza "#") in Color.
+/// Restituisce null se hex è null o non è esattamente 6 (RGB, alpha
+/// implicito FF) o 8 (ARGB) cifre esadecimali — senza questa validazione un
+/// valore senza "#" (es. "123456") veniva interpretato come decimale invece
+/// che rifiutato, producendo un colore quasi trasparente invece del
+/// fallback null atteso dai chiamanti.
 Color? colorFromHex(String? hex) {
   if (hex == null || hex.isEmpty) return null;
+  final normalizzato = hex.startsWith('#') ? hex.substring(1) : hex;
+  if (!RegExp(r'^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$').hasMatch(normalizzato)) {
+    return null;
+  }
+  final argb = normalizzato.length == 6 ? 'FF$normalizzato' : normalizzato;
   try {
-    return Color(int.parse(hex.replaceAll('#', '0xFF')));
+    return Color(int.parse(argb, radix: 16));
   } catch (_) {
     return null;
   }
@@ -48,7 +58,7 @@ ThemeData buildDarkTheme() {
   final colorScheme = ColorScheme.dark(
     primary: kPrimary,
     onPrimary: Colors.white,
-    secondary: kPrimary.withOpacity(0.7),
+    secondary: kPrimary.withValues(alpha: 0.7),
     surface: kSurface,
     onSurface: kOnBackground,
     error: const Color(0xFFCF6679),
@@ -73,7 +83,7 @@ ThemeData buildDarkTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: kSurface,
-      indicatorColor: kPrimary.withOpacity(0.2),
+      indicatorColor: kPrimary.withValues(alpha: 0.2),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
           return const IconThemeData(color: kPrimary);

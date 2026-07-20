@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, listEquals;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../db/helpers.dart';
@@ -184,10 +184,21 @@ class ToolsProvider extends ChangeNotifier {
     }
     // Persiste subito lo stato risolto: i tool appena "scoperti" qui sopra
     // diventano noti, così uno spegnimento esplicito futuro viene rispettato
-    // invece di essere ririconosciuto come "nuovo" a ogni avvio.
-    await prefs.setStringList(kPrefToolsAttivi, _attivi.toList());
-    await prefs.setStringList(
-        kPrefToolsConosciuti, kToolsDisponibili.map((t) => t.id).toList());
+    // invece di essere ririconosciuto come "nuovo" a ogni avvio. Scrive solo
+    // se il risultato differisce da quanto già salvato: senza questo
+    // confronto, ogni avvio dell'app riscriverebbe due List<String> in
+    // SharedPreferences anche a parità di contenuto.
+    final attiviOrdinati = _attivi.toList()..sort();
+    final salvatiOrdinati = (salvati ?? const <String>[]).toList()..sort();
+    if (!listEquals(attiviOrdinati, salvatiOrdinati)) {
+      await prefs.setStringList(kPrefToolsAttivi, _attivi.toList());
+    }
+    final conosciutiAttesi = kToolsDisponibili.map((t) => t.id).toList()..sort();
+    final conosciutiOrdinati = (prefs.getStringList(kPrefToolsConosciuti) ?? const <String>[]).toList()..sort();
+    if (!listEquals(conosciutiAttesi, conosciutiOrdinati)) {
+      await prefs.setStringList(
+          kPrefToolsConosciuti, kToolsDisponibili.map((t) => t.id).toList());
+    }
     _caricato = true;
     notifyListeners();
   }

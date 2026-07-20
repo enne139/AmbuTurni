@@ -76,7 +76,7 @@ class BackendApi {
     final uri = Uri.parse('$baseUrl/api/ospedali').replace(queryParameters: query.isEmpty ? null : query);
     final resp = await _client.get(uri).timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
-    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    final decoded = _decodeJson(resp);
     if (decoded is! List) {
       throw const BackendApiException('Risposta del server non riconosciuta.');
     }
@@ -89,7 +89,7 @@ class BackendApi {
   Future<List<String>> getCitta() async {
     final resp = await _client.get(Uri.parse('$baseUrl/api/citta')).timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
-    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    final decoded = _decodeJson(resp);
     if (decoded is! List) {
       throw const BackendApiException('Risposta del server non riconosciuta.');
     }
@@ -101,7 +101,7 @@ class BackendApi {
   Future<List<String>> getRegioni() async {
     final resp = await _client.get(Uri.parse('$baseUrl/api/regioni')).timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
-    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    final decoded = _decodeJson(resp);
     if (decoded is! List) {
       throw const BackendApiException('Risposta del server non riconosciuta.');
     }
@@ -114,7 +114,7 @@ class BackendApi {
   Future<Map<String, String>> getFogli() async {
     final resp = await _client.get(Uri.parse('$baseUrl/api/fogli')).timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
-    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    final decoded = _decodeJson(resp);
     if (decoded is! List) {
       throw const BackendApiException('Risposta del server non riconosciuta.');
     }
@@ -129,17 +129,29 @@ class BackendApi {
   Future<List<Map<String, dynamic>>> getMateriali() async {
     final resp = await _client.get(Uri.parse('$baseUrl/api/materiali')).timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
-    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    final decoded = _decodeJson(resp);
     if (decoded is! List) {
       throw const BackendApiException('Risposta del server non riconosciuta.');
     }
     return decoded.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
   }
 
+  /// Decodifica il body come JSON, incapsulando un body non-JSON (es. pagina
+  /// d'errore di un proxy/CDN davanti al backend con uno status 200) in
+  /// un'eccezione tipizzata invece di lasciar propagare la FormatException
+  /// grezza di jsonDecode.
+  dynamic _decodeJson(http.Response resp) {
+    try {
+      return jsonDecode(utf8.decode(resp.bodyBytes));
+    } catch (_) {
+      throw const BackendApiException('Risposta del server non valida (formato inatteso).');
+    }
+  }
+
   Never _lanciaErrore(http.Response resp) {
     String? messaggioServer;
     try {
-      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      final decoded = _decodeJson(resp);
       if (decoded is Map && decoded['error'] is String) {
         messaggioServer = decoded['error'] as String;
       }

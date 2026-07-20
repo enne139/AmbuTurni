@@ -11,14 +11,14 @@ class CodiceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (codice == null) return const SizedBox.shrink();
+    if (codice == null || codice!.isEmpty) return const SizedBox.shrink();
     final color = getCodiceColor(codice);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.6)),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
       ),
       child: Text(
         prefisso.isEmpty ? codice! : '$prefisso: $codice',

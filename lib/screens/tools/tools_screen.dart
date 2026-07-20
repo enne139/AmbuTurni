@@ -58,10 +58,15 @@ class ToolsScreen extends StatelessWidget {
                   title: Text(t.titolo),
                   subtitle: Text(t.sottotitolo),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: _destinazioni[t.id]!),
-                  ),
+                  onTap: () {
+                    // Fallback difensivo: un tool nel catalogo senza voce in
+                    // _destinazioni (mappa mantenuta a mano, separata apposta
+                    // da tools_config.dart) non deve far crashare l'app con
+                    // un null-check, solo restare silenziosamente non apribile.
+                    final builder = _destinazioni[t.id];
+                    if (builder == null) return;
+                    Navigator.push(context, MaterialPageRoute(builder: builder));
+                  },
                 ),
               )).toList(),
             ),
