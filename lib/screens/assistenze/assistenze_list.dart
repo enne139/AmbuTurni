@@ -26,7 +26,10 @@ class AssistenzeList extends StatefulWidget {
   /// Barra opzionale sotto l'AppBar: il selettore Turni/Assistenze della
   /// tab unificata (v. app_navigator.dart), come in TurniList.
   final PreferredSizeWidget? selettore;
-  const AssistenzeList({super.key, this.selettore});
+  /// Azioni aggiuntive in coda a quelle dell'AppBar, come in TurniList
+  /// (icona Anagrafiche iniettata da app_navigator.dart).
+  final List<Widget> azioniExtra;
+  const AssistenzeList({super.key, this.selettore, this.azioniExtra = const []});
 
   @override
   State<AssistenzeList> createState() => _AssistenzeListState();
@@ -180,6 +183,7 @@ class _AssistenzeListState extends State<AssistenzeList> {
                 ],
               ),
           ],
+          ...widget.azioniExtra,
         ],
         bottom: widget.selettore,
       ),

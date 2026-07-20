@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../db/backup.dart';
-import '../../db/helpers.dart';
-import '../../db/models.dart';
 import '../../providers/app_provider.dart';
-import '../../utils/geocoding_api.dart';
+import '../../utils/backend_api.dart';
+import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
 import '../../utils/tools_config.dart';
-import 'turni_filtrati_screen.dart';
 
-/// Schermata Impostazioni: CRUD di associazioni, persone, ospedali, tipologie.
-/// Ogni sezione è collassata di default e ha una barra di ricerca interna.
+/// Schermata Impostazioni: backup/ripristino, navigazione, tool attivi e
+/// backend condiviso. Le anagrafiche (Associazioni/Persone/Ospedali/
+/// Tipologie turno) si sono spostate nella schermata Anagrafiche,
+/// raggiungibile dall'icona nell'AppBar della tab Attività (v.
+/// screens/anagrafiche/anagrafiche_screen.dart e app_navigator.dart).
 class ImpostazioniScreen extends StatelessWidget {
   const ImpostazioniScreen({super.key});
 
@@ -24,645 +26,16 @@ class ImpostazioniScreen extends StatelessWidget {
         children: const [
           _SezioneBackup(),
           Divider(height: 24),
+          _SezioneNavigazione(),
+          Divider(height: 24),
           _SezioneToolsAttivi(),
           Divider(height: 24),
-          _SezioneAssociazioni(),
-          Divider(height: 1),
-          _SezionePersone(),
-          Divider(height: 1),
-          _SezioneOspedali(),
-          Divider(height: 1),
-          _SezioneTipologie(),
+          _SezioneBackendCondiviso(),
           Divider(height: 24),
           _VersioneApp(),
           SizedBox(height: 8),
         ],
       ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Associazioni
-// ---------------------------------------------------------------------------
-
-class _SezioneAssociazioni extends StatelessWidget {
-  const _SezioneAssociazioni();
-
-  @override
-  Widget build(BuildContext context) {
-    final anag = context.watch<AnagraficheProvider>();
-    return _SezioneAnag<Associazione>(
-      titolo: 'Associazioni',
-      icon: Icons.business,
-      items: anag.associazioni,
-      labelOf: (a) => a.nome,
-      sublabelOf: (_) => null,
-      colorOf: (a) => colorFromHex(a.colore),
-      onAdd: () => _dialogNomeEColore(context, 'Nuova associazione', (nome, colore) async {
-        await saveAssociazione(nome, colore: colore);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }),
-      onEdit: (a) => _dialogNomeEColore(context, 'Modifica associazione', (nome, colore) async {
-        await saveAssociazione(nome, id: a.id, colore: colore);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }, iniziale: a.nome, coloreIniziale: a.colore),
-      onDelete: (a) async {
-        await deleteAssociazione(a.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      },
-      messaggioVincolo: 'è usata da turni o assistenze esistenti.',
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Persone
-// ---------------------------------------------------------------------------
-
-class _SezionePersone extends StatelessWidget {
-  const _SezionePersone();
-
-  @override
-  Widget build(BuildContext context) {
-    final anag = context.watch<AnagraficheProvider>();
-    return _SezioneAnag<Persona>(
-      titolo: 'Persone',
-      icon: Icons.people,
-      items: anag.persone,
-      labelOf: (p) => p.nomeCompleto,
-      sublabelOf: (_) => null,
-      onAdd: () => _dialogPersona(context, null),
-      onEdit: (p) => _dialogPersona(context, p),
-      onView: (p) async {
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => TurniPersonaScreen(persona: p)));
-      },
-      onDelete: (p) async {
-        await deletePersona(p.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      },
-      messaggioVincolo: 'fa parte dell\'equipaggio di turni o assistenze esistenti.',
-    );
-  }
-
-  Future<void> _dialogPersona(BuildContext context, Persona? p) async {
-    final cognCtrl = TextEditingController(text: p?.cognome ?? '');
-    final nomeCtrl = TextEditingController(text: p?.nome ?? '');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(p == null ? 'Nuova persona' : 'Modifica persona'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: cognCtrl, decoration: const InputDecoration(labelText: 'Cognome'), textCapitalization: TextCapitalization.words),
-          const SizedBox(height: 12),
-          TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
-        ],
-      ),
-    );
-    if (ok == true) {
-      final c = cognCtrl.text.trim();
-      final n = nomeCtrl.text.trim();
-      if (c.isNotEmpty && n.isNotEmpty) {
-        await savePersona(c, n, id: p?.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Ospedali
-// ---------------------------------------------------------------------------
-
-class _SezioneOspedali extends StatelessWidget {
-  const _SezioneOspedali();
-
-  @override
-  Widget build(BuildContext context) {
-    final anag = context.watch<AnagraficheProvider>();
-    return _SezioneAnag<Ospedale>(
-      titolo: 'Ospedali',
-      icon: Icons.local_hospital,
-      items: anag.ospedali,
-      labelOf: (o) => o.nome,
-      sublabelOf: (o) => o.citta,
-      onAdd: () => _dialogOspedale(context, null),
-      onEdit: (o) => _dialogOspedale(context, o),
-      onView: (o) async {
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => TurniOspedaleScreen(ospedale: o)));
-      },
-      onDelete: (o) async {
-        await deleteOspedale(o.id);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      },
-      messaggioVincolo: 'è usato da servizi di turni esistenti.',
-      onExport: () => _export(context),
-      onImport: () => _import(context),
-    );
-  }
-
-  /// Esporta nome/via/città/coordinate di tutti gli ospedali in un file JSON
-  /// portabile (utils/backup.dart: exportOspedali) — non il backup completo,
-  /// solo l'anagrafica ospedali, per condividerla o scambiarla facilmente.
-  Future<void> _export(BuildContext context) async {
-    try {
-      final path = await exportOspedali();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(path != null ? 'Ospedali esportati.' : 'Export annullato.'),
-        ));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore export: $e')));
-      }
-    }
-  }
-
-  /// Importa ospedali da un file JSON (lo stesso prodotto da _export, o un
-  /// backup completo). A differenza dell'import di backup NON è distruttivo:
-  /// aggiorna gli ospedali già in anagrafica (per nome) e aggiunge i nuovi,
-  /// senza toccare il resto dei dati né gli ospedali non presenti nel file.
-  Future<void> _import(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Importa ospedali'),
-        content: const Text(
-          'Aggiunge o aggiorna gli ospedali del file scelto (in base al nome). '
-          'Il resto dei dati e gli ospedali non presenti nel file restano invariati.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Importa')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    final msg = await importOspedali();
-    if (context.mounted) {
-      context.read<AnagraficheProvider>().carica();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
-  }
-
-  Future<void> _dialogOspedale(BuildContext context, Ospedale? o) async {
-    final nomeCtrl = TextEditingController(text: o?.nome ?? '');
-    final cittaCtrl = TextEditingController(text: o?.citta ?? '');
-    final viaCtrl = TextEditingController(text: o?.via ?? '');
-    // Campi SEMPRE vuoti all'apertura, anche se l'ospedale ha già delle
-    // coordinate: precompilarli col valore esistente li avrebbe resi "campi
-    // manuali" già valorizzati, e modificare solo via/città lasciandoli
-    // intatti si sarebbe visto come "coordinate inserite a mano" invece che
-    // "campi vuoti" — il geocoding automatico non sarebbe mai ripartito dopo
-    // la prima volta. Il valore attuale resta visibile come hintText.
-    final latCtrl = TextEditingController();
-    final lngCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(o == null ? 'Nuovo ospedale' : 'Modifica ospedale'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
-            const SizedBox(height: 12),
-            TextField(controller: viaCtrl, decoration: const InputDecoration(labelText: 'Via (opzionale)'), textCapitalization: TextCapitalization.sentences),
-            const SizedBox(height: 12),
-            TextField(controller: cittaCtrl, decoration: const InputDecoration(labelText: 'Città (opzionale)'), textCapitalization: TextCapitalization.words),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: latCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: InputDecoration(labelText: 'Latitudine', hintText: o?.lat?.toString()),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: lngCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: InputDecoration(labelText: 'Longitudine', hintText: o?.lng?.toString()),
-                ),
-              ),
-            ]),
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Lascia vuoto per calcolarle automaticamente dall\'indirizzo.',
-                  style: TextStyle(fontSize: 12, color: Colors.white54),
-                ),
-              ),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
-        ],
-      ),
-    );
-    if (ok == true) {
-      final n = nomeCtrl.text.trim();
-      if (n.isNotEmpty) {
-        final via = viaCtrl.text.trim();
-        final citta = cittaCtrl.text.trim().isEmpty ? null : cittaCtrl.text.trim();
-        final id = await saveOspedale(n, citta, id: o?.id, via: via.isEmpty ? null : via);
-        if (!context.mounted) return;
-        context.read<AnagraficheProvider>().carica();
-        // Coordinate inserite a mano hanno priorità sul geocoding automatico
-        // (accetta sia il punto che la virgola come separatore decimale).
-        final latManuale = double.tryParse(latCtrl.text.trim().replaceAll(',', '.'));
-        final lngManuale = double.tryParse(lngCtrl.text.trim().replaceAll(',', '.'));
-        if (latManuale != null && lngManuale != null) {
-          await aggiornaCoordinateOspedale(id, latManuale, lngManuale);
-          if (context.mounted) context.read<AnagraficheProvider>().carica();
-        } else if (via.isNotEmpty && (o == null || via != (o.via ?? '') || citta != o.citta)) {
-          // Geocoding in sottofondo, solo se l'indirizzo è nuovo o cambiato:
-          // non blocca il salvataggio (offline-first) e non ripete la
-          // chiamata a Nominatim a ogni modifica banale (es. solo il nome).
-          _geocodificaInSottofondo(context, id, via, citta);
-        }
-      }
-    }
-  }
-
-  /// Risolve via+città in coordinate e le salva se trovate; nessun feedback
-  /// d'errore in UI (è un arricchimento best-effort per la mappa del tool
-  /// Lista ospedali, non un'operazione che l'utente ha chiesto esplicitamente
-  /// né di cui deve accorgersi se il device è offline).
-  Future<void> _geocodificaInSottofondo(
-      BuildContext context, String id, String via, String? citta) async {
-    final indirizzo = [via, citta].whereType<String>().where((s) => s.isNotEmpty).join(', ');
-    final coord = await GeocodingApi().geocodifica(indirizzo);
-    if (coord == null) return;
-    await aggiornaCoordinateOspedale(id, coord.lat, coord.lng);
-    if (context.mounted) context.read<AnagraficheProvider>().carica();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tipologie turno
-// ---------------------------------------------------------------------------
-
-class _SezioneTipologie extends StatelessWidget {
-  const _SezioneTipologie();
-
-  @override
-  Widget build(BuildContext context) {
-    final anag = context.watch<AnagraficheProvider>();
-    return _SezioneAnag<TipologiaTurno>(
-      titolo: 'Tipologie turno',
-      icon: Icons.label,
-      items: anag.tipologieTurno,
-      labelOf: (t) => t.nome,
-      sublabelOf: (_) => null,
-      colorOf: (t) => colorFromHex(t.colore),
-      onAdd: () => _dialogNomeEColore(context, 'Nuova tipologia', (nome, colore) async {
-        await saveTipologiaTurno(nome, colore: colore);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }),
-      onEdit: (t) => _dialogNomeEColore(context, 'Modifica tipologia', (nome, colore) async {
-        await saveTipologiaTurno(nome, id: t.id, colore: colore);
-        if (context.mounted) context.read<AnagraficheProvider>().carica();
-      }, iniziale: t.nome, coloreIniziale: t.colore),
-      onDelete: null, // Le tipologie non si eliminano (come da spec originale)
-      onMoveUp: (t) async {
-        final idx = anag.tipologieTurno.indexWhere((x) => x.id == t.id);
-        if (idx <= 0) return;
-        await spostaTipologia(idx, idx - 1);
-        if (context.mounted) await context.read<AnagraficheProvider>().carica();
-      },
-      onMoveDown: (t) async {
-        final idx = anag.tipologieTurno.indexWhere((x) => x.id == t.id);
-        if (idx < 0 || idx >= anag.tipologieTurno.length - 1) return;
-        await spostaTipologia(idx, idx + 1);
-        if (context.mounted) await context.read<AnagraficheProvider>().carica();
-      },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Sezione generica collassabile con ricerca
-// ---------------------------------------------------------------------------
-
-/// Sezione con header cliccabile (collassa/espande), contatore badge,
-/// pulsante + sempre accessibile e campo ricerca quando espansa.
-/// Collassata di default per non sovraccaricare la schermata con liste lunghe.
-class _SezioneAnag<T> extends StatefulWidget {
-  final String titolo;
-  final IconData icon;
-  final List<T> items;
-  final String Function(T) labelOf;
-  final String? Function(T) sublabelOf;
-  final Color? Function(T)? colorOf;
-  final VoidCallback onAdd;
-  final Future<void> Function(T) onEdit;
-  final Future<void> Function(T)? onDelete;
-  // Messaggio mostrato quando il DB blocca l'eliminazione per vincolo FK:
-  // spiega all'utente PERCHÉ la voce non si può eliminare (es. usata in turni).
-  final String? messaggioVincolo;
-  // Frecce di riordino: se non null, compaiono ↑↓ per ogni voce (disabilitate con filtro attivo).
-  final Future<void> Function(T)? onMoveUp;
-  final Future<void> Function(T)? onMoveDown;
-  // Se non null, mostra un pulsante per vedere i turni/assistenze in cui compare la voce
-  // (usato da Persone e Ospedali per navigare all'elenco filtrato).
-  final Future<void> Function(T)? onView;
-  // Se non null, mostrano due pulsanti export/import dell'anagrafica (per
-  // ora solo Ospedali): a differenza di onAdd/onEdit/onDelete non riguardano
-  // una singola voce, quindi niente parametro T.
-  final Future<void> Function()? onExport;
-  final Future<void> Function()? onImport;
-
-  const _SezioneAnag({
-    required this.titolo,
-    required this.icon,
-    required this.items,
-    required this.labelOf,
-    required this.sublabelOf,
-    this.colorOf,
-    required this.onAdd,
-    required this.onEdit,
-    required this.onDelete,
-    this.messaggioVincolo,
-    this.onMoveUp,
-    this.onMoveDown,
-    this.onView,
-    this.onExport,
-    this.onImport,
-  });
-
-  @override
-  State<_SezioneAnag<T>> createState() => _SezioneAnagState<T>();
-}
-
-class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
-  bool _expanded = false;
-  final _searchCtrl = TextEditingController();
-  String _query = '';
-  // Disabilita i pulsanti export/import mentre l'operazione è in corso
-  // (file picker + scritture DB, non istantanee): un doppio tap non deve
-  // avviare due import in parallelo.
-  bool _ioBusy = false;
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleExport() async {
-    if (widget.onExport == null || _ioBusy) return;
-    setState(() => _ioBusy = true);
-    try {
-      await widget.onExport!();
-    } finally {
-      if (mounted) setState(() => _ioBusy = false);
-    }
-  }
-
-  Future<void> _handleImport() async {
-    if (widget.onImport == null || _ioBusy) return;
-    setState(() => _ioBusy = true);
-    try {
-      await widget.onImport!();
-    } finally {
-      if (mounted) setState(() => _ioBusy = false);
-    }
-  }
-
-  /// Filtra la lista per il testo corrente cercando in label e sublabel.
-  List<T> get _filtered {
-    if (_query.isEmpty) return widget.items;
-    final q = _query.toLowerCase();
-    return widget.items.where((item) {
-      return widget.labelOf(item).toLowerCase().contains(q) ||
-          (widget.sublabelOf(item)?.toLowerCase().contains(q) ?? false);
-    }).toList();
-  }
-
-  /// Chiede conferma prima di eliminare (un tap accidentale non deve perdere
-  /// dati per sempre) e gestisce il rifiuto del DB per vincolo FK: senza il
-  /// catch, eliminare una voce ancora referenziata (es. persona in un turno)
-  /// fallirebbe senza alcun feedback per l'utente.
-  Future<void> _confermaEdElimina(T item) async {
-    final label = widget.labelOf(item);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Elimina'),
-        content: Text('Eliminare "$label"? L\'operazione non è reversibile.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Elimina', style: TextStyle(color: kPrimary)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      await widget.onDelete!(item);
-    } catch (e) {
-      if (!mounted) return;
-      // Le eccezioni FK di sqflite (nativo e FFI) contengono sempre
-      // "FOREIGN KEY constraint failed": basta il match sulla stringa,
-      // senza importare i tipi di sqflite in una schermata UI.
-      final vincoloFk = e.toString().contains('FOREIGN KEY');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(vincoloFk
-            ? 'Impossibile eliminare "$label": ${widget.messaggioVincolo ?? 'è ancora usata da altri dati.'}'
-            : 'Errore durante l\'eliminazione: $e'),
-      ));
-    }
-  }
-
-  /// Resetta la ricerca quando si chiude la sezione così riaprendo è pulita.
-  void _toggle() {
-    setState(() {
-      _expanded = !_expanded;
-      if (!_expanded) {
-        _query = '';
-        _searchCtrl.clear();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = _filtered;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header: tutta la riga collassa/espande tranne il tasto +
-        InkWell(
-          onTap: _toggle,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-            child: Row(
-              children: [
-                Icon(widget.icon, size: 18, color: kPrimary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.titolo,
-                    style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                ),
-                // Badge col numero di elementi totali (visibile anche da collassato)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: kPrimary.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${widget.items.length}',
-                    style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                // Export/import dell'intera anagrafica (solo Ospedali per ora):
-                // sempre visibili come l'aggiunta, non richiedono di espandere prima.
-                if (widget.onExport != null || widget.onImport != null)
-                  if (_ioBusy)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  else ...[
-                    if (widget.onExport != null)
-                      IconButton(
-                        icon: const Icon(Icons.upload_file, size: 18, color: Colors.white70),
-                        onPressed: _handleExport,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Esporta',
-                      ),
-                    if (widget.onImport != null)
-                      IconButton(
-                        icon: const Icon(Icons.download, size: 18, color: Colors.white70),
-                        onPressed: _handleImport,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Importa',
-                      ),
-                  ],
-                // Pulsante aggiunta sempre visibile (non richiede di espandere prima)
-                IconButton(
-                  icon: const Icon(Icons.add, size: 20, color: Colors.white70),
-                  onPressed: widget.onAdd,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Aggiungi',
-                ),
-                Icon(
-                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.white38,
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Contenuto (solo quando espanso)
-        if (_expanded) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Cerca in ${widget.titolo.toLowerCase()}...',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        onPressed: () => setState(() {
-                          _query = '';
-                          _searchCtrl.clear();
-                        }),
-                      )
-                    : null,
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          if (filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text(
-                _query.isEmpty ? 'Nessun elemento' : 'Nessun risultato per "$_query"',
-                style: const TextStyle(color: Colors.white38, fontSize: 13),
-              ),
-            )
-          else
-            ...filtered.asMap().entries.map((entry) {
-              final i = entry.key;
-              final item = entry.value;
-              final canUp = widget.onMoveUp != null && _query.isEmpty && i > 0;
-              final canDown = widget.onMoveDown != null && _query.isEmpty && i < filtered.length - 1;
-              final dot = widget.colorOf != null ? widget.colorOf!(item) : null;
-              return ListTile(
-                dense: true,
-                leading: dot != null
-                    ? Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-                      )
-                    : (widget.colorOf != null ? const SizedBox(width: 14, height: 14) : null),
-                title: Text(widget.labelOf(item)),
-                subtitle: widget.sublabelOf(item) != null
-                    ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
-                    : null,
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (widget.onMoveUp != null && _query.isEmpty) ...[
-                    IconButton(
-                      icon: Icon(Icons.arrow_upward, size: 16, color: canUp ? Colors.white54 : Colors.white12),
-                      onPressed: canUp ? () => widget.onMoveUp!(item) : null,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.arrow_downward, size: 16, color: canDown ? Colors.white54 : Colors.white12),
-                      onPressed: canDown ? () => widget.onMoveDown!(item) : null,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                  if (widget.onView != null)
-                    IconButton(
-                      icon: const Icon(Icons.event_note, size: 18, color: Colors.white54),
-                      onPressed: () => widget.onView!(item),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Vedi turni',
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
-                    onPressed: () => widget.onEdit(item),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  if (widget.onDelete != null)
-                    IconButton(
-                      icon: const Icon(Icons.delete, size: 18, color: kPrimary),
-                      onPressed: () => _confermaEdElimina(item),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ]),
-              );
-            }),
-          const SizedBox(height: 4),
-        ],
-      ],
     );
   }
 }
@@ -823,13 +196,130 @@ class _SezioneBackupState extends State<_SezioneBackup> {
 }
 
 // ---------------------------------------------------------------------------
+// Navigazione (pagina principale, tab Attività+Statistiche, Piano turni)
+// ---------------------------------------------------------------------------
+
+/// Pagina principale mostrata all'avvio (Attività, Tools o Piano turni),
+/// interruttore per disattivare del tutto le tab Attività (turni +
+/// assistenze) e Statistiche insieme (per chi usa l'app solo per gli altri
+/// tool, es. solo Magazzino Verde/Lista ospedali) e interruttore per
+/// spostare il tool Piano turni dalla tab Tools a una voce propria in
+/// navbar (imposta anche Piano turni come pagina principale). Collassata di
+/// default come le altre sezioni di configurazione, stesso pattern di
+/// _SezioneToolsAttivi/_SezioneBackendCondiviso.
+class _SezioneNavigazione extends StatefulWidget {
+  const _SezioneNavigazione();
+
+  @override
+  State<_SezioneNavigazione> createState() => _SezioneNavigazioneState();
+}
+
+class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final nav = context.watch<NavigazioneProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.home_outlined, size: 18, color: kPrimary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Navigazione',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          if (!nav.caricato)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: LinearProgressIndicator(),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Pagina principale', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  SegmentedButton<PaginaPrincipale>(
+                    segments: [
+                      ButtonSegment(
+                        value: PaginaPrincipale.attivita,
+                        label: const Text('Turni/Assistenze'),
+                        enabled: nav.attivitaStatisticheAttive,
+                      ),
+                      const ButtonSegment(value: PaginaPrincipale.tools, label: Text('Tools')),
+                      ButtonSegment(
+                        value: PaginaPrincipale.pianoTurni,
+                        label: const Text('Piano turni'),
+                        enabled: nav.pianoTurniInNavbar,
+                      ),
+                    ],
+                    selected: {nav.paginaPrincipale},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (s) =>
+                        context.read<NavigazioneProvider>().setPaginaPrincipale(s.first),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Attività e Statistiche'),
+                    subtitle: const Text(
+                      'Disattiva se non usi la gestione turni/assistenze di questa app: '
+                      'nasconde anche le Statistiche, che le riguardano.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                    value: nav.attivitaStatisticheAttive,
+                    activeTrackColor: kPrimary,
+                    onChanged: (v) => context.read<NavigazioneProvider>().setAttivitaStatisticheAttive(v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Piano turni nella barra di navigazione'),
+                    subtitle: const Text(
+                      'Sposta il tool Piano turni dalla tab Tools a una voce propria in basso, '
+                      'e lo imposta come pagina principale.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                    value: nav.pianoTurniInNavbar,
+                    activeTrackColor: kPrimary,
+                    onChanged: (v) => context.read<NavigazioneProvider>().setPianoTurniInNavbar(v),
+                  ),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tools attivi
 // ---------------------------------------------------------------------------
 
 /// Switch per attivare/disattivare i tool mostrati nella tab Tools
 /// (ToolsProvider): il Magazzino Verde parte disattivato di default (si
 /// collega a un server esterno da configurare), gli altri sono attivi.
-/// Collassata di default come le sezioni anagrafiche (_SezioneAnag): non è
+/// Collassata di default come le sezioni anagrafiche: non è
 /// qualcosa che si tocca spesso, non deve occupare spazio in cima alla
 /// schermata a ogni apertura.
 class _SezioneToolsAttivi extends StatefulWidget {
@@ -903,66 +393,225 @@ class _SezioneToolsAttiviState extends State<_SezioneToolsAttivi> {
   }
 }
 
-/// Dialog con campo nome e palette colori per associazioni e tipologie.
-Future<void> _dialogNomeEColore(
-  BuildContext context,
-  String titolo,
-  Future<void> Function(String nome, String? colore) onSalva, {
-  String iniziale = '',
-  String? coloreIniziale,
-}) async {
-  final ctrl = TextEditingController(text: iniziale);
-  String? coloreSelezionato = coloreIniziale;
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocalState) => AlertDialog(
-        title: Text(titolo),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(labelText: 'Nome'),
-              textCapitalization: TextCapitalization.words,
-              autofocus: true,
+// ---------------------------------------------------------------------------
+// Backend condiviso (ospedali, fogli turni, materiali)
+// ---------------------------------------------------------------------------
+
+/// Configurazione del backend condiviso (`backend/`, Go): indirizzo del
+/// server e sincronizzazione automatica dei fogli turni. Spostata qui da
+/// Lista ospedali (dove restava solo l'icona ingranaggio) perché non è
+/// specifica di quel tool: il download per città/regione resta lì
+/// (contestuale alla schermata), ma la configurazione del server è
+/// un'impostazione trasversale, coerente con Tools attivi. Collassata di
+/// default come le altre sezioni non toccate spesso.
+class _SezioneBackendCondiviso extends StatefulWidget {
+  const _SezioneBackendCondiviso();
+
+  @override
+  State<_SezioneBackendCondiviso> createState() => _SezioneBackendCondivisoState();
+}
+
+class _SezioneBackendCondivisoState extends State<_SezioneBackendCondiviso> {
+  bool _expanded = false;
+  bool _caricato = false;
+  String _url = kBackendUrlDefault;
+  bool _syncFogli = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _carica();
+  }
+
+  Future<void> _carica() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _url = prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
+      _syncFogli = prefs.getBool(kPrefSyncFogliAttivo) ?? true;
+      _caricato = true;
+    });
+  }
+
+  Future<void> _configuraServer() async {
+    final nuovo = await showDialog<String>(
+      context: context,
+      builder: (_) => _ConfigServerDialog(urlIniziale: _url),
+    );
+    if (nuovo == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final url = nuovo.isEmpty ? kBackendUrlDefault : nuovo;
+    await prefs.setString(kPrefBackendUrl, url);
+    if (mounted) setState(() => _url = url);
+  }
+
+  Future<void> _setSyncFogli(bool v) async {
+    setState(() => _syncFogli = v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kPrefSyncFogliAttivo, v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_outlined, size: 18, color: kPrimary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Backend condiviso',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            const Text('Colore', style: TextStyle(color: Colors.white54, fontSize: 12)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: kColorPalette.map((hex) {
-                final c = colorFromHex(hex)!;
-                final sel = coloreSelezionato == hex;
-                return GestureDetector(
-                  onTap: () => setLocalState(() => coloreSelezionato = sel ? null : hex),
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: c,
-                      shape: BoxShape.circle,
-                      border: sel ? Border.all(color: Colors.white, width: 3) : null,
-                    ),
-                    child: sel ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salva')),
+        if (_expanded)
+          if (!_caricato)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: LinearProgressIndicator(),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Indirizzo del server'),
+                    subtitle: Text(_url, style: const TextStyle(color: Colors.white54)),
+                    trailing: OutlinedButton(
+                      onPressed: _configuraServer,
+                      child: const Text('Cambia'),
+                    ),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Sincronizza fogli turni'),
+                    subtitle: const Text(
+                      'Scarica automaticamente i nuovi mesi salvati sul backend nel tool Piano turni.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                    value: _syncFogli,
+                    activeTrackColor: kPrimary,
+                    onChanged: _setSyncFogli,
+                  ),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+/// Dialog di configurazione dell'indirizzo backend: il pulsante principale
+/// verifica la connessione (GET /api/health) prima di salvare, così un URL
+/// sbagliato o un server irraggiungibile non passano inosservati. Se la
+/// verifica fallisce il pulsante diventa "Salva comunque" (il server
+/// potrebbe essere solo temporaneamente giù, non deve bloccare per forza il
+/// salvataggio); modificare di nuovo il testo dopo un fallimento fa
+/// ripartire da capo la verifica sul nuovo indirizzo. Spostato qui da Lista
+/// ospedali insieme alla sua configurazione (vedi _SezioneBackendCondiviso).
+class _ConfigServerDialog extends StatefulWidget {
+  final String urlIniziale;
+  const _ConfigServerDialog({required this.urlIniziale});
+
+  @override
+  State<_ConfigServerDialog> createState() => _ConfigServerDialogState();
+}
+
+class _ConfigServerDialogState extends State<_ConfigServerDialog> {
+  late final _ctrl = TextEditingController(text: widget.urlIniziale);
+  bool _verificando = false;
+  String? _errore;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onSalvaPressato() async {
+    final url = BackendApi.normalizzaUrl(_ctrl.text);
+    // Campo vuoto (torna al default) o verifica già fallita in precedenza
+    // ("Salva comunque"): nessun nuovo test, si salva subito.
+    if (url.isEmpty || _errore != null) {
+      Navigator.pop(context, url);
+      return;
+    }
+    setState(() {
+      _verificando = true;
+      _errore = null;
+    });
+    final ok = await BackendApi(baseUrl: url).verificaConnessione();
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, url);
+    } else {
+      setState(() {
+        _verificando = false;
+        _errore = 'Il server non risponde a questo indirizzo.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Server ospedali'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _ctrl,
+            enabled: !_verificando,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: const InputDecoration(labelText: 'Indirizzo del server'),
+            // Un indirizzo diverso da quello già bocciato merita una verifica
+            // vera, non l'override "Salva comunque" del tentativo precedente.
+            onChanged: (_) {
+              if (_errore != null) setState(() => _errore = null);
+            },
+          ),
+          if (_errore != null) ...[
+            const SizedBox(height: 8),
+            Text(_errore!, style: const TextStyle(color: kPrimary, fontSize: 13)),
+          ],
         ],
       ),
-    ),
-  );
-  if (ok == true && ctrl.text.trim().isNotEmpty) {
-    await onSalva(ctrl.text.trim(), coloreSelezionato);
+      actions: [
+        TextButton(
+          onPressed: _verificando ? null : () => Navigator.pop(context),
+          child: const Text('Annulla'),
+        ),
+        if (_verificando)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          )
+        else
+          TextButton(
+            onPressed: _onSalvaPressato,
+            child: Text(_errore != null ? 'Salva comunque' : 'Verifica e salva'),
+          ),
+      ],
+    );
   }
 }
 
@@ -995,4 +644,3 @@ class _VersioneApp extends StatelessWidget {
     );
   }
 }
-

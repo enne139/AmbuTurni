@@ -62,7 +62,8 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
     return ospedali.where((o) {
       return o.nome.toLowerCase().contains(q) ||
           (o.citta ?? '').toLowerCase().contains(q) ||
-          (o.via ?? '').toLowerCase().contains(q);
+          (o.via ?? '').toLowerCase().contains(q) ||
+          (o.regione ?? '').toLowerCase().contains(q);
     }).toList();
   }
 
@@ -108,46 +109,35 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
     }
   }
 
-  /// Dialog di configurazione dell'indirizzo del backend condiviso ospedali:
-  /// precompilato con quanto salvato o, se mai toccato, col default
-  /// centralizzato (kBackendUrlDefault) — a differenza del Magazzino Verde
-  /// qui c'è sempre un valore sensato, non serve un "non configurato".
-  Future<void> _configuraServer() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    final nuovo = await showDialog<String>(
-      context: context,
-      builder: (_) => _ConfigServerDialog(
-        urlIniziale: prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault,
-      ),
-    );
-    if (nuovo == null) return;
-    await prefs.setString(kPrefBackendUrl, nuovo.isEmpty ? kBackendUrlDefault : nuovo);
-  }
-
-  /// Fa scegliere una città tra quelle che hanno ospedali sul backend
-  /// (`_SceltaCittaDialog`), scarica gli ospedali di quella città e li fa
-  /// confluire in anagrafica con lo stesso upsert per nome dell'import di
-  /// backup (aggiorna chi esiste già, aggiunge i nuovi).
-  Future<void> _scaricaPerCitta() async {
+  /// Fa scegliere un luogo (città o regione, tramite `_SceltaLuogoDialog`)
+  /// tra quelli che hanno ospedali sul backend, scarica gli ospedali
+  /// corrispondenti e li fa confluire in anagrafica con lo stesso upsert per
+  /// nome dell'import di backup (aggiorna chi esiste già, aggiunge i nuovi).
+  /// L'indirizzo del server si configura ora in Impostazioni → Backend
+  /// condiviso (spostato da qui, non è specifico di questo tool).
+  Future<void> _scaricaOspedali() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     final baseUrl = prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
-    final citta = await showDialog<String>(
+    final scelta = await showDialog<(TipoLuogo, String)>(
       context: context,
-      builder: (_) => _SceltaCittaDialog(baseUrl: baseUrl),
+      builder: (_) => _SceltaLuogoDialog(baseUrl: baseUrl),
     );
-    if (citta == null || citta.isEmpty || !mounted) return;
+    if (scelta == null || scelta.$2.isEmpty || !mounted) return;
+    final (tipo, luogo) = scelta;
 
     setState(() => _scaricando = true);
     try {
-      final righe = await BackendApi(baseUrl: baseUrl).getOspedali(citta: citta);
+      final righe = await BackendApi(baseUrl: baseUrl).getOspedali(
+        citta: tipo == TipoLuogo.citta ? luogo : null,
+        regione: tipo == TipoLuogo.regione ? luogo : null,
+      );
       final esito = await upsertOspedali(righe);
       if (!mounted) return;
       context.read<AnagraficheProvider>().carica();
       final avviso = esito.scartati == 0 ? '' : ' (${esito.scartati} scartati)';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${esito.creati} nuovi, ${esito.aggiornati} aggiornati per "$citta".$avviso'),
+        content: Text('${esito.creati} nuovi, ${esito.aggiornati} aggiornati per "$luogo".$avviso'),
       ));
     } catch (e) {
       if (mounted) {
@@ -179,14 +169,9 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
           else
             IconButton(
               icon: const Icon(Icons.cloud_download_outlined),
-              tooltip: 'Scarica ospedali per città',
-              onPressed: _scaricaPerCitta,
+              tooltip: 'Scarica ospedali per città o regione',
+              onPressed: _scaricaOspedali,
             ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Configura server',
-            onPressed: _configuraServer,
-          ),
           IconButton(
             icon: Icon(_vistaMappa ? Icons.view_list : Icons.map_outlined),
             tooltip: _vistaMappa ? 'Vista elenco' : 'Vista mappa',
@@ -202,7 +187,7 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
               controller: _ricercaCtrl,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: 'Cerca per nome, via o città...',
+                hintText: 'Cerca per nome, via, città o regione...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _ricercaCtrl.text.isEmpty
                     ? null
@@ -225,6 +210,16 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
     );
   }
 
+  /// Etichetta di raggruppamento: la regione se presente, altrimenti un
+  /// bucket dedicato in fondo — un ospedale senza regione non deve sparire,
+  /// solo restare fuori dai gruppi con un nome.
+  static const _senzaRegione = 'Senza regione';
+  String _regioneDi(Ospedale o) => (o.regione == null || o.regione!.isEmpty) ? _senzaRegione : o.regione!;
+
+  /// Raggruppa [ospedali] (già ordinati per nome) per regione, alfabetica
+  /// con "Senza regione" sempre in fondo: nessun package, stessa filosofia
+  /// "niente dipendenza per una griglia semplice" del calendario mensile —
+  /// qui basta una ListView con intestazioni di sezione inline.
   Widget _buildLista(List<Ospedale> ospedali) {
     if (ospedali.isEmpty) {
       return Center(
@@ -240,13 +235,40 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
         ),
       );
     }
+    final gruppi = <String, List<Ospedale>>{};
+    for (final o in ospedali) {
+      gruppi.putIfAbsent(_regioneDi(o), () => []).add(o);
+    }
+    final regioni = gruppi.keys.toList()
+      ..sort((a, b) {
+        if (a == _senzaRegione) return b == _senzaRegione ? 0 : 1;
+        if (b == _senzaRegione) return -1;
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      itemCount: ospedali.length,
-      itemBuilder: (_, i) => _OspedaleCard(
-        ospedale: ospedali[i],
-        onNaviga: (app) => _naviga(ospedali[i], app),
-      ),
+      itemCount: regioni.length,
+      itemBuilder: (_, i) {
+        final regione = regioni[i];
+        final ospedaliRegione = gruppi[regione]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+              child: Text(
+                '$regione (${ospedaliRegione.length})',
+                style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+            ...ospedaliRegione.map((o) => _OspedaleCard(
+                  ospedale: o,
+                  onNaviga: (app) => _naviga(o, app),
+                )),
+          ],
+        );
+      },
     );
   }
 
@@ -392,122 +414,31 @@ class _OspedaleCard extends StatelessWidget {
   }
 }
 
-/// Dialog di configurazione dell'indirizzo backend: il pulsante principale
-/// verifica la connessione (GET /api/health) prima di salvare, così un URL
-/// sbagliato o un server irraggiungibile non passano inosservati. Se la
-/// verifica fallisce il pulsante diventa "Salva comunque" (il server
-/// potrebbe essere solo temporaneamente giù, non deve bloccare per forza il
-/// salvataggio); modificare di nuovo il testo dopo un fallimento fa
-/// ripartire da capo la verifica sul nuovo indirizzo.
-class _ConfigServerDialog extends StatefulWidget {
-  final String urlIniziale;
-  const _ConfigServerDialog({required this.urlIniziale});
+/// Filtro per "Scarica ospedali": per città (comportamento originale) o per
+/// intera regione (aggiunto insieme al raggruppamento della lista).
+enum TipoLuogo { citta, regione }
 
-  @override
-  State<_ConfigServerDialog> createState() => _ConfigServerDialogState();
-}
-
-class _ConfigServerDialogState extends State<_ConfigServerDialog> {
-  late final _ctrl = TextEditingController(text: widget.urlIniziale);
-  bool _verificando = false;
-  String? _errore;
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _onSalvaPressato() async {
-    final url = BackendApi.normalizzaUrl(_ctrl.text);
-    // Campo vuoto (torna al default) o verifica già fallita in precedenza
-    // ("Salva comunque"): nessun nuovo test, si salva subito.
-    if (url.isEmpty || _errore != null) {
-      Navigator.pop(context, url);
-      return;
-    }
-    setState(() {
-      _verificando = true;
-      _errore = null;
-    });
-    final ok = await BackendApi(baseUrl: url).verificaConnessione();
-    if (!mounted) return;
-    if (ok) {
-      Navigator.pop(context, url);
-    } else {
-      setState(() {
-        _verificando = false;
-        _errore = 'Il server non risponde a questo indirizzo.';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Server ospedali'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _ctrl,
-            enabled: !_verificando,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            decoration: const InputDecoration(labelText: 'Indirizzo del server'),
-            // Un indirizzo diverso da quello già bocciato merita una verifica
-            // vera, non l'override "Salva comunque" del tentativo precedente.
-            onChanged: (_) {
-              if (_errore != null) setState(() => _errore = null);
-            },
-          ),
-          if (_errore != null) ...[
-            const SizedBox(height: 8),
-            Text(_errore!, style: const TextStyle(color: kPrimary, fontSize: 13)),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _verificando ? null : () => Navigator.pop(context),
-          child: const Text('Annulla'),
-        ),
-        if (_verificando)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-          )
-        else
-          TextButton(
-            onPressed: _onSalvaPressato,
-            child: Text(_errore != null ? 'Salva comunque' : 'Verifica e salva'),
-          ),
-      ],
-    );
-  }
-}
-
-/// Dialog di scelta città per "Scarica ospedali per città": scarica
-/// l'elenco delle città che hanno almeno un ospedale sul backend (GET
-/// /api/citta) e le mostra come lista filtrabile, invece di far digitare
-/// alla cieca un nome che magari non ha corrispondenze. Se il download
-/// dell'elenco fallisce (server giù, endpoint assente su un backend
-/// vecchio...) resta comunque possibile digitare una città a mano: il vero
-/// download degli ospedali (GET /api/ospedali?citta=) potrebbe funzionare
-/// anche senza questo elenco.
-class _SceltaCittaDialog extends StatefulWidget {
+/// Dialog di scelta città/regione per "Scarica ospedali": un
+/// `SegmentedButton` in cima sceglie quale elenco scaricare dal backend (GET
+/// /api/citta o /api/regioni) e lo mostra come lista filtrabile, invece di
+/// far digitare alla cieca un nome che magari non ha corrispondenze. Se il
+/// download dell'elenco fallisce (server giù, endpoint assente su un
+/// backend vecchio...) resta comunque possibile digitare un nome a mano: il
+/// vero download degli ospedali (GET /api/ospedali?citta=|regione=)
+/// potrebbe funzionare anche senza questo elenco.
+class _SceltaLuogoDialog extends StatefulWidget {
   final String baseUrl;
-  const _SceltaCittaDialog({required this.baseUrl});
+  const _SceltaLuogoDialog({required this.baseUrl});
 
   @override
-  State<_SceltaCittaDialog> createState() => _SceltaCittaDialogState();
+  State<_SceltaLuogoDialog> createState() => _SceltaLuogoDialogState();
 }
 
-class _SceltaCittaDialogState extends State<_SceltaCittaDialog> {
+class _SceltaLuogoDialogState extends State<_SceltaLuogoDialog> {
   final _ricercaCtrl = TextEditingController();
+  TipoLuogo _tipo = TipoLuogo.citta;
   bool _caricando = true;
-  List<String>? _citta; // null = caricamento fallito (vedi _errore)
+  List<String>? _luoghi; // null = caricamento fallito (vedi _errore)
   String? _errore;
 
   @override
@@ -522,44 +453,78 @@ class _SceltaCittaDialogState extends State<_SceltaCittaDialog> {
     super.dispose();
   }
 
+  Future<void> _cambiaTipo(TipoLuogo tipo) async {
+    if (tipo == _tipo) return;
+    setState(() {
+      _tipo = tipo;
+      _ricercaCtrl.clear();
+    });
+    await _carica();
+  }
+
   Future<void> _carica() async {
+    setState(() {
+      _caricando = true;
+      _errore = null;
+    });
     try {
-      final lista = await BackendApi(baseUrl: widget.baseUrl).getCitta();
+      final api = BackendApi(baseUrl: widget.baseUrl);
+      final lista = _tipo == TipoLuogo.citta ? await api.getCitta() : await api.getRegioni();
       if (!mounted) return;
       setState(() {
-        _citta = lista;
+        _luoghi = lista;
         _caricando = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _luoghi = null;
         _errore = messaggioErroreBackend(e);
         _caricando = false;
       });
     }
   }
 
-  List<String> get _filtrate {
-    final citta = _citta ?? const [];
+  List<String> get _filtrati {
+    final luoghi = _luoghi ?? const [];
     final q = _ricercaCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return citta;
-    return citta.where((c) => c.toLowerCase().contains(q)).toList();
+    if (q.isEmpty) return luoghi;
+    return luoghi.where((c) => c.toLowerCase().contains(q)).toList();
   }
+
+  String get _etichetta => _tipo == TipoLuogo.citta ? 'città' : 'regione';
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Scarica ospedali'),
-      content: SizedBox(width: double.maxFinite, child: _buildContenuto()),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SegmentedButton<TipoLuogo>(
+              segments: const [
+                ButtonSegment(value: TipoLuogo.citta, label: Text('Per città')),
+                ButtonSegment(value: TipoLuogo.regione, label: Text('Per regione')),
+              ],
+              selected: {_tipo},
+              onSelectionChanged: (s) => _cambiaTipo(s.first),
+            ),
+            const SizedBox(height: 12),
+            _buildContenuto(),
+          ],
+        ),
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
-        // Con l'elenco caricato si sceglie una città toccandola in lista:
-        // qui serve solo il pulsante di conferma per il fallback manuale.
-        if (_citta == null && !_caricando)
+        // Con l'elenco caricato si sceglie toccando la voce in lista: qui
+        // serve solo il pulsante di conferma per il fallback manuale.
+        if (_luoghi == null && !_caricando)
           TextButton(
             onPressed: _ricercaCtrl.text.trim().isEmpty
                 ? null
-                : () => Navigator.pop(context, _ricercaCtrl.text.trim()),
+                : () => Navigator.pop(context, (_tipo, _ricercaCtrl.text.trim())),
             child: const Text('Scarica'),
           ),
       ],
@@ -573,14 +538,14 @@ class _SceltaCittaDialogState extends State<_SceltaCittaDialog> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_citta == null) {
+    if (_luoghi == null) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Elenco città non disponibile (${_errore ?? 'errore sconosciuto'}). '
-            'Puoi comunque digitare una città.',
+            'Elenco non disponibile (${_errore ?? 'errore sconosciuto'}). '
+            'Puoi comunque digitare una $_etichetta.',
             style: const TextStyle(color: Colors.white54, fontSize: 13),
           ),
           const SizedBox(height: 12),
@@ -588,39 +553,39 @@ class _SceltaCittaDialogState extends State<_SceltaCittaDialog> {
             controller: _ricercaCtrl,
             autofocus: true,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Città'),
+            decoration: InputDecoration(labelText: _tipo == TipoLuogo.citta ? 'Città' : 'Regione'),
             onChanged: (_) => setState(() {}),
           ),
         ],
       );
     }
-    if (_citta!.isEmpty) {
+    if (_luoghi!.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Text('Il server non ha ancora nessun ospedale.', style: TextStyle(color: Colors.white54)),
       );
     }
-    final filtrate = _filtrate;
+    final filtrati = _filtrati;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         TextField(
           controller: _ricercaCtrl,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Cerca città...', prefixIcon: Icon(Icons.search)),
+          decoration: InputDecoration(hintText: 'Cerca $_etichetta...', prefixIcon: const Icon(Icons.search)),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 8),
         SizedBox(
           height: 280,
-          child: filtrate.isEmpty
-              ? const Center(child: Text('Nessuna città trovata.', style: TextStyle(color: Colors.white38)))
+          child: filtrati.isEmpty
+              ? const Center(child: Text('Nessun risultato.', style: TextStyle(color: Colors.white38)))
               : ListView.builder(
                   shrinkWrap: true,
-                  itemCount: filtrate.length,
+                  itemCount: filtrati.length,
                   itemBuilder: (_, i) => ListTile(
-                    title: Text(filtrate[i]),
-                    onTap: () => Navigator.pop(context, filtrate[i]),
+                    title: Text(filtrati[i]),
+                    onTap: () => Navigator.pop(context, (_tipo, filtrati[i])),
                   ),
                 ),
         ),

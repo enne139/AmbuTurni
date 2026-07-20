@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../db/backup_file.dart';
+import '../../utils/backend_api.dart';
 import '../../utils/format.dart';
 import '../../utils/piano_cache.dart';
 import '../../utils/piano_mensile.dart';
@@ -130,6 +131,36 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       } else {
         await _carica();
       }
+    }
+    _sincronizzaFogliDalBackend(prefs);
+  }
+
+  /// Scarica in sottofondo i fogli salvati sul backend condiviso (pagina
+  /// admin) e li aggiunge all'archivio locale, se l'impostazione
+  /// "Sincronizza fogli turni" è attiva (default sì, vedi CLAUDE.md e
+  /// Impostazioni → Backend condiviso). Best-effort come il geocoding degli
+  /// ospedali: nessun errore in UI, un server irraggiungibile o
+  /// l'endpoint assente su un backend vecchio non deve disturbare l'apertura
+  /// dello strumento. Merge additivo: aggiunge solo le chiavi ("aaaa-mm")
+  /// non ancora presenti localmente, senza toccare un link che l'utente ha
+  /// già incollato/verificato per quel mese — evita che il backend sovrascriva
+  /// silenziosamente un URL già in uso.
+  Future<void> _sincronizzaFogliDalBackend(SharedPreferences prefs) async {
+    if (!(prefs.getBool(kPrefSyncFogliAttivo) ?? true)) return;
+    final baseUrl = prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
+    try {
+      final remoti = await BackendApi(baseUrl: baseUrl).getFogli();
+      if (!mounted || remoti.isEmpty) return;
+      final nuovi = {
+        for (final entry in remoti.entries)
+          if (!_fogliSalvati.containsKey(entry.key)) entry.key: entry.value
+      };
+      if (nuovi.isEmpty) return;
+      setState(() => _fogliSalvati = {..._fogliSalvati, ...nuovi});
+      await _salvaFogli();
+    } catch (_) {
+      // Silenzioso: sincronizzazione best-effort, non un'azione richiesta
+      // esplicitamente dall'utente in questo momento.
     }
   }
 

@@ -131,27 +131,31 @@ Future<String> saveOspedale(String nome, String? citta, {String? id, String? via
   }
 }
 
-/// Salva le coordinate risolte dal geocoding dell'indirizzo (tool Lista
-/// ospedali). Chiamata a parte da saveOspedale: è un aggiornamento in
-/// sottofondo, successivo al salvataggio dell'ospedale, non un campo del form.
-Future<void> aggiornaCoordinateOspedale(String id, double lat, double lng) async {
+/// Salva le coordinate e/o la regione risolte dal geocoding dell'indirizzo
+/// (tool Lista ospedali), o inserite a mano nel form. Chiamata a parte da
+/// saveOspedale: è un aggiornamento in sottofondo, successivo al salvataggio
+/// dell'ospedale, non un campo obbligatorio del form. Ogni parametro è
+/// opzionale e viene scritto solo se passato, così un aggiornamento parziale
+/// (es. solo la regione da un upsert) non azzera coordinate già presenti o
+/// viceversa.
+Future<void> aggiornaGeocodingOspedale(String id, {double? lat, double? lng, String? regione}) async {
+  if (lat == null && lng == null && regione == null) return;
   final db = await getDb();
-  await db.update(
-    'ospedali',
-    {'lat': lat, 'lng': lng, 'updated_at': _now(), 'is_synced': 0},
-    where: 'id = ?',
-    whereArgs: [id],
-  );
+  final valori = <String, Object?>{'updated_at': _now(), 'is_synced': 0};
+  if (lat != null) valori['lat'] = lat;
+  if (lng != null) valori['lng'] = lng;
+  if (regione != null) valori['regione'] = regione;
+  await db.update('ospedali', valori, where: 'id = ?', whereArgs: [id]);
 }
 
 /// Upsert per nome di una lista di ospedali: righe nel formato
-/// nome/via/citta/lat/lng (lo stesso di exportOspedali/importOspedali in
-/// db/backup.dart e della risposta del backend condiviso, vedi
+/// nome/via/citta/lat/lng/regione (lo stesso di exportOspedali/importOspedali
+/// in db/backup.dart e della risposta del backend condiviso, vedi
 /// utils/backend_api.dart). Un ospedale già in anagrafica con lo stesso nome
-/// viene aggiornato, uno nuovo viene creato; le coordinate si scrivono così
-/// come sono nella riga, nessun geocoding qui (lo fa solo il form Ospedale
-/// in Impostazioni). Condivisa tra import di backup e download dal backend:
-/// stessa logica, due sorgenti diverse (file JSON o rete).
+/// viene aggiornato, uno nuovo viene creato; coordinate e regione si
+/// scrivono così come sono nella riga, nessun geocoding qui (lo fa solo il
+/// form Ospedale in Impostazioni). Condivisa tra import di backup e download
+/// dal backend: stessa logica, due sorgenti diverse (file JSON o rete).
 Future<({int creati, int aggiornati, int scartati})> upsertOspedali(List<dynamic> righe) async {
   final db = await getDb();
   final esistenti = {
@@ -170,6 +174,7 @@ Future<({int creati, int aggiornati, int scartati})> upsertOspedali(List<dynamic
     }
     final via = (riga['via'] as String?)?.trim();
     final citta = (riga['citta'] as String?)?.trim();
+    final regione = (riga['regione'] as String?)?.trim();
     final lat = (riga['lat'] as num?)?.toDouble();
     final lng = (riga['lng'] as num?)?.toDouble();
 
@@ -192,8 +197,13 @@ Future<({int creati, int aggiornati, int scartati})> upsertOspedali(List<dynamic
       esistenti[nome] = id;
       creati++;
     }
-    if (lat != null && lng != null) {
-      await aggiornaCoordinateOspedale(id, lat, lng);
+    if (lat != null && lng != null || (regione != null && regione.isNotEmpty)) {
+      await aggiornaGeocodingOspedale(
+        id,
+        lat: lat,
+        lng: lng,
+        regione: (regione == null || regione.isEmpty) ? null : regione,
+      );
     }
   }
   return (creati: creati, aggiornati: aggiornati, scartati: scartati);
@@ -674,6 +684,36 @@ Future<String> saveMateriale(String nome, {String? id}) async {
 Future<void> deleteMateriale(String id) async {
   final db = await getDb();
   await db.delete('materiali', where: 'id = ?', whereArgs: [id]);
+}
+
+/// Upsert per nome dei materiali scaricati dal backend condiviso (stesso
+/// scopo di upsertOspedali): un materiale già in catalogo con lo stesso nome
+/// (case-insensitive, come il MaterialePicker) resta invariato, uno nuovo
+/// viene creato. Nessun aggiornamento in caso di match: un materiale ha solo
+/// il nome, non c'è altro campo da sincronizzare.
+Future<({int creati, int scartati})> upsertMateriali(List<dynamic> righe) async {
+  final materiali = await getMateriali();
+  final esistenti = {for (final m in materiali) m.nome.toLowerCase(): m.id};
+  int creati = 0, scartati = 0;
+  for (final riga in righe) {
+    final String? nome;
+    if (riga is Map) {
+      nome = (riga['nome'] as String?)?.trim();
+    } else if (riga is String) {
+      nome = riga.trim();
+    } else {
+      nome = null;
+    }
+    if (nome == null || nome.isEmpty) {
+      scartati++;
+      continue;
+    }
+    if (esistenti.containsKey(nome.toLowerCase())) continue;
+    final id = await saveMateriale(nome);
+    esistenti[nome.toLowerCase()] = id;
+    creati++;
+  }
+  return (creati: creati, scartati: scartati);
 }
 
 /// Restituisce gli utilizzi di materiale attivi, dal più recente. Non esiste

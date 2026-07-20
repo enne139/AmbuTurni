@@ -105,6 +105,22 @@ Future<String?> exportBackup() async {
     // un restore tratterebbe come "nuovi" tutti i tool già noti all'origine,
     // riaccendendo quelli disattivati esplicitamente prima del backup.
     kPrefToolsConosciuti: prefs.getStringList(kPrefToolsConosciuti),
+    // Indirizzo del backend condiviso ospedali, se diverso dal default
+    // centralizzato (es. un'istanza locale/di test): mancava dal backup fin
+    // dall'introduzione del tool, corretto qui perché aggiungiamo un'altra
+    // preferenza nella stessa area (kPrefSyncFogliAttivo).
+    kPrefBackendUrl: prefs.getString(kPrefBackendUrl),
+    // Sincronizzazione automatica dei fogli turni dal backend: null se mai
+    // toccato (il restore applica il default "attiva", coerente con un
+    // device mai configurato).
+    kPrefSyncFogliAttivo: prefs.getBool(kPrefSyncFogliAttivo),
+    // Navigazione (pagina principale, tab Attività+Statistiche attive,
+    // Piano turni in navbar): null se mai toccate, il restore applica i
+    // default (Attività/Statistiche disattivate, Piano turni in navbar e
+    // come pagina principale — vedi prefs_keys.dart/NavigazioneProvider).
+    kPrefPaginaPrincipale: prefs.getString(kPrefPaginaPrincipale),
+    kPrefAttivitaStatisticheAttive: prefs.getBool(kPrefAttivitaStatisticheAttive),
+    kPrefPianoTurniInNavbar: prefs.getBool(kPrefPianoTurniInNavbar),
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
@@ -377,6 +393,35 @@ Future<String> importBackup() async {
     if (toolsConosciuti is List && toolsConosciuti.every((e) => e is String)) {
       await prefs.setStringList(kPrefToolsConosciuti, toolsConosciuti.cast<String>());
     }
+    final backendUrl = preferenze[kPrefBackendUrl];
+    if (backendUrl is String && backendUrl.isNotEmpty) {
+      await prefs.setString(kPrefBackendUrl, backendUrl);
+    }
+    // Booleano: a differenza delle stringhe, `false` è un valore esplicito
+    // valido da ripristinare (l'utente aveva disattivato la sincronizzazione),
+    // non va scartato come le stringhe vuote sopra — solo l'assenza del
+    // campo (backup precedenti a questa funzionalità) lascia il default
+    // "attiva" del device.
+    final syncFogli = preferenze[kPrefSyncFogliAttivo];
+    if (syncFogli is bool) {
+      await prefs.setBool(kPrefSyncFogliAttivo, syncFogli);
+    }
+    final paginaPrincipale = preferenze[kPrefPaginaPrincipale];
+    if (paginaPrincipale is String && paginaPrincipale.isNotEmpty) {
+      await prefs.setString(kPrefPaginaPrincipale, paginaPrincipale);
+    }
+    // Booleano: stessa eccezione di syncFogli, `false` è un valore esplicito
+    // valido (Attività/Statistiche disattivate prima del backup).
+    final attivitaStatisticheAttive = preferenze[kPrefAttivitaStatisticheAttive];
+    if (attivitaStatisticheAttive is bool) {
+      await prefs.setBool(kPrefAttivitaStatisticheAttive, attivitaStatisticheAttive);
+    }
+    // Booleano: stessa eccezione, `true` è un valore esplicito valido
+    // (Piano turni già spostato in navbar prima del backup).
+    final pianoTurniInNavbar = preferenze[kPrefPianoTurniInNavbar];
+    if (pianoTurniInNavbar is bool) {
+      await prefs.setBool(kPrefPianoTurniInNavbar, pianoTurniInNavbar);
+    }
   }
 
   final ts = payload['exportedAt'] as String? ?? '?';
@@ -386,12 +431,12 @@ Future<String> importBackup() async {
   return 'Import completato. Dati del $ts ripristinati.$avviso';
 }
 
-/// Esporta la sola anagrafica ospedali (nome, via, città, coordinate) in un
-/// file JSON portabile — a differenza del backup completo, pensato per
-/// scambiare/condividere la lista con un'altra installazione (o un'altra
-/// associazione), non per un ripristino esatto: niente id/timestamp interni.
-/// L'import (vedi importOspedali) fa un upsert per nome, quindi lo stesso
-/// file può anche fare da "esportazione periodica" senza creare doppioni.
+/// Esporta la sola anagrafica ospedali (nome, via, città, regione,
+/// coordinate) in un file JSON portabile — a differenza del backup completo,
+/// pensato per scambiare/condividere la lista con un'altra installazione (o
+/// un'altra associazione), non per un ripristino esatto: niente id/timestamp
+/// interni. L'import (vedi importOspedali) fa un upsert per nome, quindi lo
+/// stesso file può anche fare da "esportazione periodica" senza creare doppioni.
 Future<String?> exportOspedali() async {
   final db = await getDb();
   final righe = await db.query('ospedali', orderBy: 'nome ASC');
@@ -401,6 +446,7 @@ Future<String?> exportOspedali() async {
         'citta': r['citta'],
         'lat': r['lat'],
         'lng': r['lng'],
+        'regione': r['regione'],
       }).toList();
   final json = const JsonEncoder.withIndent('  ').convert({'ospedali': ospedali});
   return _salvaFile(

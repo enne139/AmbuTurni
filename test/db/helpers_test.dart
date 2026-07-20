@@ -61,6 +61,7 @@ void main() {
         'via': 'Via Roma 1',
         'lat': 45.4642,
         'lng': 9.19,
+        'regione': 'Lombardia',
         'created_at': null,
         'updated_at': null,
         'is_synced': 0,
@@ -195,7 +196,7 @@ void main() {
     test('saveOspedale in modifica non tocca lat/lng già geocodificate',
         () async {
       final id = await saveOspedale('Ospedale Coord', 'Roma', via: 'Via A');
-      await aggiornaCoordinateOspedale(id, 41.9, 12.5);
+      await aggiornaGeocodingOspedale(id, lat: 41.9, lng: 12.5);
       // Modifica che non cambia l'indirizzo (es. solo il nome).
       await saveOspedale('Ospedale Coord Rinominato', 'Roma', id: id, via: 'Via A');
       final o = (await getOspedali()).firstWhere((x) => x.id == id);
@@ -204,13 +205,23 @@ void main() {
       expect(o.lng, 12.5);
     });
 
-    test('aggiornaCoordinateOspedale imposta lat/lng', () async {
+    test('aggiornaGeocodingOspedale imposta lat/lng', () async {
       final id = await saveOspedale('Ospedale Geo', null, via: 'Via B');
-      await aggiornaCoordinateOspedale(id, 45.46, 9.19);
+      await aggiornaGeocodingOspedale(id, lat: 45.46, lng: 9.19);
       final o = (await getOspedali()).firstWhere((x) => x.id == id);
       expect(o.haCoordinate, isTrue);
       expect(o.lat, 45.46);
       expect(o.lng, 9.19);
+    });
+
+    test('aggiornaGeocodingOspedale imposta la regione senza toccare lat/lng esistenti', () async {
+      final id = await saveOspedale('Ospedale Regione', 'Bologna', via: 'Via C');
+      await aggiornaGeocodingOspedale(id, lat: 44.49, lng: 11.34);
+      await aggiornaGeocodingOspedale(id, regione: 'Emilia-Romagna');
+      final o = (await getOspedali()).firstWhere((x) => x.id == id);
+      expect(o.regione, 'Emilia-Romagna');
+      expect(o.lat, 44.49);
+      expect(o.lng, 11.34);
     });
 
     test('deleteOspedale rimuove la riga', () async {
@@ -267,13 +278,49 @@ void main() {
 
     test('senza lat/lng nella riga non tocca eventuali coordinate esistenti', () async {
       final id = await saveOspedale('Upsert Coord', 'Napoli', via: 'Via X');
-      await aggiornaCoordinateOspedale(id, 40.85, 14.27);
+      await aggiornaGeocodingOspedale(id, lat: 40.85, lng: 14.27);
       await upsertOspedali([
         {'nome': 'Upsert Coord', 'citta': 'Napoli', 'via': 'Via X'},
       ]);
       final o = (await getOspedali()).firstWhere((x) => x.id == id);
       expect(o.lat, 40.85);
       expect(o.lng, 14.27);
+    });
+
+    test('scrive la regione dalla riga se presente', () async {
+      final esito = await upsertOspedali([
+        {'nome': 'Upsert Regione', 'citta': 'Bologna', 'regione': 'Emilia-Romagna'},
+      ]);
+      expect(esito.creati, 1);
+      final o = (await getOspedali()).firstWhere((x) => x.nome == 'Upsert Regione');
+      expect(o.regione, 'Emilia-Romagna');
+    });
+  });
+
+  group('upsertMateriali', () {
+    test('crea i materiali nuovi (per nome) e conta creati/scartati', () async {
+      final esito = await upsertMateriali(['Upsert Garze', 'Upsert Guanti', '']);
+      expect(esito.creati, 2);
+      expect(esito.scartati, 1);
+      final lista = await getMateriali();
+      expect(lista.map((m) => m.nome), containsAll(['Upsert Garze', 'Upsert Guanti']));
+    });
+
+    test('un materiale già in catalogo (case-insensitive) non viene duplicato', () async {
+      await saveMateriale('Upsert Bende');
+      final esito = await upsertMateriali(['upsert bende', 'Upsert Cerotti']);
+      expect(esito.creati, 1);
+      final lista = await getMateriali();
+      expect(lista.where((m) => m.nome.toLowerCase() == 'upsert bende').length, 1);
+    });
+
+    test('accetta anche righe in formato mappa {"nome": ...}', () async {
+      final esito = await upsertMateriali([
+        {'nome': 'Upsert Siringhe'},
+        {'citta': 'senza nome'},
+      ]);
+      expect(esito.creati, 1);
+      expect(esito.scartati, 1);
     });
   });
 

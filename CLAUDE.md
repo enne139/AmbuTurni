@@ -102,7 +102,7 @@ lib/
 │   │                               Go): GET /api/ospedali?citta=, testato con MockClient
 │   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
 │   │                               (Piano turni + Magazzino Verde + Tools attivi + indirizzo
-│   │                               del backend condiviso ospedali)
+│   │                               del backend condiviso ospedali + sincronizzazione fogli turni)
 │   ├── scanner_errors.dart        messaggio d'errore fotocamera per mobile_scanner,
 │   │                               condiviso tra scanner_barcode_screen e conta_screen
 │   └── tools_config.dart          catalogo dei tool disattivabili (id, titolo, icona,
@@ -117,11 +117,15 @@ lib/
 │                                    Piattaforma web)
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider,
-│                                   StatisticheProvider, ToolsProvider
+│                                   StatisticheProvider, ToolsProvider, NavigazioneProvider
 ├── navigation/
-│   └── app_navigator.dart         Scaffold con NavigationBar a 4 tab (IndexedStack);
-│                                   la tab Attività unisce Turni e Assistenze con un
-│                                   SegmentedButton sotto l'AppBar
+│   └── app_navigator.dart         Scaffold con NavigationBar (2-5 tab, IndexedStack, tab
+│                                   selezionata per identità con l'enum _TabId); la tab Attività
+│                                   unisce Turni e Assistenze con un SegmentedButton sotto
+│                                   l'AppBar e inietta lì l'icona Anagrafiche; Attività+
+│                                   Statistiche sono disattivabili insieme e Piano turni può
+│                                   comparire come voce propria, entrambe da Impostazioni →
+│                                   Navigazione (NavigazioneProvider)
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
 │   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
@@ -131,6 +135,12 @@ lib/
 └── screens/
     ├── shared/
     │   └── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
+    ├── anagrafiche/
+    │   ├── anagrafiche_screen.dart CRUD associazioni/persone/ospedali/tipologie turno (spostato
+    │   │                            da Impostazioni), raggiungibile dall'icona nell'AppBar di
+    │   │                            Turni/Assistenze; export/import ospedali e geocoding compresi
+    │   └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
+    │                                   assistenze) in cui compare una persona/ospedale
     ├── turni/
     │   ├── turni_list.dart         lista + FAB + filtro assoc. + vista calendario (niente swipe/long-press,
     │   │                            v. Decisioni tecniche)
@@ -145,14 +155,19 @@ lib/
     │   └── statistiche_screen.dart  card statistiche + filtro associazione (chip)
     ├── tools/
     │   ├── tools_screen.dart          elenco strumenti extra (Materiali usati, Piano turni,
-    │   │                               Magazzino Verde), filtrato dai tool attivi (ToolsProvider)
-    │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni
+    │   │                               Magazzino Verde), filtrato dai tool attivi (ToolsProvider);
+    │   │                               nasconde Piano turni se spostato in navbar (NavigazioneProvider)
+    │   ├── piano_turni_screen.dart    calendario equipaggi/buchi dal foglio Google dei turni;
+    │   │                               sincronizza in sottofondo i fogli salvati sul backend
+    │   │                               condiviso (kPrefSyncFogliAttivo, default attivo)
     │   ├── magazzino_screen.dart      giacenze e movimenti carico/scarico dal gestionale
     │   │                               esterno Magazzino Verde (API JSON con chiave)
-    │   ├── lista_ospedali_screen.dart cerca ospedali per nome/via/città, pulsante Naviga
-    │   │                               (Google Maps o Waze) e vista mappa con tutti gli
-    │   │                               ospedali geocodificati (flutter_map + OSM); scarica
-    │   │                               ospedali per città dal backend condiviso (backend_api.dart)
+    │   ├── lista_ospedali_screen.dart cerca ospedali per nome/via/città/regione, raggruppati
+    │   │                               per regione, pulsante Naviga (Google Maps o Waze) e
+    │   │                               vista mappa con tutti gli ospedali geocodificati
+    │   │                               (flutter_map + OSM); scarica ospedali per città o
+    │   │                               regione dal backend condiviso (backend_api.dart) — la
+    │   │                               configurazione del server è in Impostazioni
     │   ├── scanner_barcode_screen.dart scanner barcode/QR a schermo intero (mobile_scanner),
     │   │                               pop col codice letto; aperto solo dietro !isDesktop
     │   ├── conta_screen.dart          contatore rapido indipendente dall'API: manuale
@@ -161,15 +176,20 @@ lib/
     │   │                               swipe elimina, ripristina (singolo/tutto)
     │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
     │   └── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
-    │                                   (doppioni case-insensitive bloccati: niente UNIQUE sul nome)
+    │                                   (doppioni case-insensitive bloccati: niente UNIQUE sul nome);
+    │                                   pulsante per scaricare il catalogo dal backend condiviso
     └── impostazioni/
-        ├── impostazioni_screen.dart CRUD assoc./persone/ospedali/tipologie + backup + versione app
-        └── turni_filtrati_screen.dart TurniPersonaScreen/TurniOspedaleScreen: turni (e
-                                        assistenze) in cui compare una persona/ospedale
+        └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
+                                      backend condiviso (indirizzo del server, sincronizzazione
+                                      fogli turni) + Navigazione (pagina principale, disattiva
+                                      Attività+Statistiche, Piano turni in navbar). Le anagrafiche (associazioni/
+                                      persone/ospedali/tipologie) sono in screens/anagrafiche/
 
-backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome,
-                                     via, città, coordinate) + pagina admin statica; NON è un
+backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome, via,
+                                     città, regione, coordinate), dei link ai fogli turni mensili
+                                     e del catalogo materiali, + pagina admin statica; NON è un
                                      backend di sincronizzazione, vedi Decisioni tecniche.
+                                     ospedali.go/fogli.go/materiali.go: CRUD di ciascuna risorsa.
                                      backend/Dockerfile + docker-compose.yml sono solo per
                                      sviluppo locale (`docker compose up --build`) — in
                                      produzione il binario è incorporato nell'immagine web
@@ -206,11 +226,12 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 10); `_onOpen` esegue soltanto i PRAGMA di connessione
+(versione corrente: 11); `_onOpen` esegue soltanto i PRAGMA di connessione
 (WAL + foreign_keys).
 
-`ospedali` ha anche `via` (indirizzo testuale) e `lat`/`lng` (coordinate da
-geocoding automatico, v9): vedi il tool "Lista ospedali" in Decisioni tecniche.
+`ospedali` ha anche `via` (indirizzo testuale), `lat`/`lng` (coordinate da
+geocoding automatico, v9) e `regione` (v11, stessa fonte): vedi il tool
+"Lista ospedali" in Decisioni tecniche.
 
 ### Desktop (Windows/Linux/macOS)
 
@@ -468,6 +489,94 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   chiamante rilegge la pref subito dopo il pop, ma il dispose della route
   arriva solo a fine transizione — in dispose i segnalini sarebbero rimasti
   al nome precedente. Svuotare il campo di ricerca cancella anche i segnalini.
+- **Anagrafiche spostate fuori da Impostazioni, raggiungibili da Attività**
+  (`screens/anagrafiche/anagrafiche_screen.dart`): Associazioni, Persone,
+  Ospedali e Tipologie turno (con tutto il loro CRUD, `_SezioneAnag<T>`
+  condivisa, `_dialogNomeEColore`, export/import ospedali) non vivono più
+  in Impostazioni — sono di uso frequente proprio mentre si compila un
+  turno/un'assistenza (creazione al volo di una persona/ospedale nuovo),
+  non un'impostazione. Raggiungibili con un'icona (`Icons.groups_outlined`,
+  tooltip "Anagrafiche") nell'AppBar di Turni e Assistenze, iniettata da
+  `_AttivitaTab` in `app_navigator.dart` tramite il nuovo parametro
+  `azioniExtra` (`List<Widget>`, default vuota) che entrambe le liste
+  aggiungono in coda alle proprie azioni — stesso meccanismo già in uso per
+  `selettore` (un solo punto di contatto, le liste restano usabili anche da
+  sole). `turni_filtrati_screen.dart` (`TurniPersonaScreen`/
+  `TurniOspedaleScreen`) si è spostato con loro in `screens/anagrafiche/`.
+  Impostazioni resta con Backup, Navigazione, Tools attivi, Backend
+  condiviso e versione app.
+- **Impostazioni → Navigazione: pagina principale + disattivazione
+  Attività/Statistiche** (`NavigazioneProvider`, `kPrefPaginaPrincipale`/
+  `kPrefAttivitaStatisticheAttive` in `prefs_keys.dart`): due impostazioni
+  distinte ma correlate — quale pagina si apre all'avvio (Attività o Tools)
+  e un solo interruttore per nascondere insieme le tab Attività (turni +
+  assistenze) e Statistiche, per chi usa l'app solo per gli altri tool (es.
+  solo Lista ospedali/Magazzino Verde). Un solo switch per entrambe le tab,
+  non due separati: le Statistiche aggregano proprio i dati di
+  turni/assistenze, senza Attività non avrebbero nulla da mostrare — a
+  differenza delle anagrafiche (bullet sopra), qui la richiesta esplicita
+  era disattivarle insieme. Stesso motivo di `ToolsProvider` per il
+  provider condiviso: `AppNavigator` e `ImpostazioniScreen` restano
+  entrambe montate nell'`IndexedStack`, senza un provider uno switch
+  cambiato in Impostazioni non aggiornerebbe da sola la `NavigationBar` già
+  a schermo. **Selezione per identità di tab, non per indice numerico**
+  (enum privato `_TabId` in `app_navigator.dart`): disattivare
+  Attività/Statistiche toglie due voci dalla `NavigationBar`/`IndexedStack`,
+  quindi le posizioni delle tab successive si spostano — tenere la tab
+  selezionata per identità (`_TabId.impostazioni` ecc.) invece che per
+  indice fa sì che la tab attualmente aperta resti selezionata alla sua
+  nuova posizione senza alcun caso speciale; l'unico caso speciale reale è
+  quando la tab sparita *era* quella selezionata, gestito ripiegando su
+  Tools **senza sovrascrivere il campo di stato** — se le tab vengono
+  riattivate più tardi la selezione originale torna a valere da sola.
+  **Attività/Statistiche disattivate non possono mai essere la pagina
+  principale**: invariante garantita dal provider stesso (in `carica()` e
+  in `setAttivitaStatisticheAttive(false)`), non lasciata alla UI — se lo
+  fosse, uno stato salvato incoerente (es. da un backup di un device con
+  Attività ancora attiva) farebbe puntare l'avvio a una tab inesistente.
+  `_tabSelezionata` (il campo, non la preferenza) viene allineato alla
+  pagina principale in un `postFrameCallback` dopo `NavigazioneProvider.
+  carica()`, stesso pattern asincrono già in uso per
+  `AnagraficheProvider`/`ToolsProvider` in quel metodo: il default del
+  campo (`_TabId.pianoTurni`) coincide con quello del provider prima del
+  caricamento (vedi bullet sotto sui default), quindi non c'è alcun flash
+  visibile in assenza di una preferenza salvata. Disattivare non tocca mai
+  il database: turni, assistenze e statistiche restano intatti, solo le
+  tab spariscono dalla navigazione (riattivandole, tutto torna visibile
+  esattamente com'era).
+- **Default di navigazione: Attività/Statistiche disattivate, Piano turni
+  in navbar e come pagina principale** (richiesta esplicita dell'utente,
+  applicata anche a device con turni/assistenze già registrati): il
+  fallback di `NavigazioneProvider.carica()` per le tre preferenze assenti
+  è stato scelto così deliberatamente, l'opposto del comportamento
+  "storico" (Attività attiva/pagina principale, Piano turni nella tab
+  Tools). Nessuna versione rilasciata ha mai scritto
+  `kPrefAttivitaStatisticheAttive`/`kPrefPianoTurniInNavbar`/
+  `kPrefPaginaPrincipale` (introdotte in questa stessa release): non esiste
+  quindi un comportamento pregresso da preservare per chi aggiorna, il
+  nuovo default si applica a tutti allo stesso modo, dati compresi (che
+  restano intatti, vedi bullet sopra). Un utente che vuole tornare al
+  comportamento con Attività in primo piano lo fa da Impostazioni →
+  Navigazione, la stessa schermata di sempre.
+- **Piano turni spostabile nella barra di navigazione**
+  (`kPrefPianoTurniInNavbar`, `NavigazioneProvider.pianoTurniInNavbar`,
+  terzo valore `pianoTurni` di `PaginaPrincipale`): interruttore
+  indipendente da quello di Attività/Statistiche, per chi consulta il
+  piano turni più spesso degli altri tool e non vuole passare da Tools
+  ogni volta. Attivarlo **imposta subito Piano turni come pagina
+  principale** (richiesta esplicita, non solo "aggiungilo alla navbar"):
+  `setPianoTurniInNavbar(true)` scrive sia la preferenza sia la pagina
+  principale in un colpo solo. Disattivarlo mentre è la pagina principale
+  ripiega su Attività (se attiva) o Tools, stessa logica di
+  `setAttivitaStatisticheAttive`. `ToolsScreen` nasconde la card Piano
+  turni dalla lista quando è in navbar (sarebbe un accesso duplicato alla
+  stessa schermata) — controllo indipendente da Tools attivi
+  (`ToolsProvider`): un utente può tenere il tool "attivo" ma visibile solo
+  in navbar, i due switch non si escludono a vicenda di proposito. Le
+  funzioni di (de)serializzazione della pagina principale sono centralizzate
+  in `_paginaAStringa`/`_paginaDaStringa` (`app_provider.dart`) invece di
+  ripetere lo switch in ogni metodo: con tre valori possibili invece di due
+  la codifica manuale sparsa sarebbe stata più facile da disallineare.
 - **Permesso INTERNET nel manifest Android (v1.3.1)**: le build debug lo
   includono automaticamente, le release no — il Piano turni (prima feature di
   rete su main) falliva con "Failed host lookup" solo sull'APK release.
@@ -731,27 +840,104 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     `utils/prefs_keys.dart`, `https://ambuturni.maratuck.com/`): a
     differenza del Magazzino Verde (nessun default universale possibile, un
     server per associazione) qui c'è un'unica istanza gestita centralmente,
-    quindi il tool funziona da subito senza configurazione — l'icona
-    ingranaggio in Lista ospedali serve solo a puntare altrove (dev/test).
-    Il dialog di configurazione (`_ConfigServerDialog`) **verifica prima di
-    salvare**: il pulsante principale chiama `BackendApi.verificaConnessione`
-    (GET `/api/health`, non lancia mai eccezioni, timeout più corto — 8s —
-    delle altre chiamate perché qui l'utente aspetta in un dialog) e solo se
+    quindi il tool funziona da subito senza configurazione. Il dialog di
+    configurazione (`_ConfigServerDialog`, in `impostazioni_screen.dart` —
+    vedi bullet sotto sullo spostamento) **verifica prima di salvare**: il
+    pulsante principale chiama `BackendApi.verificaConnessione` (GET
+    `/api/health`, non lancia mai eccezioni, timeout più corto — 8s — delle
+    altre chiamate perché qui l'utente aspetta in un dialog) e solo se
     risponde salva; se fallisce mostra l'errore e il pulsante diventa "Salva
     comunque" (un secondo tap forza il salvataggio: il server potrebbe
     essere solo temporaneamente giù, non deve bloccare per forza — ma
     modificare di nuovo il testo dell'indirizzo fa ripartire da capo la
     verifica, non si "eredita" un bypass per un URL diverso).
-    Il pulsante "Scarica ospedali per città" fa scegliere la città da un
-    elenco (`_SceltaCittaDialog`, scarica `BackendApi.getCitta` all'apertura
-    e la mostra come lista filtrabile) invece di farla digitare alla cieca —
-    se il download dell'elenco fallisce resta comunque un campo libero come
-    ripiego, il download vero (`GET /api/ospedali?citta=`) potrebbe funzionare
-    anche senza quell'elenco. Scelta la città, scarica e fa l'upsert con la
-    stessa funzione condivisa dell'import di backup (`upsertOspedali` in
+    Il pulsante "Scarica ospedali" in Lista ospedali fa scegliere città o
+    regione da un elenco (`_SceltaLuogoDialog`, `SegmentedButton` in cima per
+    passare da `BackendApi.getCitta` a `getRegioni` — vedi bullet "Regione"
+    sotto) invece di far digitare alla cieca — se il download dell'elenco
+    fallisce resta comunque un campo libero come ripiego, il download vero
+    (`GET /api/ospedali?citta=|regione=`) potrebbe funzionare anche senza
+    quell'elenco. Scelto il luogo, scarica e fa l'upsert con la stessa
+    funzione condivisa dell'import di backup (`upsertOspedali` in
     `db/helpers.dart`, estratta da lì per questo riuso — stessa logica, due
     sorgenti diverse: file JSON o rete). `BackendApi` (`utils/backend_api.dart`)
     è Dart puro e testato con `MockClient` come `magazzino_api.dart`.
+  - **Configurazione del backend spostata in Impostazioni**: l'indirizzo
+    del server viveva dietro l'icona ingranaggio di
+    Lista ospedali, ma non è specifico di quel tool (lo riusano anche Piano
+    turni e Materiali usati per fogli/materiali condivisi, vedi bullet
+    sotto) — spostato in una nuova sezione collassabile "Backend condiviso"
+    (`_SezioneBackendCondiviso` in `impostazioni_screen.dart`, stesso
+    pattern collassato-di-default di Tools attivi), insieme a
+    `_ConfigServerDialog` (portata lì di peso). Il download "per città/
+    regione" resta invece in Lista ospedali: è contestuale a quella
+    schermata, non una configurazione. `_SezioneOspedali`/altre schermate
+    leggono comunque `kPrefBackendUrl` direttamente da SharedPreferences,
+    non serve un provider condiviso (letto raramente, non a ogni frame).
+  - **Regione: raggruppamento Lista ospedali + download per regione**:
+    `Ospedale.regione` (v11, colonna nullable come lat/lng) si
+    popola allo stesso modo delle coordinate — geocoding automatico
+    (`GeocodingApi.geocodifica` ora chiama Nominatim con `addressdetails=1`
+    e legge `address.state`, che per un indirizzo italiano è la regione) o
+    inserimento manuale nel form Ospedale, con la stessa regola di priorità
+    già in uso per lat/lng: se l'utente compila anche solo uno tra
+    lat/lng/regione a mano, il geocoding automatico viene saltato del tutto
+    (esteso da "solo lat/lng" a includere la regione, comportamento più
+    prevedibile che aggiornare i singoli campi con priorità diverse). La
+    funzione che scrive questi campi è stata rinominata da
+    `aggiornaCoordinateOspedale` a **`aggiornaGeocodingOspedale`**, con lat/
+    lng/regione tutti opzionali (si scrive solo ciò che viene passato — un
+    aggiornamento parziale, es. solo regione da un `upsertOspedali`, non
+    azzera le coordinate già presenti). Lista ospedali raggruppa la vista
+    elenco per regione (intestazioni di sezione inline in una `ListView`,
+    stessa filosofia "niente package" del calendario mensile — ordine
+    alfabetico con un bucket "Senza regione" sempre in fondo) e il pulsante
+    "Scarica ospedali" offre "Per città"/"Per regione" nello stesso dialog
+    (vedi bullet sopra). Lato backend: colonna `ospedali.regione`
+    (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, niente sistema di
+    migrazioni lì — un solo campo non lo giustifica), `GET /api/regioni`
+    gemella di `/api/citta` (stesso `DISTINCT ON (lower(...))`), filtro
+    `?regione=` su `GET /api/ospedali` con priorità a `?citta=` se entrambi
+    passati (nessun caso d'uso per l'AND). Pagina admin: campo Regione nel
+    form e colonna in tabella, incluso nella ricerca lato client.
+  - **Fogli turni sul backend, sincronizzati automaticamente**: nuova
+    tabella `fogli_turni` (`chiave` "aaaa-mm" PRIMARY KEY, `url`) con
+    lo stesso schema di fiducia di `/api/ospedali` — lettura pubblica
+    (`GET /api/fogli`), scrittura solo da admin (`POST`/`DELETE`, pagina
+    admin: card dedicata con form chiave+link e tabella). Nessuna scrittura
+    dal client: l'app non ha alcun login (solo la pagina admin ce l'ha),
+    quindi il client può solo scaricare, mai proporre un link al backend.
+    Lato client, `PianoTurniScreen._sincronizzaFogliDalBackend` (chiamata
+    da `_ripristinaPreferenze`, quindi a ogni apertura del tool) scarica
+    `BackendApi.getFogli()` e fa un **merge additivo** nell'archivio locale
+    (`kPrefPianoTurniFogli`): aggiunge solo le chiavi assenti, senza mai
+    sovrascrivere un link che l'utente ha già incollato/verificato per quel
+    mese — un aggiornamento silenzioso di un URL già in uso sarebbe più
+    sorprendente che utile. Attivo di default (`kPrefSyncFogliAttivo`,
+    assente = true) con uno `SwitchListTile` in Impostazioni → Backend
+    condiviso; come il geocoding, è best-effort e silenzioso (nessun errore
+    in UI, un backend vecchio senza l'endpoint o irraggiungibile non deve
+    disturbare l'apertura dello strumento).
+  - **Catalogo materiali sul backend**: stesso schema pubblico-
+    lettura/admin-scrittura di ospedali/fogli, tabella `materiali(id, nome)`
+    lato server (solo il nome: quantità/posizione sono per-device, il
+    backend condivide solo l'anagrafica per popolare un catalogo su un
+    device nuovo). `POST /api/materiali/import` mirror di
+    `/api/ospedali/import` (upsert per nome, array puro o
+    `{"materiali":[...]}`). Lato client, `upsertMateriali` in
+    `db/helpers.dart` (match case-insensitive come il `MaterialePicker`,
+    nessun aggiornamento sui match — un materiale ha solo il nome) e un
+    pulsante "Scarica dal backend condiviso" nell'AppBar di
+    `materiali_screen.dart`.
+  - **Nessuno scoping multi-associazione sul backend**: ospedali, fogli
+    turni e materiali condividono lo stesso schema "un'unica istanza,
+    tabella piatta" già scelto per gli ospedali — chi vuole dati isolati
+    per la propria associazione fa girare la propria istanza del backend
+    (indirizzo configurabile, vedi sopra) invece di condividere quella
+    centralizzata di default. Se in futuro più associazioni dovessero
+    condividere davvero la stessa istanza pubblica per fogli/materiali,
+    servirebbe una chiave di scoping (non implementata: nessun caso d'uso
+    reale oggi, aggiunta prematura).
 - **`pubspec.lock` versionato**: raccomandazione Flutter per le app (non le
   librerie) — build riproducibili in CI. Gli step actions/cache (Gradle/pub)
   sono stati rimossi dal workflow: senza cache backend sull'istanza Gitea
@@ -965,30 +1151,46 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Assistenze**: come i turni ma senza tipologia né servizi; ricerca
   testuale (descrizione/note) e vista calendario come i turni.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
-- ✅ **Impostazioni**: CRUD anagrafiche, "Vedi turni" per persona/ospedale,
-  Tools attivi (attiva/disattiva i tool mostrati in Tools).
+- ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
+  associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
+  persona/ospedale, export/import ospedali.
+- ✅ **Impostazioni**: backup, Tools attivi (attiva/disattiva i tool
+  mostrati in Tools), backend condiviso, navigazione.
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.
 - ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
-- ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione), nessuno storico.
+- ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione),
+  nessuno storico. Pulsante per scaricare il catalogo condiviso dal backend
+  (upsert per nome, case-insensitive).
 - ✅ **Tools → Piano turni**: calendario equipaggi/buchi dal foglio Google
   mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
-  ruolo, aggiunta del turno al calendario di sistema).
+  ruolo, aggiunta del turno al calendario di sistema). Sincronizza in
+  sottofondo i fogli salvati sul backend condiviso (merge additivo,
+  disattivabile in Impostazioni → Backend condiviso).
 - ✅ **Tools → Magazzino Verde**: giacenze e movimenti carico/scarico dal
   gestionale di magazzino esterno (API JSON con chiave, evidenza sotto
   scorta, scansione barcode/QR su mobile e web, contatore rapido manuale
   o a scansione scollegato dall'API).
-- ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città,
-  pulsante Naviga (Google Maps o Waze) e vista mappa con tutti gli ospedali
-  geocodificati automaticamente (nessuna API key) o con coordinate inserite
-  a mano nel form Ospedale. Anagrafica ospedali esportabile/importabile a
-  parte (Impostazioni → Ospedali), upsert per nome, senza toccare il resto
-  dei dati. Ospedali scaricabili per città anche dal backend condiviso
-  (`backend/`, indirizzo configurabile con default centralizzato).
-- ✅ **Backend condiviso ospedali** (`backend/`, Go+PostgreSQL): API pubblica
-  di sola lettura per città + pagina admin (login) per aggiungerli/eliminarli
-  uno alla volta o in blocco da file JSON, incorporato nell'immagine Docker
-  della versione web.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 123 test unitari.
+- ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
+  vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
+  Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente
+  (nessuna API key) o con coordinate/regione inserite a mano nel form
+  Ospedale. Anagrafica ospedali esportabile/importabile a parte
+  (Impostazioni → Ospedali), upsert per nome, senza toccare il resto dei
+  dati. Ospedali scaricabili per città o per regione anche dal backend
+  condiviso (`backend/`).
+- ✅ **Impostazioni → Backend condiviso**: indirizzo del server (spostato da
+  Lista ospedali) e interruttore per la sincronizzazione automatica dei
+  fogli turni (default attivo).
+- ✅ **Impostazioni → Navigazione**: scelta della pagina principale
+  all'avvio (Attività, Tools o Piano turni), interruttore per disattivare/
+  nascondere insieme le tab Attività (turni + assistenze) e Statistiche, e
+  interruttore per spostare il tool Piano turni dalla tab Tools a una voce
+  propria nella barra di navigazione.
+- ✅ **Backend condiviso** (`backend/`, Go+PostgreSQL): API pubblica di sola
+  lettura per ospedali (per città/regione), fogli turni e catalogo
+  materiali + pagina admin (login) per gestirli uno alla volta o in blocco
+  da file JSON, incorporato nell'immagine Docker della versione web.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 152 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO
@@ -997,13 +1199,10 @@ Le voci completate sono già documentate in Funzionalità implementate/Decisioni
 tecniche e vengono rimosse da qui una volta chiuse, per non tenere in questo
 elenco un changelog duplicato.
 
-(La sincronizzazione completa dei dati
-dell'app con un backend non è più in programma: il backend condiviso serve
-solo l'elenco ospedali, vedi Decisioni tecniche — il backup JSON locale
-resta l'unico modo per spostare i dati tra device.)
+(La sincronizzazione completa dei dati dell'app con un backend non è più in
+programma: il backend condiviso serve solo elenco ospedali, fogli turni e
+catalogo materiali — vedi Decisioni tecniche — il backup JSON locale resta
+l'unico modo per spostare i dati "vivi" — turni, persone, assistenze... —
+tra device.)
 
-- [ ] voglio spostare la configurazione del backend nelle impostazioni e toglierlo dal lista ospedali
-- [ ] voglio che la lista degli ospedali sia raggruppata per regione, e aggiungere l'opzione per scaricare tutti quelli della regione
-- [ ] voglio che aggiungi il fatto che sul backend vengano salvato i link dei fogli turni, e che li scarichi aggioranmente se l'impostazione è impostata (di default attiva)
-- [ ] aggiuni anche nel backend la lista dei materiali
-- [ ] nelle impostazioni voglio un impostazione per impostare la pagina principale se turni/assisenze o tools, e e anche di poter disattivare turni/sistenze
+Nessuna voce aperta al momento.

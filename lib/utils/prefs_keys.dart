@@ -24,6 +24,32 @@ const kPrefMagazzinoApiKey = 'magazzino_api_key';
 const kPrefBackendUrl = 'backend_url';
 const kBackendUrlDefault = 'https://ambuturni.maratuck.com/';
 
+// Sincronizzazione automatica dei fogli turni dal backend condiviso (tool
+// Piano turni): assente = attiva (default true, vedi CLAUDE.md). Il backend
+// li tiene solo in lettura per i client (scrittura riservata alla pagina
+// admin), quindi qui basta un interruttore sì/no, non credenziali.
+const kPrefSyncFogliAttivo = 'backend_sync_fogli_attivo';
+
+// Navigazione principale (AppNavigator): quale tab è la "pagina principale"
+// mostrata all'avvio ('attivita', 'tools' o 'piano_turni') e se le tab
+// Attività (turni + assistenze) e Statistiche sono visibili del tutto.
+// Default (entrambe le chiavi assenti, richiesta esplicita anche per device
+// con dati già esistenti — nessuna versione precedente ha mai scritto
+// queste chiavi, quindi non c'è un comportamento "storico" da preservare):
+// Attività/Statistiche DISATTIVATE e Piano turni in navbar/pagina
+// principale (vedi kPrefPianoTurniInNavbar sotto e NavigazioneProvider).
+// Chi disattiva Attività/Statistiche mentre Attività è impostata come
+// pagina principale la vede spostata automaticamente su Tools.
+const kPrefPaginaPrincipale = 'pagina_principale';
+const kPrefAttivitaStatisticheAttive = 'attivita_statistiche_attive';
+
+// Sposta il tool Piano turni dalla tab Tools a una voce propria nella barra
+// di navigazione (assente = true, default: vedi sopra): attivarla imposta
+// anche Piano turni come pagina principale (richiesta esplicita),
+// disattivarla ripiega la pagina principale su Attività/Tools se era
+// impostata su Piano turni.
+const kPrefPianoTurniInNavbar = 'piano_turni_in_navbar';
+
 // Elenco (List<String>) degli ID dei tool attivi in Impostazioni → Tools
 // attivi, vedi utils/tools_config.dart. Assente = mai salvato: si applicano
 // i default del catalogo (attivoDiDefault), non tutti abilitati (es. il

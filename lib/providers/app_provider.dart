@@ -203,3 +203,111 @@ class ToolsProvider extends ChangeNotifier {
     await prefs.setStringList(kPrefToolsAttivi, _attivi.toList());
   }
 }
+
+/// Le pagine tra cui si può scegliere come "pagina principale" mostrata
+/// all'avvio (Impostazioni → Navigazione). Statistiche e Impostazioni non
+/// sono proponibili come home: sono destinazioni secondarie, non un punto
+/// di partenza sensato per aprire l'app. `pianoTurni` è selezionabile solo
+/// quando il tool è stato spostato in navbar (kPrefPianoTurniInNavbar).
+enum PaginaPrincipale { attivita, tools, pianoTurni }
+
+/// Converte [PaginaPrincipale] nella stringa persistita in
+/// kPrefPaginaPrincipale, e viceversa (usata sia da carica() sia dai setter,
+/// per non duplicare l'encoding in più punti).
+String _paginaAStringa(PaginaPrincipale p) => switch (p) {
+      PaginaPrincipale.tools => 'tools',
+      PaginaPrincipale.pianoTurni => 'piano_turni',
+      PaginaPrincipale.attivita => 'attivita',
+    };
+
+PaginaPrincipale _paginaDaStringa(String? s) => switch (s) {
+      'tools' => PaginaPrincipale.tools,
+      'attivita' => PaginaPrincipale.attivita,
+      _ => PaginaPrincipale.pianoTurni,
+    };
+
+/// Provider per le impostazioni di navigazione (AppNavigator): quale pagina
+/// è la "home" mostrata all'avvio, se le tab Attività (turni + assistenze) e
+/// Statistiche sono visibili (un solo interruttore per entrambe: le
+/// statistiche aggregano proprio i dati di turni/assistenze, quindi senza
+/// Attività non avrebbero nulla da mostrare) e se il tool Piano turni è
+/// spostato dalla tab Tools a una voce propria in navbar. Stesso motivo di
+/// ToolsProvider: AppNavigator, ToolsScreen e ImpostazioniScreen restano
+/// tutte montate nell'IndexedStack, quindi uno switch cambiato in
+/// Impostazioni non farebbe aggiornare da soli la NavigationBar/la lista
+/// Tools già mostrate senza un provider condiviso.
+/// **Default (assente qualunque preferenza salvata, anche su un device con
+/// dati già esistenti): Attività/Statistiche disattivate, Piano turni in
+/// navbar e come pagina principale** — richiesta esplicita dell'utente,
+/// non il comportamento "storico" (che sarebbe stato Attività attiva/pagina
+/// principale): dato che nessuna versione con queste preferenze è mai stata
+/// rilasciata, non c'è alcun device che le abbia già scritte, quindi
+/// cambiare qui il fallback si applica a tutti, dati compresi (i dati non
+/// vengono toccati: solo la tab da cui si parte cambia).
+class NavigazioneProvider extends ChangeNotifier {
+  bool _attivitaStatisticheAttive = false;
+  bool _pianoTurniInNavbar = true;
+  PaginaPrincipale _paginaPrincipale = PaginaPrincipale.pianoTurni;
+  bool _caricato = false;
+
+  bool get caricato => _caricato;
+  bool get attivitaStatisticheAttive => _attivitaStatisticheAttive;
+  bool get pianoTurniInNavbar => _pianoTurniInNavbar;
+  PaginaPrincipale get paginaPrincipale => _paginaPrincipale;
+
+  /// true se [pagina] corrisponde a una tab attualmente visibile in navbar:
+  /// usata per correggere una pagina principale salvata ma non più valida
+  /// (es. Attività scelta come home e poi disattivata).
+  bool _paginaValida(PaginaPrincipale pagina) => switch (pagina) {
+        PaginaPrincipale.attivita => _attivitaStatisticheAttive,
+        PaginaPrincipale.pianoTurni => _pianoTurniInNavbar,
+        PaginaPrincipale.tools => true,
+      };
+
+  Future<void> carica() async {
+    final prefs = await SharedPreferences.getInstance();
+    _attivitaStatisticheAttive = prefs.getBool(kPrefAttivitaStatisticheAttive) ?? false;
+    _pianoTurniInNavbar = prefs.getBool(kPrefPianoTurniInNavbar) ?? true;
+    _paginaPrincipale = _paginaDaStringa(prefs.getString(kPrefPaginaPrincipale));
+    if (!_paginaValida(_paginaPrincipale)) _paginaPrincipale = PaginaPrincipale.tools;
+    _caricato = true;
+    notifyListeners();
+  }
+
+  /// Disattivare Attività/Statistiche mentre Attività è la pagina principale
+  /// sposta la scelta su Tools (persistito subito): altrimenti l'app
+  /// aprirebbe una tab che non esiste più nella NavigationBar.
+  Future<void> setAttivitaStatisticheAttive(bool valore) async {
+    _attivitaStatisticheAttive = valore;
+    final sposta = !valore && _paginaPrincipale == PaginaPrincipale.attivita;
+    if (sposta) _paginaPrincipale = PaginaPrincipale.tools;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kPrefAttivitaStatisticheAttive, valore);
+    if (sposta) await prefs.setString(kPrefPaginaPrincipale, _paginaAStringa(_paginaPrincipale));
+  }
+
+  /// Attivare questa opzione sposta subito Piano turni come pagina
+  /// principale (richiesta esplicita: è il motivo per cui la si attiva).
+  /// Disattivarla mentre Piano turni è la pagina principale ripiega su
+  /// Attività (se attiva) o Tools, per lo stesso motivo del metodo sopra.
+  Future<void> setPianoTurniInNavbar(bool valore) async {
+    _pianoTurniInNavbar = valore;
+    if (valore) {
+      _paginaPrincipale = PaginaPrincipale.pianoTurni;
+    } else if (_paginaPrincipale == PaginaPrincipale.pianoTurni) {
+      _paginaPrincipale = _attivitaStatisticheAttive ? PaginaPrincipale.attivita : PaginaPrincipale.tools;
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kPrefPianoTurniInNavbar, valore);
+    await prefs.setString(kPrefPaginaPrincipale, _paginaAStringa(_paginaPrincipale));
+  }
+
+  Future<void> setPaginaPrincipale(PaginaPrincipale valore) async {
+    _paginaPrincipale = valore;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kPrefPaginaPrincipale, _paginaAStringa(valore));
+  }
+}

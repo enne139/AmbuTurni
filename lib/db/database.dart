@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS ospedali (
   via TEXT,
   lat REAL,
   lng REAL,
+  regione TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   is_synced INTEGER DEFAULT 0
@@ -189,7 +190,7 @@ Future<Database> getDb() async {
       : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 10,
+    version: 11,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -436,6 +437,13 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // tabella per un beneficio nullo.
     try { await db.execute('DROP TABLE IF EXISTS sync_meta'); } catch (_) {}
     try { await db.execute('DROP TABLE IF EXISTS deletions'); } catch (_) {}
+  }
+  if (oldVersion < 11) {
+    // Tool "Lista ospedali": regione, come lat/lng calcolata dal geocoding
+    // dell'indirizzo (o inserita a mano) — usata per raggruppare la lista e
+    // per scaricare in blocco gli ospedali di un'intera regione dal backend
+    // condiviso.
+    try { await db.execute('ALTER TABLE ospedali ADD COLUMN regione TEXT'); } catch (_) {}
   }
 }
 

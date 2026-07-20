@@ -54,6 +54,20 @@ void main() {
       expect(richieste.single.url.queryParameters.containsKey('citta'), isFalse);
     });
 
+    test('passa regione come query param', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json([], 200), richieste);
+      await api.getOspedali(regione: 'Lombardia');
+      expect(richieste.single.url.queryParameters['regione'], 'Lombardia');
+    });
+
+    test('regione vuota o solo spazi non viene passata come query', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json([], 200), richieste);
+      await api.getOspedali(regione: '   ');
+      expect(richieste.single.url.queryParameters.containsKey('regione'), isFalse);
+    });
+
     test('parsa l\'elenco ospedali', () async {
       final api = _api(
         _json([
@@ -139,6 +153,68 @@ void main() {
         () => api.getCitta(),
         throwsA(isA<BackendApiException>().having((e) => e.message, 'message', contains('fuori servizio'))),
       );
+    });
+  });
+
+  group('getRegioni', () {
+    test('chiama GET /api/regioni e parsa l\'elenco', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json(['Lombardia', 'Veneto'], 200), richieste);
+      final regioni = await api.getRegioni();
+      expect(regioni, ['Lombardia', 'Veneto']);
+      expect(richieste.single.url.toString(), 'https://backend.test/api/regioni');
+    });
+
+    test('errore HTTP riporta il messaggio del server', () async {
+      final api = _api(_json({'error': 'fuori servizio'}, 500), []);
+      expect(
+        () => api.getRegioni(),
+        throwsA(isA<BackendApiException>().having((e) => e.message, 'message', contains('fuori servizio'))),
+      );
+    });
+  });
+
+  group('getFogli', () {
+    test('chiama GET /api/fogli e restituisce una mappa chiave->url', () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json([
+          {'chiave': '2026-07', 'url': 'https://esempio.it/luglio'},
+          {'chiave': '2026-06', 'url': 'https://esempio.it/giugno'},
+        ], 200),
+        richieste,
+      );
+      final fogli = await api.getFogli();
+      expect(fogli, {'2026-07': 'https://esempio.it/luglio', '2026-06': 'https://esempio.it/giugno'});
+      expect(richieste.single.url.toString(), 'https://backend.test/api/fogli');
+    });
+
+    test('righe senza chiave o url valide vengono ignorate', () async {
+      final api = _api(
+        _json([
+          {'chiave': '2026-07'},
+          {'url': 'https://esempio.it/senza-chiave'},
+        ], 200),
+        [],
+      );
+      expect(await api.getFogli(), isEmpty);
+    });
+  });
+
+  group('getMateriali', () {
+    test('chiama GET /api/materiali e parsa l\'elenco', () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json([
+          {'id': '1', 'nome': 'Garze'},
+          {'id': '2', 'nome': 'Guanti'},
+        ], 200),
+        richieste,
+      );
+      final lista = await api.getMateriali();
+      expect(lista, hasLength(2));
+      expect(lista.first['nome'], 'Garze');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/materiali');
     });
   });
 

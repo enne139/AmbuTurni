@@ -22,16 +22,23 @@ final Map<String, WidgetBuilder> _destinazioni = {
 /// Mostra solo i tool attivati da Impostazioni → Tools attivi (ToolsProvider):
 /// pensata per ospitare più strumenti senza ridisegnare la navigazione
 /// principale, senza però ingombrare la lista con quelli che non si usano.
+/// Piano turni sparisce da qui se spostato in navbar (Impostazioni →
+/// Navigazione, NavigazioneProvider.pianoTurniInNavbar): sarebbe un accesso
+/// duplicato alla stessa schermata.
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<ToolsProvider>();
+    final pianoTurniInNavbar = context.watch<NavigazioneProvider>().pianoTurniInNavbar;
     if (!tools.caricato) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final attivi = kToolsDisponibili.where((t) => tools.attivo(t.id)).toList();
+    final attivi = kToolsDisponibili
+        .where((t) => tools.attivo(t.id))
+        .where((t) => !(t.id == kToolPianoTurni && pianoTurniInNavbar))
+        .toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Tools')),
       body: attivi.isEmpty

@@ -10,7 +10,7 @@ import '../assistenze/assistenza_detail.dart';
 import '../turni/turno_detail.dart';
 
 /// Elenco di turni e assistenze in cui compare una determinata [Persona],
-/// raggiungibile con un tap dalla lista Persone in Impostazioni.
+/// raggiungibile con un tap dalla lista Persone in Anagrafiche.
 class TurniPersonaScreen extends StatefulWidget {
   final Persona persona;
   const TurniPersonaScreen({super.key, required this.persona});
@@ -84,7 +84,7 @@ class _TurniPersonaScreenState extends State<TurniPersonaScreen> {
 }
 
 /// Elenco dei turni in cui compare un determinato [Ospedale] (tramite i suoi servizi),
-/// raggiungibile con un tap dalla lista Ospedali in Impostazioni.
+/// raggiungibile con un tap dalla lista Ospedali in Anagrafiche.
 class TurniOspedaleScreen extends StatefulWidget {
   final Ospedale ospedale;
   const TurniOspedaleScreen({super.key, required this.ospedale});

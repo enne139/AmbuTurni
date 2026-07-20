@@ -66,11 +66,15 @@ class BackendApi {
     }
   }
 
-  /// GET /api/ospedali — elenco ospedali (nome/via/citta/lat/lng, stesso
-  /// formato di db/backup.dart), filtrato per città se indicata.
-  Future<List<Map<String, dynamic>>> getOspedali({String? citta}) async {
-    final query = (citta != null && citta.trim().isNotEmpty) ? {'citta': citta.trim()} : null;
-    final uri = Uri.parse('$baseUrl/api/ospedali').replace(queryParameters: query);
+  /// GET /api/ospedali — elenco ospedali (nome/via/citta/lat/lng/regione,
+  /// stesso formato di db/backup.dart), filtrato per città o per regione se
+  /// indicate (città ha priorità se passate entrambe, stessa regola del
+  /// server: non c'è un caso d'uso per l'AND dei due filtri).
+  Future<List<Map<String, dynamic>>> getOspedali({String? citta, String? regione}) async {
+    final query = <String, String>{};
+    if (citta != null && citta.trim().isNotEmpty) query['citta'] = citta.trim();
+    if (regione != null && regione.trim().isNotEmpty) query['regione'] = regione.trim();
+    final uri = Uri.parse('$baseUrl/api/ospedali').replace(queryParameters: query.isEmpty ? null : query);
     final resp = await _client.get(uri).timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
     final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -91,6 +95,46 @@ class BackendApi {
       throw const BackendApiException('Risposta del server non riconosciuta.');
     }
     return decoded.whereType<String>().toList();
+  }
+
+  /// GET /api/regioni — stessa cosa di getCitta ma sulla regione: usata per
+  /// il raggruppamento della Lista ospedali e per "Scarica ospedali per regione".
+  Future<List<String>> getRegioni() async {
+    final resp = await _client.get(Uri.parse('$baseUrl/api/regioni')).timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    if (decoded is! List) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return decoded.whereType<String>().toList();
+  }
+
+  /// GET /api/fogli — link ai fogli del piano turni mensile salvati sul
+  /// backend (pagina admin), come {"chiave": url}: usata per la
+  /// sincronizzazione automatica del tool Piano turni (kPrefSyncFogliAttivo).
+  Future<Map<String, String>> getFogli() async {
+    final resp = await _client.get(Uri.parse('$baseUrl/api/fogli')).timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    if (decoded is! List) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return {
+      for (final riga in decoded.whereType<Map>())
+        if (riga['chiave'] is String && riga['url'] is String) riga['chiave'] as String: riga['url'] as String,
+    };
+  }
+
+  /// GET /api/materiali — catalogo condiviso dei nomi materiali (Tools →
+  /// Materiali usati), per popolare il catalogo locale su un device nuovo.
+  Future<List<Map<String, dynamic>>> getMateriali() async {
+    final resp = await _client.get(Uri.parse('$baseUrl/api/materiali')).timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    if (decoded is! List) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return decoded.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
   }
 
   Never _lanciaErrore(http.Response resp) {

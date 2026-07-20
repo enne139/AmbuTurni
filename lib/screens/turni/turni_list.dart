@@ -26,7 +26,12 @@ class TurniList extends StatefulWidget {
   /// selettore Turni/Assistenze (v. app_navigator.dart), la lista non deve
   /// sapere altro.
   final PreferredSizeWidget? selettore;
-  const TurniList({super.key, this.selettore});
+  /// Azioni aggiuntive in coda a quelle dell'AppBar: la tab "Attività" ci
+  /// mette l'icona per aprire Anagrafiche (Associazioni/Persone/Ospedali/
+  /// Tipologie, spostate da Impostazioni). Vuota di default: la lista resta
+  /// usabile anche da sola senza dipendere da app_navigator.dart.
+  final List<Widget> azioniExtra;
+  const TurniList({super.key, this.selettore, this.azioniExtra = const []});
 
   @override
   State<TurniList> createState() => _TurniListState();
@@ -184,6 +189,7 @@ class _TurniListState extends State<TurniList> {
                 ],
               ),
           ],
+          ...widget.azioniExtra,
         ],
         bottom: widget.selettore,
       ),

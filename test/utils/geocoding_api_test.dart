@@ -57,6 +57,39 @@ void main() {
       expect(coord.lng, 9.19);
     });
 
+    test('passa addressdetails=1 nella richiesta', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json([], 200), richieste);
+      await api.geocodifica('Via Roma 1, Milano');
+      expect(richieste.single.url.queryParameters['addressdetails'], '1');
+    });
+
+    test('parsa address.state come regione', () async {
+      final api = _api(
+        _json([
+          {
+            'lat': '45.4642',
+            'lon': '9.1900',
+            'address': {'state': 'Lombardia'},
+          }
+        ], 200),
+        [],
+      );
+      final coord = await api.geocodifica('Duomo, Milano');
+      expect(coord!.regione, 'Lombardia');
+    });
+
+    test('address assente o senza state → regione null', () async {
+      final api = _api(
+        _json([
+          {'lat': '45.4642', 'lon': '9.1900'},
+        ], 200),
+        [],
+      );
+      final coord = await api.geocodifica('Duomo, Milano');
+      expect(coord!.regione, isNull);
+    });
+
     test('nessun risultato → null', () async {
       final api = _api(_json([], 200), []);
       final coord = await api.geocodifica('indirizzo inesistente');

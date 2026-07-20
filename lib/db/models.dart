@@ -87,6 +87,10 @@ class Ospedale {
   // comunque utilizzabile ovunque, semplicemente non compare sulla mappa.
   final double? lat;
   final double? lng;
+  // Regione (v11): come lat/lng, calcolata dal geocoding dell'indirizzo o
+  // inseribile a mano; usata per raggruppare la Lista ospedali e per
+  // scaricare in blocco gli ospedali di un'intera regione dal backend.
+  final String? regione;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -98,6 +102,7 @@ class Ospedale {
     this.via,
     this.lat,
     this.lng,
+    this.regione,
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -115,6 +120,7 @@ class Ospedale {
         via: m['via'] as String?,
         lat: (m['lat'] as num?)?.toDouble(),
         lng: (m['lng'] as num?)?.toDouble(),
+        regione: m['regione'] as String?,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -127,6 +133,7 @@ class Ospedale {
         'via': via,
         'lat': lat,
         'lng': lng,
+        'regione': regione,
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
