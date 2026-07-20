@@ -311,3 +311,44 @@ class NavigazioneProvider extends ChangeNotifier {
     await prefs.setString(kPrefPaginaPrincipale, _paginaAStringa(valore));
   }
 }
+
+/// Stato del tutorial di navigazione a schermo intero
+/// (widgets/tutorial_overlay.dart): mostrato una sola volta al primo avvio
+/// (kPrefTutorialCompletato assente) e rivedibile in ogni momento dal
+/// pulsante in Impostazioni → Navigazione. Provider condiviso per lo stesso
+/// motivo di ToolsProvider/NavigazioneProvider: il pulsante "Rivedi
+/// tutorial" vive in ImpostazioniScreen, ma solo AppNavigator ha la
+/// NavigationBar reale da cui calcolare le aree da evidenziare — le due
+/// schermate restano entrambe montate nell'IndexedStack, quindi serve stato
+/// condiviso perché un tap nell'una faccia scattare l'overlay nell'altra.
+/// `richiesta` è un contatore, non un bool: incrementarlo fa sempre scattare
+/// una nuova comparsa anche a tutorial già completato (rivedibile a
+/// piacere), mentre `completato` decide solo se mostrarlo in automatico al
+/// primo avvio.
+class TutorialProvider extends ChangeNotifier {
+  bool _completato = false;
+  int _richiesta = 0;
+
+  bool get completato => _completato;
+  int get richiesta => _richiesta;
+
+  Future<void> carica() async {
+    final prefs = await SharedPreferences.getInstance();
+    _completato = prefs.getBool(kPrefTutorialCompletato) ?? false;
+    if (!_completato) _richiesta++;
+    notifyListeners();
+  }
+
+  /// Richiamato dal pulsante "Rivedi il tutorial" in Impostazioni.
+  void richiediReplay() {
+    _richiesta++;
+    notifyListeners();
+  }
+
+  Future<void> segnaCompletato() async {
+    if (_completato) return;
+    _completato = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kPrefTutorialCompletato, true);
+  }
+}

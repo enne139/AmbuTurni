@@ -202,11 +202,13 @@ class _SezioneBackupState extends State<_SezioneBackup> {
 /// Pagina principale mostrata all'avvio (Attività, Tools o Piano turni),
 /// interruttore per disattivare del tutto le tab Attività (turni +
 /// assistenze) e Statistiche insieme (per chi usa l'app solo per gli altri
-/// tool, es. solo Magazzino Verde/Lista ospedali) e interruttore per
+/// tool, es. solo Magazzino Verde/Lista ospedali), interruttore per
 /// spostare il tool Piano turni dalla tab Tools a una voce propria in
-/// navbar (imposta anche Piano turni come pagina principale). Collassata di
-/// default come le altre sezioni di configurazione, stesso pattern di
-/// _SezioneToolsAttivi/_SezioneBackendCondiviso.
+/// navbar (imposta anche Piano turni come pagina principale) e pulsante per
+/// rivedere a piacere il tutorial di navigazione (TutorialProvider,
+/// widgets/tutorial_overlay.dart) mostrato in automatico al primo avvio.
+/// Collassata di default come le altre sezioni di configurazione, stesso
+/// pattern di _SezioneToolsAttivi/_SezioneBackendCondiviso.
 class _SezioneNavigazione extends StatefulWidget {
   const _SezioneNavigazione();
 
@@ -303,6 +305,14 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
                     value: nav.pianoTurniInNavbar,
                     activeTrackColor: kPrimary,
                     onChanged: (v) => context.read<NavigazioneProvider>().setPianoTurniInNavbar(v),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.school_outlined, color: Colors.white70),
+                    title: const Text('Rivedi il tutorial di navigazione'),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+                    onTap: () => context.read<TutorialProvider>().richiediReplay(),
                   ),
                 ],
               ),

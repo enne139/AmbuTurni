@@ -131,7 +131,9 @@ lib/
 │   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
 │   ├── calendario_mensile.dart    CalendarioMensile<T>: vista calendario generica (turni e assistenze)
 │   ├── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
-│   └── nota_markdown.dart         NotaMarkdown: rendering markdown delle note, stile coerente col tema scuro
+│   ├── nota_markdown.dart         NotaMarkdown: rendering markdown delle note, stile coerente col tema scuro
+│   └── tutorial_overlay.dart      avviaTutorial(): overlay spotlight a schermo intero (nessun
+│                                   package) per il tutorial di navigazione, vedi TutorialProvider
 └── screens/
     ├── shared/
     │   └── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
@@ -577,6 +579,51 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   in `_paginaAStringa`/`_paginaDaStringa` (`app_provider.dart`) invece di
   ripetere lo switch in ogni metodo: con tre valori possibili invece di due
   la codifica manuale sparsa sarebbe stata più facile da disallineare.
+- **Tutorial di navigazione a schermo intero** (`widgets/tutorial_overlay.dart`,
+  `TutorialProvider` in `app_provider.dart`): con la navigazione ormai
+  configurabile in più modi (tab disattivabili, Piano turni spostabile in
+  navbar), un nuovo utente rischia di non capire subito cosa c'è dietro
+  ogni voce della `NavigationBar` — un overlay "a spotlight" evidenzia in
+  sequenza ogni tab attualmente visibile con una card di spiegazione,
+  mostrato in automatico una sola volta al primo avvio e rivedibile in
+  qualsiasi momento dal pulsante "Rivedi il tutorial di navigazione" in
+  Impostazioni → Navigazione.
+  - **Nessun package** (`avviaTutorial` in `tutorial_overlay.dart`), stessa
+    scelta "niente dipendenza per poco codice" del calendario mensile: un
+    solo `OverlayEntry` con `CustomPainter` (`Path.combine` con
+    `PathOperation.difference` per ritagliare il "buco" nello scrim scuro)
+    e un `Completer` per restituire il controllo a chi ha avviato il
+    tutorial una volta finito o saltato.
+  - **Aree evidenziate calcolate dividendo la larghezza della
+    `NavigationBar` per il numero di tab**, non con una `GlobalKey` per
+    singola icona: `NavigationDestination` anima internamente una coppia
+    `icon`/`selectedIcon` sovrapposta per la transizione Material 3, quindi
+    due chiavi sullo stesso slot avrebbero rischiato un conflitto — una
+    sola `GlobalKey` sul widget `NavigationBar` stesso, con un conto
+    aritmetico sulla sua `RenderBox`, è più robusto e molto meno codice.
+  - **Piano turni ha 3 passi invece di 1** (`_descrizioneTutorial` in
+    `app_navigator.dart` restituisce una `List<String>`, non una singola
+    stringa): è il tool più complesso dell'app, un solo passo avrebbe dovuto
+    scegliere tra un testo generico ("c'è un calendario con dei buchi") o un
+    unico paragrafo troppo lungo per una card. I passi extra condividono
+    area e titolo del passo singolo degli altri tab (cambia solo la
+    descrizione) e coprono: da dove arriva il foglio (sync automatica dal
+    backend), il significato dei pallini per fascia e il tap per il
+    dettaglio equipaggi, e la ricerca per nome col segnalino sul calendario.
+  - **`TutorialProvider` condiviso** (stesso motivo di `ToolsProvider`/
+    `NavigazioneProvider`): il pulsante di replay vive in
+    `ImpostazioniScreen`, ma solo `AppNavigator` ha la `NavigationBar` reale
+    da cui calcolare le aree — le due schermate restano entrambe montate
+    nell'`IndexedStack`, quindi serve stato condiviso perché un tap
+    nell'una faccia scattare l'overlay nell'altra. `richiesta` è un
+    contatore incrementale (non un bool): sia il primo avvio mai completato
+    (`carica()`) sia un replay esplicito (`richiediReplay()`) lo
+    incrementano, e `AppNavigator` reagisce al *cambiamento* di valore, non
+    al suo stato assoluto — altrimenti un tutorial già "vero" non
+    ripartirebbe più al tap su "Rivedi". `kPrefTutorialCompletato` non è
+    nel backup (come `kPrefPianoTurniUltimoMese`): è stato locale al
+    device, e su un device nuovo ripristinato da un backup ha senso
+    rivedere comunque il tutorial.
 - **Permesso INTERNET nel manifest Android (v1.3.1)**: le build debug lo
   includono automaticamente, le release no — il Piano turni (prima feature di
   rete su main) falliva con "Failed host lookup" solo sull'APK release.
@@ -1190,7 +1237,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   lettura per ospedali (per città/regione), fogli turni e catalogo
   materiali + pagina admin (login) per gestirli uno alla volta o in blocco
   da file JSON, incorporato nell'immagine Docker della versione web.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 152 test unitari.
+- ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
+  al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
+  Impostazioni → Navigazione.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 157 test unitari.
 - ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
 
 ## TODO

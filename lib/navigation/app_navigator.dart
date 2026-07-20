@@ -9,6 +9,7 @@ import '../screens/tools/tools_screen.dart';
 import '../screens/tools/piano_turni_screen.dart';
 import '../screens/impostazioni/impostazioni_screen.dart';
 import '../utils/theme.dart';
+import '../widgets/tutorial_overlay.dart';
 
 /// Identità logica di una tab, indipendente dalla sua posizione: le tab
 /// Attività e Statistiche possono essere nascoste insieme, e Piano turni può
@@ -38,6 +39,16 @@ class _AppNavigatorState extends State<AppNavigator> {
   // visibile prima che carica() confermi la preferenza salvata.
   _TabId _tabSelezionata = _TabId.pianoTurni;
 
+  // Chiave sulla NavigationBar vera: il tutorial calcola le aree da
+  // evidenziare dividendo la sua larghezza per il numero di tab visibili,
+  // invece di una GlobalKey per singola icona (che dovrebbe essere
+  // sincronizzata con l'animazione interna doppia icon/selectedIcon di
+  // NavigationDestination — più fragile di questo semplice conto).
+  final GlobalKey _navBarKey = GlobalKey();
+  // Ultima richiesta di TutorialProvider già gestita: evita di rimostrare
+  // l'overlay a ogni rebuild finché lo stesso valore resta invariato.
+  int _tutorialGestito = 0;
+
   @override
   void initState() {
     super.initState();
@@ -58,8 +69,67 @@ class _AppNavigatorState extends State<AppNavigator> {
               PaginaPrincipale.attivita => _TabId.attivita,
             });
       }
+      // Dopo la pagina principale, così il tutorial calcola le aree sulla
+      // NavigationBar già nel suo assetto finale: se non è mai stato
+      // completato su questo device carica() farà scattare la comparsa
+      // automatica (vedi TutorialProvider).
+      if (mounted) context.read<TutorialProvider>().carica();
     });
   }
+
+  /// Uno o più passi per ogni tab visibile (Piano turni ne ha più di uno:
+  /// è il tool più complesso, un unico testo sarebbe stato o troppo lungo o
+  /// troppo generico), con l'area calcolata dividendo la larghezza reale
+  /// della NavigationBar per il numero di destinazioni: nessuna dipendenza
+  /// da GlobalKey per singola icona (vedi commento sopra). I passi dello
+  /// stesso tab condividono area e titolo, cambia solo la descrizione.
+  Future<void> _mostraTutorial(List<_TabId> tabs) async {
+    if (!mounted || tabs.isEmpty) return;
+    final barBox = _navBarKey.currentContext?.findRenderObject() as RenderBox?;
+    if (barBox == null || !barBox.hasSize) return;
+    final origine = barBox.localToGlobal(Offset.zero);
+    final larghezza = barBox.size.width / tabs.length;
+    final passi = <TutorialStep>[];
+    for (var i = 0; i < tabs.length; i++) {
+      final area = Rect.fromLTWH(origine.dx + i * larghezza, origine.dy, larghezza, barBox.size.height);
+      final titolo = _destinazione(tabs[i]).label;
+      for (final testo in _descrizioneTutorial(tabs[i])) {
+        passi.add(TutorialStep(area: area, titolo: titolo, descrizione: testo));
+      }
+    }
+    await avviaTutorial(context, passi);
+    if (mounted) context.read<TutorialProvider>().segnaCompletato();
+  }
+
+  List<String> _descrizioneTutorial(_TabId id) => switch (id) {
+        _TabId.attivita => [
+            'Qui gestisci turni e assistenze: crea, cerca e passa alla vista calendario. '
+                'L\'icona in alto apre le Anagrafiche (persone, ospedali, associazioni, tipologie).',
+          ],
+        _TabId.statistiche => [
+            'Il riepilogo delle tue ore e dei tuoi servizi, filtrabile per associazione.',
+          ],
+        // Il tool più complesso dell'app (vedi CLAUDE.md): tre passi invece
+        // di uno per coprire davvero il funzionamento, non solo l'esistenza
+        // del tool.
+        _TabId.pianoTurni => [
+            'Il calendario mensile della tua associazione: si scarica dal foglio Google condiviso e '
+                'si aggiorna da solo se il link è già salvato sul backend condiviso.',
+            'Un pallino per fascia (mattina/pomeriggio/sera/notte) segnala i giorni con equipaggi '
+                'scoperti: tocca un giorno per il dettaglio di ogni blocco (H24, H12, centralino, '
+                'assistenze, gettoni), con titolare e sostituti affiancati.',
+            'Cerca il tuo nome con la lente: i giorni in cui sei in servizio vengono segnalati sul '
+                'calendario. Dal dettaglio di un blocco puoi anche aggiungere il turno al calendario '
+                'del telefono.',
+          ],
+        _TabId.tools => [
+            'Altri strumenti: materiali usati, magazzino, lista ospedali con mappa e navigatore.',
+          ],
+        _TabId.impostazioni => [
+            'Backup dei dati, tool da mostrare in Tools e scelte di navigazione — anche per '
+                'riattivare Turni/Assistenze se li hai disattivati.',
+          ],
+      };
 
   List<_TabId> _tabsVisibili(bool attivitaStatisticheAttive, bool pianoTurniInNavbar) => [
         if (attivitaStatisticheAttive) _TabId.attivita,
@@ -117,12 +187,23 @@ class _AppNavigatorState extends State<AppNavigator> {
     final selezionata = tabs.contains(_tabSelezionata) ? _tabSelezionata : _TabId.tools;
     final index = tabs.indexOf(selezionata);
 
+    // TutorialProvider.richiesta cambia sia al primo avvio (carica(), se mai
+    // completato) sia a un tap su "Rivedi tutorial" in Impostazioni: qui si
+    // reagisce solo al *cambiamento* (non al valore assoluto), altrimenti
+    // ogni rebuild di questa tab riproporrebbe l'overlay all'infinito.
+    final tutorial = context.watch<TutorialProvider>();
+    if (tutorial.richiesta != _tutorialGestito) {
+      _tutorialGestito = tutorial.richiesta;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _mostraTutorial(tabs));
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: index,
         children: tabs.map(_schermata).toList(),
       ),
       bottomNavigationBar: NavigationBar(
+        key: _navBarKey,
         selectedIndex: index,
         onDestinationSelected: (i) => setState(() => _tabSelezionata = tabs[i]),
         destinations: tabs.map(_destinazione).toList(),

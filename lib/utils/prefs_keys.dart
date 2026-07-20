@@ -65,3 +65,10 @@ const kPrefToolsAttivi = 'tools_attivi';
 // device nuovo tratterebbe come "nuovi" tutti i tool già noti sul device di
 // origine, riattivando quelli disattivati esplicitamente prima del backup.
 const kPrefToolsConosciuti = 'tools_conosciuti';
+
+// Tutorial di navigazione a schermo intero (widgets/tutorial_overlay.dart,
+// TutorialProvider): mostrato una sola volta al primo avvio, poi rivedibile
+// dal pulsante in Impostazioni → Navigazione. Stato puramente locale al
+// device, non va nel backup (come kPrefPianoTurniUltimoMese): su un device
+// nuovo ripristinato da un backup ha senso rivedere comunque il tutorial.
+const kPrefTutorialCompletato = 'tutorial_completato';
