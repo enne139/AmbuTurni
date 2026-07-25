@@ -55,6 +55,8 @@ class _SezioneAssociazioni extends StatelessWidget {
       labelOf: (a) => a.nome,
       sublabelOf: (_) => null,
       colorOf: (a) => colorFromHex(a.colore),
+      countOf: (a) => anag.conteggioAssociazioni[a.id] ?? 0,
+      countTooltip: 'Turni e assistenze registrati',
       onAdd: () => _dialogNomeEColore(context, 'Nuova associazione', (nome, colore) async {
         await saveAssociazione(nome, colore: colore);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
@@ -88,6 +90,8 @@ class _SezionePersone extends StatelessWidget {
       items: anag.persone,
       labelOf: (p) => p.nomeCompleto,
       sublabelOf: (_) => null,
+      countOf: (p) => anag.conteggioPersone[p.id] ?? 0,
+      countTooltip: 'Turni e assistenze in cui è in equipaggio',
       onAdd: () => _dialogPersona(context, null),
       onEdit: (p) => _dialogPersona(context, p),
       onView: (p) async {
@@ -154,6 +158,8 @@ class _SezioneOspedali extends StatelessWidget {
       items: anag.ospedali,
       labelOf: (o) => o.nome,
       sublabelOf: (o) => o.citta,
+      countOf: (o) => anag.conteggioOspedali[o.id] ?? 0,
+      countTooltip: 'Turni in cui compare',
       onAdd: () => _dialogOspedale(context, null),
       onEdit: (o) => _dialogOspedale(context, o),
       onView: (o) async {
@@ -353,6 +359,8 @@ class _SezioneTipologie extends StatelessWidget {
       labelOf: (t) => t.nome,
       sublabelOf: (_) => null,
       colorOf: (t) => colorFromHex(t.colore),
+      countOf: (t) => anag.conteggioTipologie[t.id] ?? 0,
+      countTooltip: 'Turni con questa tipologia',
       onAdd: () => _dialogNomeEColore(context, 'Nuova tipologia', (nome, colore) async {
         await saveTipologiaTurno(nome, colore: colore);
         if (context.mounted) context.read<AnagraficheProvider>().carica();
@@ -392,6 +400,12 @@ class _SezioneAnag<T> extends StatefulWidget {
   final String Function(T) labelOf;
   final String? Function(T) sublabelOf;
   final Color? Function(T)? colorOf;
+  // Se non null, mostra un badge col numero di turni/assistenze/servizi in
+  // cui compare la voce (0 incluso: aiuta a individuare voci mai usate).
+  final int Function(T)? countOf;
+  // Testo del tooltip del badge sopra: cosa viene contato, es. "Turni e
+  // assistenze" — diverso per tipo (ospedali/tipologie non hanno assistenze).
+  final String? countTooltip;
   final VoidCallback onAdd;
   final Future<void> Function(T) onEdit;
   final Future<void> Function(T)? onDelete;
@@ -417,6 +431,8 @@ class _SezioneAnag<T> extends StatefulWidget {
     required this.labelOf,
     required this.sublabelOf,
     this.colorOf,
+    this.countOf,
+    this.countTooltip,
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
@@ -432,6 +448,10 @@ class _SezioneAnag<T> extends StatefulWidget {
   State<_SezioneAnag<T>> createState() => _SezioneAnagState<T>();
 }
 
+/// Campo su cui ordinare una sezione, in alternativa all'ordine naturale
+/// (widget.items): scelta dall'utente con i chip "Nome"/"Numero" sopra la lista.
+enum _CampoOrdinamento { nome, numero }
+
 class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
   bool _expanded = false;
   final _searchCtrl = TextEditingController();
@@ -440,6 +460,31 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
   // (file picker + scritture DB, non istantanee): un doppio tap non deve
   // avviare due import in parallelo.
   bool _ioBusy = false;
+  // null = ordine naturale (widget.items, già "per nome" per tre delle
+  // quattro sezioni; "per ordine" custom solo per le tipologie turno).
+  // Non persistito: è uno stato di visualizzazione della sessione corrente,
+  // non una preferenza dell'anagrafica.
+  _CampoOrdinamento? _ordinamento;
+  bool _ordinamentoDiscendente = false;
+
+  /// Ciclo a tre stati per ciascun campo: primo tap seleziona il campo in
+  /// ordine crescente, secondo tap inverte, terzo tap torna all'ordine
+  /// naturale — così l'ordine "per ordine" delle tipologie (le uniche con le
+  /// frecce di riordino manuale) resta sempre raggiungibile senza un
+  /// pulsante di reset separato.
+  void _toggleOrdinamento(_CampoOrdinamento campo) {
+    setState(() {
+      if (_ordinamento != campo) {
+        _ordinamento = campo;
+        _ordinamentoDiscendente = false;
+      } else if (!_ordinamentoDiscendente) {
+        _ordinamentoDiscendente = true;
+      } else {
+        _ordinamento = null;
+        _ordinamentoDiscendente = false;
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -467,14 +512,24 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
     }
   }
 
-  /// Filtra la lista per il testo corrente cercando in label e sublabel.
+  /// Filtra la lista per il testo corrente (label e sublabel) e applica
+  /// l'ordinamento scelto dall'utente, se diverso da quello naturale.
   List<T> get _filtered {
-    if (_query.isEmpty) return widget.items;
-    final q = _query.toLowerCase();
-    return widget.items.where((item) {
-      return widget.labelOf(item).toLowerCase().contains(q) ||
-          (widget.sublabelOf(item)?.toLowerCase().contains(q) ?? false);
-    }).toList();
+    Iterable<T> risultato = widget.items;
+    if (_query.isNotEmpty) {
+      final q = _query.toLowerCase();
+      risultato = risultato.where((item) =>
+          widget.labelOf(item).toLowerCase().contains(q) ||
+          (widget.sublabelOf(item)?.toLowerCase().contains(q) ?? false));
+    }
+    final list = risultato.toList();
+    if (_ordinamento == _CampoOrdinamento.nome) {
+      list.sort((a, b) => widget.labelOf(a).toLowerCase().compareTo(widget.labelOf(b).toLowerCase()));
+    } else if (_ordinamento == _CampoOrdinamento.numero && widget.countOf != null) {
+      list.sort((a, b) => widget.countOf!(a).compareTo(widget.countOf!(b)));
+    }
+    if (_ordinamento != null && _ordinamentoDiscendente) return list.reversed.toList();
+    return list;
   }
 
   /// Chiede conferma prima di eliminare (un tap accidentale non deve perdere
@@ -626,6 +681,28 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
               onChanged: (v) => setState(() => _query = v),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(children: [
+              const Text('Ordina per', style: TextStyle(fontSize: 12, color: Colors.white38)),
+              const SizedBox(width: 8),
+              _ChipOrdinamento(
+                label: 'Nome',
+                attivo: _ordinamento == _CampoOrdinamento.nome,
+                discendente: _ordinamentoDiscendente,
+                onTap: () => _toggleOrdinamento(_CampoOrdinamento.nome),
+              ),
+              if (widget.countOf != null) ...[
+                const SizedBox(width: 8),
+                _ChipOrdinamento(
+                  label: 'Numero',
+                  attivo: _ordinamento == _CampoOrdinamento.numero,
+                  discendente: _ordinamentoDiscendente,
+                  onTap: () => _toggleOrdinamento(_CampoOrdinamento.numero),
+                ),
+              ],
+            ]),
+          ),
           if (filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -638,8 +715,12 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
             ...filtered.asMap().entries.map((entry) {
               final i = entry.key;
               final item = entry.value;
-              final canUp = widget.onMoveUp != null && _query.isEmpty && i > 0;
-              final canDown = widget.onMoveDown != null && _query.isEmpty && i < filtered.length - 1;
+              // Le frecce di riordino manuale hanno senso solo nell'ordine
+              // naturale (quello scritto nel campo "ordine" delle tipologie):
+              // con un ordinamento per nome/numero attivo la posizione in
+              // lista non rispecchia più quel campo, quindi restano nascoste.
+              final canUp = widget.onMoveUp != null && _query.isEmpty && _ordinamento == null && i > 0;
+              final canDown = widget.onMoveDown != null && _query.isEmpty && _ordinamento == null && i < filtered.length - 1;
               final dot = widget.colorOf != null ? widget.colorOf!(item) : null;
               return ListTile(
                 dense: true,
@@ -655,7 +736,23 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                     ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
                     : null,
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (widget.onMoveUp != null && _query.isEmpty) ...[
+                  if (widget.countOf != null)
+                    Tooltip(
+                      message: widget.countTooltip ?? 'Numero di utilizzi',
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${widget.countOf!(item)}',
+                          style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  if (widget.onMoveUp != null && _query.isEmpty && _ordinamento == null) ...[
                     IconButton(
                       icon: Icon(Icons.arrow_upward, size: 16, color: canUp ? Colors.white54 : Colors.white12),
                       onPressed: canUp ? () => widget.onMoveUp!(item) : null,
@@ -691,6 +788,52 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
           const SizedBox(height: 4),
         ],
       ],
+    );
+  }
+}
+
+/// Chip tappabile per il selettore "Ordina per": mostra una freccia
+/// su/giù quando è il campo attivo, per indicare la direzione corrente.
+class _ChipOrdinamento extends StatelessWidget {
+  final String label;
+  final bool attivo;
+  final bool discendente;
+  final VoidCallback onTap;
+
+  const _ChipOrdinamento({
+    required this.label,
+    required this.attivo,
+    required this.discendente,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: attivo ? kPrimary.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: attivo ? kPrimary.withValues(alpha: 0.5) : Colors.white24),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: attivo ? kPrimary : Colors.white54,
+              fontWeight: attivo ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          if (attivo) ...[
+            const SizedBox(width: 2),
+            Icon(discendente ? Icons.arrow_downward : Icons.arrow_upward, size: 12, color: kPrimary),
+          ],
+        ]),
+      ),
     );
   }
 }

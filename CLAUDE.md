@@ -1358,6 +1358,55 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   widget Material localizzabili) e nessuna nuova stringa da tradurre: il
   pacchetto localizza solo i widget standard di Flutter, non introduce un
   sistema di localizzazione da estendere alle stringhe dell'app.
+- **Badge "quante volte compare" in Anagrafiche (2026-07-25)**: ogni voce di
+  associazioni/persone/ospedali/tipologie turno in `AnagraficheScreen` ha ora
+  un badge col numero di turni/assistenze/servizi in cui compare (richiesta
+  esplicita: aiuta a individuare voci mai usate o da consolidare). Quattro
+  nuove funzioni in `helpers.dart` (`contaOccorrenzeAssociazioni/Persone/
+  Ospedali/Tipologie`), una query aggregata per tipo invece di una query per
+  voce — l'anagrafica può contenere decine di persone/ospedali e N query
+  scalerebbero male:
+  - **Persone**: unpivot via `UNION ALL` dei 10 campi equipaggio +
+    `COUNT(DISTINCT id)`, sommato tra `turni` e `assistenze`
+    (`_contaPerEquipaggio`, funzione privata parametrizzata sul nome tabella —
+    sempre un letterale interno, mai testo utente). `DISTINCT id` replica la
+    stessa semantica OR di `getTurniPerPersona`/`getAssistenzePerPersona`: una
+    persona in più ruoli sulla stessa riga conta una volta sola, non due.
+  - **Ospedali**: `COUNT(DISTINCT turno_id)` su `servizi` **con `WHERE
+    ospedale_id IS NOT NULL`** — un servizio senza ospedale assegnato
+    (campo opzionale nel form) produrrebbe altrimenti un gruppo `NULL` nel
+    `GROUP BY` che fa fallire il cast Dart a `String` in fase di lettura;
+    bug reale, preso dal test dedicato prima di finire in produzione.
+  - **Associazioni**: somma dei conteggi di `turni`+`assistenze` per
+    `associazione_id`.
+  - **Tipologie turno**: `tipologie` è la colonna multi-valore JSON (v8) —
+    lette tutte le righe non vuote e decodificate in Dart (stesso
+    `jsonDecode` di `Turno.fromMap`) invece di un unpivot SQL su un array di
+    lunghezza variabile, più semplice per una tabella di questa dimensione.
+  - **Ricalcolo**: `AnagraficheProvider.carica()` calcola le quattro mappe
+    insieme alle liste; un nuovo `ricaricaConteggi()` le ricalcola da sole
+    (senza rileggere le liste anagrafiche, che non cambiano quando si salva
+    un turno) ed è chiamato da `TurniList`/`AssistenzeList` negli stessi
+    punti in cui già ricaricano `StatisticheProvider` dopo un form/dettaglio
+    — stesso bug-pattern già documentato per `StatisticheProvider`:
+    `AnagraficheScreen` resta montata nell'`IndexedStack` di `AppNavigator`,
+    senza questo refresh i badge sarebbero rimasti quelli di prima di
+    ogni modifica a un turno/un'assistenza.
+  - Coperto da un nuovo gruppo di test in `test/db/helpers_test.dart`
+    (`Conteggi anagrafiche`), incluso il caso NULL di cui sopra.
+  - **Ordinamento "Nome"/"Numero" per sezione**: due chip sopra la lista di
+    ogni sezione (richiesta esplicita di seguito al badge). Ciclo a tre stati
+    per campo (`_SezioneAnagState._toggleOrdinamento`): primo tap ordina
+    crescente, secondo tap inverte, terzo tap torna all'ordine naturale
+    (quello di `widget.items`, già "per nome" per tre sezioni su quattro —
+    solo le tipologie hanno un ordine custom, il campo `ordine`). Stato di
+    sola visualizzazione della sessione (`_ordinamento`/
+    `_ordinamentoDiscendente`), non persistito e non incluso nel backup: non
+    è una preferenza dell'anagrafica. Le frecce di riordino manuale delle
+    tipologie (`onMoveUp`/`onMoveDown`) restano visibili solo con
+    l'ordinamento naturale attivo: con "Nome"/"Numero" attivo la posizione in
+    lista non rispecchia più il campo `ordine`, quindi spostare una voce
+    sarebbe fuorviante.
 
 ---
 
@@ -1379,7 +1428,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
   associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
-  persona/ospedale, export/import ospedali.
+  persona/ospedale, export/import ospedali, badge con quante volte ogni
+  voce compare in turni/assistenze/servizi.
 - ✅ **Impostazioni**: backup, Tools attivi (attiva/disattiva i tool
   mostrati in Tools), backend condiviso, navigazione.
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.

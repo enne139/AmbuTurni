@@ -16,6 +16,16 @@ class AnagraficheProvider extends ChangeNotifier {
   List<TipologiaTurno> tipologieTurno = [];
   bool _caricato = false;
 
+  // Quante volte ogni voce compare in turni/assistenze/servizi (id -> conteggio),
+  // mostrato come badge accanto a ogni voce in AnagraficheScreen. Mappe separate
+  // da carica() (sotto) perché vanno ricalcolate anche a ogni salvataggio di un
+  // turno/un'assistenza, non solo quando cambiano le anagrafiche stesse — vedi
+  // ricaricaConteggi().
+  Map<String, int> conteggioAssociazioni = {};
+  Map<String, int> conteggioPersone = {};
+  Map<String, int> conteggioOspedali = {};
+  Map<String, int> conteggioTipologie = {};
+
   // Ogni load è indipendente: se una query fallisce (es. migrazione DB non ancora
   // applicata) le altre continuano e notifyListeners() viene chiamato comunque.
   // Gli errori vengono comunque loggati: un catch completamente muto mascherava
@@ -25,8 +35,27 @@ class AnagraficheProvider extends ChangeNotifier {
     try { persone = await getPersone(); } catch (e) { debugPrint('[anagrafiche] persone non caricate: $e'); }
     try { ospedali = await getOspedali(); } catch (e) { debugPrint('[anagrafiche] ospedali non caricati: $e'); }
     try { tipologieTurno = await getTipologieTurno(); } catch (e) { debugPrint('[anagrafiche] tipologie non caricate: $e'); }
+    await _caricaConteggi();
     _caricato = true;
     notifyListeners();
+  }
+
+  /// Ricalcola solo i conteggi d'uso, senza ricaricare le liste anagrafiche
+  /// (che non cambiano quando si salva un turno/un'assistenza). Da chiamare
+  /// negli stessi punti in cui TurniList/AssistenzeList già ricaricano
+  /// StatisticheProvider dopo essere tornate da un form/dettaglio: senza,
+  /// i contatori resterebbero quelli di prima finché non si tocca
+  /// un'anagrafica, dato che AnagraficheScreen resta montata nell'IndexedStack.
+  Future<void> ricaricaConteggi() async {
+    await _caricaConteggi();
+    notifyListeners();
+  }
+
+  Future<void> _caricaConteggi() async {
+    try { conteggioAssociazioni = await contaOccorrenzeAssociazioni(); } catch (e) { debugPrint('[anagrafiche] conteggio associazioni non calcolato: $e'); }
+    try { conteggioPersone = await contaOccorrenzePersone(); } catch (e) { debugPrint('[anagrafiche] conteggio persone non calcolato: $e'); }
+    try { conteggioOspedali = await contaOccorrenzeOspedali(); } catch (e) { debugPrint('[anagrafiche] conteggio ospedali non calcolato: $e'); }
+    try { conteggioTipologie = await contaOccorrenzeTipologie(); } catch (e) { debugPrint('[anagrafiche] conteggio tipologie non calcolato: $e'); }
   }
 
   bool get caricato => _caricato;

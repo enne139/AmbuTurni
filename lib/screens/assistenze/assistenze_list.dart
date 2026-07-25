@@ -105,6 +105,8 @@ class _AssistenzeListState extends State<AssistenzeList> {
     // questo refresh restavano quelle di prima anche dopo una modifica, dato
     // che la tab Statistiche resta montata nell'IndexedStack di AppNavigator.
     context.read<StatisticheProvider>().ricarica();
+    // Stesso motivo per i contatori d'uso di persone/tipologie in Anagrafiche.
+    context.read<AnagraficheProvider>().ricaricaConteggi();
   }
 
   Future<void> _nuovaAssistenza() async {
@@ -120,6 +122,7 @@ class _AssistenzeListState extends State<AssistenzeList> {
     if (!mounted) return;
     context.read<AssistenzeProvider>().ricarica();
     context.read<StatisticheProvider>().ricarica();
+    context.read<AnagraficheProvider>().ricaricaConteggi();
   }
 
   @override

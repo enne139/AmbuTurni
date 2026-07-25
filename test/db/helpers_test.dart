@@ -574,4 +574,91 @@ void main() {
       expect((await getMaterialiUsati()).where((m) => m.id == idUsato), isEmpty);
     });
   });
+
+  group('Conteggi anagrafiche (badge in AnagraficheScreen)', () {
+    test('contaOccorrenzePersone: stesso ruolo doppio nello stesso turno conta una volta, sommato alle assistenze', () async {
+      await saveAssociazione('Assoc Conteggio Persone');
+      final assocId = (await getAssociazioni())
+          .firstWhere((a) => a.nome == 'Assoc Conteggio Persone').id;
+      final personaId = await savePersona('ContaPersona', 'Test');
+
+      // Stessa persona in due ruoli dello stesso turno: deve contare 1, non 2
+      // (stessa semantica OR di getTurniPerPersona).
+      await saveTurno(Turno(
+        id: newId(),
+        data: '2024-10-01',
+        associazioneId: assocId,
+        eq1AutistaId: personaId,
+        eq2TerzoId: personaId,
+      ));
+      // Un secondo turno con la persona in un solo ruolo.
+      await saveTurno(Turno(
+        id: newId(),
+        data: '2024-10-02',
+        associazioneId: assocId,
+        eq1CsId: personaId,
+      ));
+      // Un'assistenza.
+      await saveAssistenza(Assistenza(
+        id: newId(),
+        data: '2024-10-03',
+        associazioneId: assocId,
+        eq1AutistaId: personaId,
+      ));
+
+      final conteggi = await contaOccorrenzePersone();
+      expect(conteggi[personaId], 3);
+    });
+
+    test('contaOccorrenzeOspedali: più servizi con lo stesso ospedale nello stesso turno contano una volta', () async {
+      await saveAssociazione('Assoc Conteggio Ospedali');
+      final assocId = (await getAssociazioni())
+          .firstWhere((a) => a.nome == 'Assoc Conteggio Ospedali').id;
+      final ospedaleId = await saveOspedale('Conta Ospedale', 'Milano');
+
+      final t1 = newId();
+      await saveTurno(Turno(id: t1, data: '2024-10-10', associazioneId: assocId));
+      await saveServizio(Servizio(id: newId(), turnoId: t1, ospedaleId: ospedaleId));
+      await saveServizio(Servizio(id: newId(), turnoId: t1, ospedaleId: ospedaleId));
+
+      final t2 = newId();
+      await saveTurno(Turno(id: t2, data: '2024-10-11', associazioneId: assocId));
+      await saveServizio(Servizio(id: newId(), turnoId: t2, ospedaleId: ospedaleId));
+
+      final conteggi = await contaOccorrenzeOspedali();
+      expect(conteggi[ospedaleId], 2);
+    });
+
+    test('contaOccorrenzeAssociazioni: somma turni + assistenze', () async {
+      await saveAssociazione('Assoc Conteggio Totale');
+      final assocId = (await getAssociazioni())
+          .firstWhere((a) => a.nome == 'Assoc Conteggio Totale').id;
+      await saveTurno(Turno(id: newId(), data: '2024-10-15', associazioneId: assocId));
+      await saveTurno(Turno(id: newId(), data: '2024-10-16', associazioneId: assocId));
+      await saveAssistenza(Assistenza(id: newId(), data: '2024-10-17', associazioneId: assocId));
+
+      final conteggi = await contaOccorrenzeAssociazioni();
+      expect(conteggi[assocId], 3);
+    });
+
+    test('contaOccorrenzeTipologie: conta i turni per ciascun id nella colonna multi-valore', () async {
+      await saveAssociazione('Assoc Conteggio Tipologie');
+      final assocId = (await getAssociazioni())
+          .firstWhere((a) => a.nome == 'Assoc Conteggio Tipologie').id;
+      await saveTipologiaTurno('Conta Tipologia A');
+      await saveTipologiaTurno('Conta Tipologia B');
+      final tipologie = await getTipologieTurno();
+      final idA = tipologie.firstWhere((t) => t.nome == 'Conta Tipologia A').id;
+      final idB = tipologie.firstWhere((t) => t.nome == 'Conta Tipologia B').id;
+
+      await saveTurno(Turno(id: newId(), data: '2024-10-20', associazioneId: assocId, tipologie: [idA, idB]));
+      await saveTurno(Turno(id: newId(), data: '2024-10-21', associazioneId: assocId, tipologie: [idA]));
+      // Turno senza tipologie: non deve far fallire il parsing degli altri.
+      await saveTurno(Turno(id: newId(), data: '2024-10-22', associazioneId: assocId));
+
+      final conteggi = await contaOccorrenzeTipologie();
+      expect(conteggi[idA], 2);
+      expect(conteggi[idB], 1);
+    });
+  });
 }

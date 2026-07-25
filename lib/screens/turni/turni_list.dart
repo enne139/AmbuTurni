@@ -107,6 +107,9 @@ class _TurniListState extends State<TurniList> {
     // questo refresh restavano quelle di prima anche dopo una modifica, dato
     // che la tab Statistiche resta montata nell'IndexedStack di AppNavigator.
     context.read<StatisticheProvider>().ricarica();
+    // Stesso motivo per i contatori d'uso di persone/ospedali/tipologie in
+    // Anagrafiche (badge accanto a ogni voce).
+    context.read<AnagraficheProvider>().ricaricaConteggi();
   }
 
   Future<void> _nuovoTurno() async {
@@ -123,6 +126,7 @@ class _TurniListState extends State<TurniList> {
     if (!mounted) return;
     context.read<TurniProvider>().ricarica();
     context.read<StatisticheProvider>().ricarica();
+    context.read<AnagraficheProvider>().ricaricaConteggi();
   }
 
   @override

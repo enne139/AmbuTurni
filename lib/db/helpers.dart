@@ -1,5 +1,6 @@
 // Tutte le funzioni CRUD dell'app. Ogni funzione che scrive invalida
 // is_synced = 0 così il sync manager sa cosa deve spingere al server.
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'database.dart';
@@ -293,6 +294,110 @@ Future<void> spostaTipologia(int fromIndex, int toIndex) async {
   batch.update('tipologie_turno', {'ordine': fromIndex},
       where: 'id = ?', whereArgs: [list[toIndex].id]);
   await batch.commit(noResult: true);
+}
+
+// ---------------------------------------------------------------------------
+// CONTEGGI ANAGRAFICHE
+// ---------------------------------------------------------------------------
+//
+// Quante volte ogni voce di anagrafica (associazione/persona/ospedale/
+// tipologia) compare in turni/assistenze/servizi — mostrato come contatore
+// accanto a ogni voce in Anagrafiche. Un'unica query aggregata per tipo
+// invece di una query per voce: l'anagrafica può contenere decine di
+// persone/ospedali e una query per voce scalerebbe male.
+
+// Nomi dei 10 campi equipaggio (eq1/eq2 x autista/cs/terzo/quarto/
+// centralinista), identici su turni e assistenze — stessa lista implicita
+// nell'OR di getTurniPerPersona/getAssistenzePerPersona.
+const _campiEquipaggio = [
+  'eq1_autista_id', 'eq1_cs_id', 'eq1_terzo_id', 'eq1_quarto_id', 'eq1_centralinista_id',
+  'eq2_autista_id', 'eq2_cs_id', 'eq2_terzo_id', 'eq2_quarto_id', 'eq2_centralinista_id',
+];
+
+/// Conta, per ciascuna persona, in quante righe di [tabella] compare in uno
+/// qualsiasi dei campi equipaggio: unpivot via UNION ALL + COUNT(DISTINCT id),
+/// dove DISTINCT id fa sì che una persona in più ruoli sulla stessa riga
+/// conti una volta sola (stessa semantica dell'OR di getTurniPerPersona/
+/// getAssistenzePerPersona). [tabella] è sempre un letterale interno
+/// ('turni'/'assistenze'), mai testo proveniente dall'utente.
+Future<Map<String, int>> _contaPerEquipaggio(String tabella) async {
+  final db = await getDb();
+  final unpivot = _campiEquipaggio
+      .map((c) => 'SELECT id, $c AS persona_id FROM $tabella')
+      .join(' UNION ALL ');
+  final rows = await db.rawQuery('''
+    SELECT persona_id, COUNT(DISTINCT id) AS cnt FROM ($unpivot)
+    WHERE persona_id IS NOT NULL
+    GROUP BY persona_id
+  ''');
+  return {for (final r in rows) r['persona_id'] as String: r['cnt'] as int};
+}
+
+/// Conta, per ciascuna persona, il totale di turni + assistenze in cui compare.
+Future<Map<String, int>> contaOccorrenzePersone() async {
+  final turni = await _contaPerEquipaggio('turni');
+  final assistenze = await _contaPerEquipaggio('assistenze');
+  final risultato = <String, int>{...turni};
+  assistenze.forEach((id, cnt) => risultato[id] = (risultato[id] ?? 0) + cnt);
+  return risultato;
+}
+
+/// Conta, per ciascun ospedale, in quanti turni compare (tramite i suoi
+/// servizi) — DISTINCT sul turno perché più servizi nello stesso ospedale
+/// nello stesso turno vanno contati una sola volta, stessa semantica di
+/// getTurniPerOspedale.
+Future<Map<String, int>> contaOccorrenzeOspedali() async {
+  final db = await getDb();
+  final rows = await db.rawQuery('''
+    SELECT ospedale_id, COUNT(DISTINCT turno_id) AS cnt
+    FROM servizi
+    WHERE ospedale_id IS NOT NULL
+    GROUP BY ospedale_id
+  ''');
+  return {for (final r in rows) r['ospedale_id'] as String: r['cnt'] as int};
+}
+
+/// Conta, per ciascuna associazione, il totale di turni + assistenze
+/// registrati sotto di essa.
+Future<Map<String, int>> contaOccorrenzeAssociazioni() async {
+  final db = await getDb();
+  final turni = await db.rawQuery(
+      'SELECT associazione_id, COUNT(*) AS cnt FROM turni '
+      'WHERE associazione_id IS NOT NULL GROUP BY associazione_id');
+  final assistenze = await db.rawQuery(
+      'SELECT associazione_id, COUNT(*) AS cnt FROM assistenze '
+      'WHERE associazione_id IS NOT NULL GROUP BY associazione_id');
+  final risultato = <String, int>{};
+  for (final rows in [turni, assistenze]) {
+    for (final r in rows) {
+      final id = r['associazione_id'] as String;
+      risultato[id] = (risultato[id] ?? 0) + (r['cnt'] as int);
+    }
+  }
+  return risultato;
+}
+
+/// Conta, per ciascuna tipologia turno, in quanti turni compare. `tipologie`
+/// è una colonna multi-valore JSON (v8, vedi Turno.fromMap): lette tutte le
+/// righe non vuote e decodificate in Dart, più semplice di un unpivot SQL su
+/// un array di lunghezza variabile.
+Future<Map<String, int>> contaOccorrenzeTipologie() async {
+  final db = await getDb();
+  final rows = await db.query('turni', columns: ['tipologie']);
+  final risultato = <String, int>{};
+  for (final r in rows) {
+    final raw = r['tipologie'];
+    if (raw is! String || raw.isEmpty) continue;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        for (final id in decoded.whereType<String>()) {
+          risultato[id] = (risultato[id] ?? 0) + 1;
+        }
+      }
+    } catch (_) {}
+  }
+  return risultato;
 }
 
 // ---------------------------------------------------------------------------
