@@ -1407,6 +1407,44 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     l'ordinamento naturale attivo: con "Nome"/"Numero" attivo la posizione in
     lista non rispecchia più il campo `ordine`, quindi spostare una voce
     sarebbe fuorviante.
+- **Piano turni: apertura automatica al primo avvio + navigazione rapida tra
+  mesi (2026-07-25)**: due richieste esplicite legate allo stesso archivio
+  `_fogliSalvati` (chiave "aaaa-mm" → URL del foglio Google di quel mese, già
+  esistente).
+  - **Primo utilizzo**: prima `_ripristinaPreferenze()` decideva solo tra
+    "c'è un URL salvato → carica quello" e "nessun URL → form vuoto",
+    lasciando un utente nuovo davanti a un campo da compilare a mano anche
+    se l'associazione ha già pubblicato il foglio del mese sul backend
+    condiviso. Quando l'URL salvato è assente, la sincronizzazione dal
+    backend (`_sincronizzaFogliDalBackend`, già esistente per il merge
+    additivo in sottofondo) viene ora **attesa** invece che lanciata e
+    dimenticata, e se l'archivio risultante contiene la chiave del mese
+    corrente il piano si apre da solo (`_apriFoglioSalvato`, stessa funzione
+    già usata dal tap su un foglio salvato). Per chi ha già un URL salvato
+    il comportamento non cambia: la sincronizzazione resta in sottofondo,
+    non deve ritardare l'apertura del piano che l'utente aveva già.
+  - **Frecce ← → mese precedente/successivo**: nell'intestazione del
+    calendario, accanto al nome del mese. Abilitate solo se il mese
+    adiacente è tra i fogli salvati (`_fogliSalvati`, locale + sincronizzato
+    dal backend) — a differenza di una paginazione qualunque, ogni mese ha
+    un proprio link Google Sheets distinto (vedi bullet originale del tool):
+    senza un URL noto per quel mese non c'è nulla da scaricare, quindi il
+    pulsante resta disabilitato (icona attenuata, tooltip esplicito) invece
+    di tentare un caricamento destinato a fallire. Stessa `_apriFoglioSalvato`
+    di sopra, nessuna logica di caricamento duplicata.
+  - **Nessuno scenario di rete lascia l'utente senza feedback**: verificato
+    a mente ripercorrendo il codice (non solo assunto). Il download del
+    foglio ha già un timeout di 20s e cattura `TimeoutException`/errori di
+    rete in `_carica()` (preesistente); `getFogli()` del backend condiviso
+    ha lo stesso timeout di 20s in `backend_api.dart`. Se il tentativo
+    automatico al primo avvio non trova un link per il mese corrente (rete
+    assente, timeout, o l'associazione non ha ancora pubblicato quel mese —
+    i tre casi non sono distinguibili da qui, la sync è silenziosa di
+    proposito) compare un banner informativo nel form (`_messaggioPrimoAvvio`,
+    icona neutra `info_outline`, non lo stile rosso di `_errore`: non è detto
+    che qualcosa sia "andato storto"). Si azzera al primo vero tentativo di
+    caricamento (manuale o su un foglio salvato) in `_carica()`, altrimenti
+    resterebbe visibile insieme a un piano già caricato con successo.
 
 ---
 
@@ -1441,7 +1479,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
   ruolo, aggiunta del turno al calendario di sistema). Sincronizza in
   sottofondo i fogli salvati sul backend condiviso (merge additivo,
-  disattivabile in Impostazioni → Backend condiviso).
+  disattivabile in Impostazioni → Backend condiviso). Al primo utilizzo
+  (nessun link mai incollato) apre da solo il foglio del mese corrente se
+  già pubblicato dall'associazione; frecce ← → per saltare al mese
+  precedente/successivo tra i fogli salvati.
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
   vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
   Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente

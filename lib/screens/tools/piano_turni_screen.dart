@@ -82,6 +82,13 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   // sempre il proprio nome: i segnalini mostrano i propri turni a colpo
   // d'occhio senza rifare la ricerca).
   String _nomeCercato = '';
+  // Valorizzato solo dal tentativo automatico al primo avvio (vedi
+  // _ripristinaPreferenze) quando non trova un foglio per il mese corrente:
+  // spiega nel form perché compare vuoto invece di aprirsi da solo, così
+  // l'utente non si chiede se l'auto-apertura sia semplicemente sparita.
+  // Non è un errore di caricamento (quello resta _errore): qui il server
+  // può essere irraggiungibile o semplicemente non avere ancora quel mese.
+  String? _messaggioPrimoAvvio;
 
   @override
   void initState() {
@@ -138,8 +145,33 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       } else {
         await _carica();
       }
+      // Utente già in possesso di un link: sincronizzazione in sottofondo
+      // come sempre, non deve ritardare l'apertura del piano già suo.
+      _sincronizzaFogliDalBackend(prefs);
+    } else {
+      // Prima apertura (nessun link mai usato su questo device): sincronizza
+      // SUBITO — non in sottofondo — dal backend condiviso e, se il foglio
+      // del mese corrente è tra quelli pubblicati dall'associazione, lo apre
+      // da solo invece di lasciare l'utente davanti al form vuoto da
+      // compilare a mano.
+      await _sincronizzaFogliDalBackend(prefs);
+      if (!mounted) return;
+      final chiaveOggi = _chiaveMeseCorrente();
+      if (_fogliSalvati.containsKey(chiaveOggi)) {
+        await _apriFoglioSalvato(chiaveOggi);
+      } else {
+        // Nessun link trovato per il mese corrente: non necessariamente un
+        // problema di rete, il server potrebbe semplicemente non avere ancora
+        // quel mese (l'associazione potrebbe non averlo ancora pubblicato).
+        // Non c'è modo semplice di distinguere i due casi da qui (la sync è
+        // silenziosa di proposito, vedi _sincronizzaFogliDalBackend), quindi
+        // un unico messaggio generico copre entrambi.
+        setState(() => _messaggioPrimoAvvio =
+            'Nessun foglio trovato automaticamente per ${_etichettaMese(chiaveOggi)}. '
+            'Incolla qui il link, oppure riprova più tardi se l\'associazione non '
+            "l'ha ancora pubblicato.");
+      }
     }
-    _sincronizzaFogliDalBackend(prefs);
   }
 
   /// Scarica in sottofondo i fogli salvati sul backend condiviso (pagina
@@ -184,9 +216,29 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     await prefs.setString(kPrefPianoTurniFogli, jsonEncode(_fogliSalvati));
   }
 
-  /// Chiave archivio del piano caricato: "2026-07" (ordinabile come testo).
+  /// Formato comune delle chiavi archivio: "2026-07" (ordinabile come testo,
+  /// come l'anno-mese ISO).
+  static String _formattaChiave(int anno, int mese) =>
+      '$anno-${mese.toString().padLeft(2, '0')}';
+
+  /// Chiave archivio del piano caricato.
   static String _chiaveMese(PianoMensile piano) =>
-      '${piano.anno}-${piano.mese.toString().padLeft(2, '0')}';
+      _formattaChiave(piano.anno, piano.mese);
+
+  /// Chiave archivio del mese corrente: per l'apertura automatica al primo
+  /// avvio (vedi _ripristinaPreferenze), quando non c'è ancora nessun piano
+  /// caricato da cui leggere anno/mese.
+  static String _chiaveMeseCorrente() {
+    final oggi = DateTime.now();
+    return _formattaChiave(oggi.year, oggi.month);
+  }
+
+  /// Chiave archivio del mese a distanza [delta] (±1) da quello del piano
+  /// caricato, per i pulsanti "mese precedente"/"mese successivo".
+  static String _chiaveMeseOffset(PianoMensile piano, int delta) {
+    final data = DateTime(piano.anno, piano.mese + delta, 1);
+    return _formattaChiave(data.year, data.month);
+  }
 
   /// Etichetta leggibile di una chiave archivio: "2026-07" → "Luglio 2026".
   String _etichettaMese(String chiave) {
@@ -218,6 +270,9 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     setState(() {
       if (!silenzioso) _loading = true;
       _errore = null;
+      // Un tentativo di caricamento vero e proprio (manuale o su un foglio
+      // salvato) rende irrilevante il messaggio del solo primo avvio.
+      _messaggioPrimoAvvio = null;
     });
     try {
       // Stesso trucco del tool HTML: l'endpoint export del foglio restituisce
@@ -375,6 +430,32 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Solo dal tentativo automatico al primo avvio (vedi
+        // _ripristinaPreferenze): informativo, non un errore di caricamento
+        // (icona/colore neutri, non kPrimary) — il server può essere
+        // irraggiungibile o non avere ancora quel mese, non è detto che
+        // qualcosa sia "andato storto".
+        if (_messaggioPrimoAvvio != null) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline, size: 16, color: Colors.white54),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_messaggioPrimoAvvio!,
+                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         const Text(
           'Incolla il link del foglio Google dei turni del mese '
           '(condiviso con "chiunque abbia il link").',
@@ -544,17 +625,28 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
           child: Row(
             children: [
+              _pulsanteMese(piano, -1, Icons.chevron_left, 'Mese precedente'),
               Expanded(
-                child: Text(
-                  '${kMesiItaliani[piano.mese - 1]} ${piano.anno}',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${kMesiItaliani[piano.mese - 1]} ${piano.anno}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                      ),
+                      if (_errore != null) ...[
+                        const SizedBox(width: 6),
+                        const Icon(Icons.warning_amber, size: 16, color: kPrimary),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-              if (_errore != null)
-                const Icon(Icons.warning_amber, size: 16, color: kPrimary),
+              _pulsanteMese(piano, 1, Icons.chevron_right, 'Mese successivo'),
             ],
           ),
         ),
@@ -596,6 +688,25 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               : _dettaglioGiorno(slotsGiorno),
         ),
       ],
+    );
+  }
+
+  /// Pulsante per saltare al mese precedente/successivo ([delta] = ±1 mese
+  /// rispetto al piano mostrato). Abilitato solo se il suo foglio è tra
+  /// quelli salvati: a differenza di una normale paginazione, ogni mese ha
+  /// un proprio link Google Sheets (vedi CLAUDE.md) — senza un URL noto per
+  /// quel mese non c'è nulla da scaricare, quindi il pulsante resta
+  /// disabilitato invece di tentare un caricamento destinato a fallire.
+  Widget _pulsanteMese(PianoMensile piano, int delta, IconData icon, String etichetta) {
+    final chiave = _chiaveMeseOffset(piano, delta);
+    final disponibile = _fogliSalvati.containsKey(chiave);
+    return IconButton(
+      icon: Icon(icon, color: disponibile ? Colors.white70 : Colors.white24),
+      tooltip: disponibile
+          ? '$etichetta (${_etichettaMese(chiave)})'
+          : '$etichetta — nessun foglio salvato',
+      visualDensity: VisualDensity.compact,
+      onPressed: disponibile ? () => _apriFoglioSalvato(chiave) : null,
     );
   }
 
