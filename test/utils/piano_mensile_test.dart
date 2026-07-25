@@ -95,10 +95,11 @@ void main() {
       expect(autista.sostituti, 'Verdi');
     });
 
-    test('fascia dalla descrizione (POMERIGGIO in A/B della seconda riga)', () {
+    test('fascia dalla descrizione (solo colonna A della seconda riga)', () {
       final excel = base('LUN 1');
       scrivi(excel, 'LUN 1', 'A6', 'H12');
-      scrivi(excel, 'LUN 1', 'B7', 'TURNO POMERIGGIO');
+      scrivi(excel, 'LUN 1', 'A7', 'TURNO POMERIGGIO');
+      scrivi(excel, 'LUN 1', 'B7', 'Cs'); // etichetta di riga, ignorata
       scrivi(excel, 'LUN 1', 'C6', 'Rossi');
       final slots = parsa(excel).delGiorno(1);
       expect(slots.first.fascia, FasciaPiano.pomeriggio);
@@ -181,6 +182,16 @@ void main() {
       expect(slots, hasLength(1));
       expect(slots.single.fascia, FasciaPiano.sera);
       expect(slots.single.buco, isTrue);
+    });
+
+    test('colonna B della riga orario ignorata anche per il centralino', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'CENTRALINO');
+      scrivi(excel, 'LUN 1', 'A7', '20:00 - 8:00');
+      scrivi(excel, 'LUN 1', 'B7', 'Centralino'); // etichetta di riga, non l'orario
+      final slots = parsa(excel).delGiorno(1);
+      expect(slots, hasLength(1));
+      expect(slots.single.orario, '20:00 - 8:00');
     });
   });
 
@@ -303,6 +314,17 @@ void main() {
       final (inizio, fine) = piano.intervalloEvento(slots.first)!;
       expect(inizio, DateTime(2026, 7, 1, 18, 30));
       expect(fine, DateTime(2026, 7, 1, 23, 30));
+    });
+
+    test('colonna B della riga orario ignorata (contiene il ruolo, non l\'orario)', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'A8', '18:30 - 23:30');
+      scrivi(excel, 'LUN 1', 'B8', 'Terzo'); // etichetta di riga, non l'orario
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+
+      final slots = parsa(excel).delGiorno(1);
+      expect(slots.map((s) => s.orario).toSet(), {'18:30 - 23:30'});
     });
 
     test('orario con punto come separatore e trattino lungo', () {
@@ -495,6 +517,113 @@ void main() {
         piano.buchiDelGiorno(1, ruoliEsclusi: {RuoloPiano.quarto, RuoloPiano.terzo}),
         hasLength(1),
       );
+    });
+  });
+
+  group('Foglio reale', () {
+    // Riproduce cella per cella un vero foglio "SERA/NOTTE" (scheda
+    // notturna, non DIURNO) fornito dall'utente, colonna B compresa (le
+    // etichette di ruolo AUT/CAP/SOC/ALL, che il parser deve ignorare) —
+    // non solo frammenti sintetici minimi come gli altri test. Regressione
+    // concreta per la lettura "solo colonna A" di descrizione/orario.
+    test('blocchi H24 sera/notte, template vuoti e centralino sera', () {
+      final excel = Excel.createExcel();
+      scrivi(excel, 'MER 1', 'B2', '1/7/2026');
+      scrivi(excel, 'MER 1', 'D2', 'SERA/NOTTE');
+      scrivi(excel, 'MER 1', 'A4', 'Turno del MERCOLEDI');
+      scrivi(excel, 'MER 1', 'B4', 'QUAL.');
+      scrivi(excel, 'MER 1', 'C4', 'NOMINATIVO');
+      scrivi(excel, 'MER 1', 'D4', 'SOSTITUZIONE');
+
+      // Blocco H24 di sera, righe 6-9.
+      scrivi(excel, 'MER 1', 'A6', 'H24');
+      scrivi(excel, 'MER 1', 'B6', 'AUT');
+      scrivi(excel, 'MER 1', 'C6', 'GUARNIERI BAR');
+      scrivi(excel, 'MER 1', 'A7', 'SERA');
+      scrivi(excel, 'MER 1', 'B7', 'CAP');
+      scrivi(excel, 'MER 1', 'C7', 'PIANTELLI CRI');
+      scrivi(excel, 'MER 1', 'A8', '18:30 - 23:30');
+      scrivi(excel, 'MER 1', 'B8', 'SOC');
+      scrivi(excel, 'MER 1', 'C8', 'TANDI SIM');
+      scrivi(excel, 'MER 1', 'A9', '5,0');
+      scrivi(excel, 'MER 1', 'B9', 'ALL');
+      scrivi(excel, 'MER 1', 'C9', 'GRANCHI PAO');
+
+      // Blocco H24 di notte, righe 11-14: sostituzione sull'Autista,
+      // orario a cavallo di mezzanotte.
+      scrivi(excel, 'MER 1', 'A11', 'H24');
+      scrivi(excel, 'MER 1', 'B11', 'AUT');
+      scrivi(excel, 'MER 1', 'C11', 'VOLPE BAR');
+      scrivi(excel, 'MER 1', 'D11', 'CHIERICI');
+      scrivi(excel, 'MER 1', 'A12', 'NOTTE');
+      scrivi(excel, 'MER 1', 'B12', 'CAP');
+      scrivi(excel, 'MER 1', 'C12', 'PIANTELLI CRI');
+      scrivi(excel, 'MER 1', 'A13', '23:30 - 6:00');
+      scrivi(excel, 'MER 1', 'B13', 'SOC');
+      scrivi(excel, 'MER 1', 'C13', 'MARRUNCHEDDU MAR');
+      scrivi(excel, 'MER 1', 'A14', '6,5');
+      scrivi(excel, 'MER 1', 'B14', 'ALL');
+      scrivi(excel, 'MER 1', 'C14', 'GRANCHI PAO');
+
+      // Tre blocchi H12 template mai compilati (righe 16-19, 21-24, 26-29):
+      // nessun macro in colonna A, solo le etichette di ruolo in B —
+      // devono restare del tutto ignorati, zero slot.
+      for (final r0 in [16, 21, 26]) {
+        const ruoli = ['AUT', 'CAP', 'SOC', 'ALL'];
+        for (var i = 0; i < ruoli.length; i++) {
+          scrivi(excel, 'MER 1', 'B${r0 + i}', ruoli[i]);
+        }
+        scrivi(excel, 'MER 1', 'A${r0 + 3}', '0,0');
+      }
+
+      // Centralino di sera, righe 31-33 (colonna B qui non è un ruolo ma
+      // "SERA"/"ALL", ulteriore prova che il parser non deve mai leggerla).
+      scrivi(excel, 'MER 1', 'A31', 'Centralino');
+      scrivi(excel, 'MER 1', 'B31', 'SERA');
+      scrivi(excel, 'MER 1', 'C31', 'LANDRIANI SER');
+      scrivi(excel, 'MER 1', 'A32', '18:30 - 23:30');
+      scrivi(excel, 'MER 1', 'B32', 'ALL');
+      scrivi(excel, 'MER 1', 'A33', '5,0');
+      scrivi(excel, 'MER 1', 'B33', 'ALL');
+
+      final piano = parsa(excel);
+      final slots = piano.delGiorno(1);
+      // 4 (H24 sera) + 4 (H24 notte) + 1 (centralino sera).
+      expect(slots, hasLength(9));
+
+      final sera = slots.where((s) => s.blocco == 1).toList();
+      expect(sera, hasLength(4));
+      for (final s in sera) {
+        expect(s.macro, 'H24');
+        expect(s.fascia, FasciaPiano.sera);
+        expect(s.orario, '18:30 - 23:30');
+      }
+      expect(sera.firstWhere((s) => s.ruolo == RuoloPiano.autista).titolare,
+          'GUARNIERI BAR');
+      expect(sera.firstWhere((s) => s.ruolo == RuoloPiano.quarto).titolare,
+          'GRANCHI PAO');
+
+      final notte = slots.where((s) => s.blocco == 2).toList();
+      expect(notte, hasLength(4));
+      for (final s in notte) {
+        expect(s.macro, 'H24');
+        expect(s.fascia, FasciaPiano.notte);
+        expect(s.orario, '23:30 - 6:00');
+      }
+      final autistaNotte =
+          notte.firstWhere((s) => s.ruolo == RuoloPiano.autista);
+      expect(autistaNotte.titolare, 'VOLPE BAR');
+      expect(autistaNotte.sostituti, 'CHIERICI');
+      final (inizio, fine) = piano.intervalloEvento(autistaNotte)!;
+      expect(inizio, DateTime(2026, 7, 1, 23, 30));
+      expect(fine, DateTime(2026, 7, 2, 6, 0));
+
+      final centralino = slots.where((s) => s.blocco == 3).toList();
+      expect(centralino, hasLength(1));
+      expect(centralino.single.ruolo, RuoloPiano.centralino);
+      expect(centralino.single.fascia, FasciaPiano.sera);
+      expect(centralino.single.orario, '18:30 - 23:30');
+      expect(centralino.single.titolare, 'LANDRIANI SER');
     });
   });
 }

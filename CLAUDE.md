@@ -1445,6 +1445,26 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     che qualcosa sia "andato storto"). Si azzera al primo vero tentativo di
     caricamento (manuale o su un foglio salvato) in `_carica()`, altrimenti
     resterebbe visibile insieme a un piano già caricato con successo.
+- **Bug del parser Piano turni: descrizione fascia e orario leggevano anche
+  la colonna B (2026-07-25)**: trovato dall'utente confrontando col foglio
+  reale (mai un'ipotesi mia, verificato cella per cella). Struttura vera di
+  ogni riga del blocco a 4 ruoli: colonna A = contenuto informativo di quella
+  riga (titolo blocco sulla riga del titolo, descrizione fascia sulla riga
+  del Cs, orario sulla riga del Terzo, monte ore sulla riga del Quarto,
+  ignorato), colonna B = **solo l'etichetta del ruolo** (AUT/CAP/SOC/ALL —
+  Autista/Cs/Terzo/Quarto), colonna C = titolare, D = sostituti. Il codice
+  concatenava A+B sia per la descrizione sia per l'orario
+  (`'${testo(r + 1, 0)} ${testo(r + 1, 1)}'`), quindi appendeva il nome del
+  ruolo in coda al valore mostrato (es. `"18:30 - 23:30 Terzo"` invece di
+  `"18:30 - 23:30"`); stesso bug per l'orario del centralino (riga sotto il
+  titolo). Ora entrambi leggono solo `testo(r + 1, 0)`/`testo(r + 2, 0)` —
+  colonna B non viene mai letta dal parser, in nessun punto. Nuovo gruppo di
+  test "Foglio reale" in `piano_mensile_test.dart`: riproduce cella per
+  cella un vero foglio "SERA/NOTTE" fornito dall'utente (colonna B compresa,
+  con le etichette di ruolo), non solo frammenti sintetici minimi come gli
+  altri test — regressione concreta invece che solo teorica. Lo stesso bug
+  e la stessa correzione sono stati applicati in parallelo al porting Go del
+  parser in un progetto separato (`Progetti/MOS`, temporaneo).
 
 ---
 

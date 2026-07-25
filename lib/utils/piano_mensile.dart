@@ -11,13 +11,15 @@
 // - Dalla riga 6 in giù, blocchi riconosciuti dalla colonna A:
 //   * H12/H24/ASSISTENZA/GETTONE: 4 righe di ruoli (Autista, Cs, Terzo,
 //     Quarto, a partire dalla riga del titolo); la fascia oraria è nel testo
-//     di A/B della seconda riga (MATT/POM/SER/NOT), default mattina se scheda
-//     diurna altrimenti sera. Un blocco ASSISTENZA/GETTONE senza descrizione
-//     né nomi è un template inutilizzato e viene ignorato.
+//     in colonna A della seconda riga (MATT/POM/SER/NOT), default mattina se
+//     scheda diurna altrimenti sera. Un blocco ASSISTENZA/GETTONE senza
+//     descrizione né nomi è un template inutilizzato e viene ignorato.
 //   * CENTRALINO: 2 slot (mattina+pomeriggio) se diurno, 1 (sera) altrimenti;
 //     l'orario è nella riga sotto il titolo (diurno: i due intervalli
 //     mattina/pomeriggio separati da "/", es. "8:30 - 13:30/13:30 - 18:30").
 //   * USCITA MEZZI: blocco fisso da saltare (6 righe).
+// - Colonna B su ogni riga: solo l'etichetta del ruolo (Autista/Cs/Terzo/
+//   Quarto), non letta — il ruolo si ricava dalla posizione della riga.
 // - Colonna C: chi è di turno (titolare); colonna D: possibili sostituti.
 //   Entrambe vuote = buco.
 //
@@ -379,8 +381,10 @@ int _parseFoglio(
       // L'orario del centralino è sulla riga sotto il titolo (r+1), non
       // sulla terza come nei blocchi a 4 ruoli; nella scheda diurna la cella
       // contiene i due intervalli mattina/pomeriggio separati da "/", che
-      // vanno divisi tra i due slot ("/" non compare mai negli orari).
-      final orari = '${testo(r + 1, 0)} ${testo(r + 1, 1)}'.trim().split('/');
+      // vanno divisi tra i due slot ("/" non compare mai negli orari). Solo
+      // colonna A: la B in questa riga non è testo dell'orario, è
+      // l'etichetta del ruolo di quella riga (vedi sotto).
+      final orari = testo(r + 1, 0).trim().split('/');
       if (diurno) {
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.mattina,
@@ -400,12 +404,15 @@ int _parseFoglio(
       continue;
     }
 
-    // Blocco equipaggio a 4 ruoli (H12/H24/ASSISTENZA/GETTONE).
-    // La descrizione della fascia condivide la riga del Cs (r+1), colonne A/B;
-    // la riga sotto (r+2) ha l'orario del blocco ("18:30 - 23:30") e l'ultima
-    // il monte ore, che non serve (l'orario basta a ricavare la durata).
-    final descrizione = '${testo(r + 1, 0)} ${testo(r + 1, 1)}'.toUpperCase();
-    final orario = '${testo(r + 2, 0)} ${testo(r + 2, 1)}'.trim();
+    // Blocco equipaggio a 4 ruoli (H12/H24/ASSISTENZA/GETTONE). Ogni riga ha
+    // colonna A col contenuto informativo (titolo blocco sulla riga r,
+    // descrizione della fascia sulla riga del Cs r+1, orario del blocco
+    // sulla riga del Terzo r+2, monte ore sulla riga del Quarto r+3, che non
+    // serve), colonna B col nome del ruolo di quella riga (Autista/Cs/Terzo/
+    // Quarto, solo etichetta — non letta, il ruolo si ricava dalla
+    // posizione), colonna C il titolare e D i sostituti.
+    final descrizione = testo(r + 1, 0).toUpperCase();
+    final orario = testo(r + 2, 0);
 
     if (valA == 'ASSISTENZA' || valA == 'GETTONE') {
       // Blocco template mai compilato (né descrizione né nomi): non è un
