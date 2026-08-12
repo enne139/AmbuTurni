@@ -92,7 +92,7 @@ Variabili principali (vedi `.env.example` per l'elenco completo):
 ## Build dell'immagine
 
 Questo backend **non ha più una sua immagine pubblicata separatamente**: è
-compilato ed eseguito dentro l'immagine web (vedi `.gitea/workflows/build-web.yml`
+compilato ed eseguito dentro l'immagine web (vedi `.github/workflows/build-web.yml`
 e il `Dockerfile` alla radice). `backend/Dockerfile` in questa cartella serve
 solo per lo sviluppo locale via `docker compose` sopra.
 

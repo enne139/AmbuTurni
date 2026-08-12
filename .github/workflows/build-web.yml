@@ -1,0 +1,79 @@
+# Workflow GitHub Actions: costruisce e pubblica l'immagine della versione
+# web (build Flutter + backend Go di backend/ + nginx, che serve i file
+# statici e fa da reverse proxy verso il backend — vedi il Dockerfile alla
+# radice) sul GitHub Container Registry (ghcr.io), sotto lo stesso
+# repository GitHub. Trigger sui tag vX.Y.Z come build-android.yml: la web
+# app segue lo stesso versionamento dell'APK, si ripubblica a ogni release
+# (non a ogni push su main — continuous deploy scollegherebbe "versione
+# app" da "cosa gira in produzione sul web"). Il deploy sul server resta
+# manuale. Il backend non ha una sua immagine separata: è incorporato qui.
+#
+# Migrato da Gitea Actions + Container Registry della stessa istanza Gitea
+# (violata, 2026-08, vedi CLAUDE.md) a GitHub Actions + ghcr.io: il push
+# usa il GITHUB_TOKEN generato automaticamente a ogni run (permessi
+# `packages: write` sotto), nessun PAT (`REGISTRY_TOKEN`) da custodire o
+# ruotare.
+#
+# Runner GitHub-hosted standard (ubuntu-latest): Docker con buildx già
+# pronto, nessuna infrastruttura propria richiesta (a differenza di Gitea,
+# che richiedeva un runner self-hosted con accesso al socket Docker).
+#
+# Il primo push crea il pacchetto su ghcr.io come PRIVATO di default, anche
+# con repository pubblico: va reso pubblico a mano una tantum dalle
+# impostazioni del pacchetto su GitHub (Package settings → Change
+# visibility), altrimenti il pull in produzione richiede un `docker login`
+# anche per un'immagine di un repo pubblico.
+
+name: build-web-image
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Prepara variabili registry
+        # Nome immagine = ghcr.io/<owner>/<repo>-web, owner/repo in minuscolo
+        # perché i nomi immagine Docker devono essere lowercase
+        # (github.repository può contenere maiuscole).
+        run: |
+          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')-web"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Login al registry
+        # GITHUB_TOKEN via stdin: utente = chi ha lanciato il workflow.
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build dell'immagine
+        # Builder "default" (driver docker) + --load: l'immagine entra nello
+        # store locale del daemon (il builder docker-container non carica in
+        # locale e gira in rete isolata che non raggiunge il registry).
+        # Contesto la radice del repo (dove sta il Dockerfile, che ha
+        # bisogno di tutto il progetto Flutter + backend/). Tag sia con lo
+        # SHA e "latest" sia col nome del tag vX.Y.Z (come build-android.yml):
+        # sul server si puo' puntare a una versione precisa invece che solo
+        # all'ultima.
+        run: |
+          docker buildx build --builder default --load \
+            -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" -t "$IMAGE:${{ github.ref_name }}" .
+
+      - name: Push dell'immagine
+        run: |
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.ref_name }}"

@@ -7,7 +7,7 @@ build
 android
 windows
 test
-.gitea
+.github
 .idea
 .vscode
 *.iml

@@ -1,10 +1,10 @@
 # Immagine della versione web: build Flutter multi-stage + backend Go
 # (backend/, elenco condiviso ospedali), serviti insieme da nginx — un solo
 # container, nginx fa da reverse proxy su /api/ verso il backend. Vedi
-# .gitea/workflows/build-web.yml per come viene costruita e pubblicata.
+# .github/workflows/build-web.yml per come viene costruita e pubblicata.
 
 # Stage 1: build della web app. Stessa immagine e versione pinnata di
-# .gitea/workflows/build-android.yml (Flutter/SDK preinstallati, build
+# .github/workflows/build-android.yml (Flutter/SDK preinstallati, build
 # riproducibili — aggiornarla a mano quando si aggiorna Flutter in locale).
 FROM ghcr.io/cirruslabs/flutter:3.44.0 AS build-web
 WORKDIR /app

@@ -42,9 +42,10 @@
    e si manifestava solo su Android reale.
 9. **Processo di release:** bump della versione in `pubspec.yaml` (`X.Y.Z+N`,
    incrementando entrambe le parti), commit su `main`, poi tag `vX.Y.Z`: il push
-   del tag fa pubblicare al workflow Gitea l'APK come artifact e come Release,
-   e pubblica anche l'immagine Docker della versione web (build-web.yml) con
-   un tag pari alla versione — il deploy sul server resta comunque manuale.
+   del tag fa pubblicare al workflow GitHub Actions l'APK come artifact e
+   come Release GitHub, e pubblica anche l'immagine Docker della versione
+   web (build-web.yml) su `ghcr.io` con un tag pari alla versione — il
+   deploy sul server resta comunque manuale.
 
 ---
 
@@ -70,7 +71,7 @@
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Versione app a runtime | `package_info_plus` (legge X.Y.Z+N dalla piattaforma, mostrata in Impostazioni) |
 | Localizzazione widget nativi | `flutter_localizations` (SDK), solo per `showDatePicker`: `locale` fisso `it`, il resto dell'app resta testo italiano hardcoded |
-| Build | `flutter build apk` oppure workflow Gitea |
+| Build | `flutter build apk` oppure workflow GitHub Actions |
 
 Web (Chrome/Edge, `flutter run -d chrome` / `flutter build web`): DB via
 `sqflite_common_ffi_web` (SQLite compilato in WASM, persistito in IndexedDB),
@@ -195,7 +196,7 @@ backend/                            API Go+PostgreSQL dell'elenco condiviso ospe
                                      backend/Dockerfile + docker-compose.yml sono solo per
                                      sviluppo locale (`docker compose up --build`) — in
                                      produzione il binario è incorporato nell'immagine web
-.gitea/workflows/build-web.yml      CI Docker versione web (build Flutter + backend Go + nginx,
+.github/workflows/build-web.yml      CI Docker versione web (build Flutter + backend Go + nginx,
                                      un'unica immagine — build-backend.yml è stato rimosso)
 Dockerfile                          build multi-stage: web Flutter + binario backend Go +
                                      nginx (root: serve tutto il progetto, backend/ incluso)
@@ -268,8 +269,8 @@ dart run sqflite_common_ffi_web:setup
 La build Android richiede **Gradle 8.14.3** (`gradle-wrapper.properties`), **AGP 8.11.1**
 e **Kotlin 1.9.0 → 2.2.20** (`android/settings.gradle`): versioni minime imposte da
 Flutter stable per Java 23 (Gradle ≥ 8.14, AGP ≥ 8.11.1, KGP ≥ 2.2.20 — sotto soglia
-la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
-(`build-android.yml`) usa `flutter build apk`.
+la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow GitHub
+Actions (`build-android.yml`) usa `flutter build apk`.
 
 ## Decisioni tecniche rilevanti
 
@@ -657,7 +658,7 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   setup Flutter/SDK a ogni run su runner effimero (dettagli e motivazioni nei
   commenti in testa a `build-android.yml`, per non duplicarli qui).
 - **Pubblicazione web: un'unica immagine Docker (nginx + backend Go)**
-  (`Dockerfile` alla radice + `.gitea/workflows/build-web.yml`): build
+  (`Dockerfile` alla radice + `.github/workflows/build-web.yml`): build
   multi-stage, stage 1 `ghcr.io/cirruslabs/flutter:3.44.0` (stessa immagine
   pinnata della CI Android, include già il setup di
   `sqflite_common_ffi_web:setup` non versionato) compila `flutter build web
@@ -675,8 +676,10 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   tolto** — le rotte Go vivono sotto `/api/` anche quando il backend gira
   da solo senza nginx davanti, vedi bullet sotto sul perché), `/admin/` →
   backend su `/admin/` (pagina di gestione ospedali, percorso diretto per
-  un URL più corto). Pubblicata sul Container Registry della stessa istanza Gitea
-  (`ambuturni-web`), un solo secret `REGISTRY_TOKEN`. Trigger sui tag
+  un URL più corto). Pubblicata sul GitHub Container Registry
+  (`ghcr.io/<owner>/ambuturni-web`), push col `GITHUB_TOKEN` automatico del
+  workflow, nessun secret PAT da gestire (migrato da Gitea il 2026-08-12,
+  vedi bullet dedicato più sotto). Trigger sui tag
   `vX.Y.Z` (come `build-android.yml`, non a ogni push su `main`: la web app
   segue lo stesso versionamento dell'APK — questo ora vale anche per il
   backend, che non ha più un versionamento/trigger proprio), immagine
@@ -1005,8 +1008,12 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
     reale oggi, aggiunta prematura).
 - **`pubspec.lock` versionato**: raccomandazione Flutter per le app (non le
   librerie) — build riproducibili in CI. Gli step actions/cache (Gradle/pub)
-  sono stati rimossi dal workflow: senza cache backend sull'istanza Gitea
-  facevano solo cache-miss silenziosi.
+  erano stati rimossi dal workflow perché, sulla vecchia istanza Gitea, senza
+  un cache backend configurato facevano solo cache-miss silenziosi — non
+  reintrodotti nella migrazione a GitHub Actions (2026-08-12, che invece un
+  cache backend funzionante ce l'ha) perché il grosso del guadagno è già
+  nell'immagine `cirruslabs/flutter` precompilata: possibile ottimizzazione
+  futura, non fatta qui per non allargare la portata della migrazione.
 - **Rinominata l'app "AmbuTurni"**: nome visibile e identificatori interni
   (package Dart `ambu_turni`, `applicationId` Android, CMake/Windows).
   **Eccezione deliberata**: il file SQLite resta `ambulanza_turni.db` — rinominarlo
@@ -1049,9 +1056,14 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   ospitare più strumenti in futuro.
 - **Keystore di release**: PKCS12 in `%USERPROFILE%\keystores\`, letto da
   `android/key.properties` (gitignorato) se presente, altrimenti fallback
-  debug. In CI arriva dai secret Gitea `KEYSTORE_B64`/`KEYSTORE_PASSWORD`. Le
-  release passate (v1.0.0, v1.1.0) sono state ri-firmate per uniformità: gli
-  update via Obtainium richiedono la stessa firma tra versioni.
+  debug. In CI arriva dai secret del repository GitHub
+  `KEYSTORE_B64`/`KEYSTORE_PASSWORD`. Le release passate (v1.0.0, v1.1.0)
+  sono state ri-firmate per uniformità: gli update via Obtainium richiedono
+  la stessa firma tra versioni. **Rigenerato da zero il 2026-08-12** dopo la
+  violazione del vecchio server Gitea (dove viveva come secret CI, quindi
+  potenzialmente esposto): rottura deliberata della continuità di firma, chi
+  ha già installato l'app deve disinstallare/reinstallare — vedi bullet
+  sulla migrazione a GitHub Actions.
 - **Piattaforma web** (`flutter create . --platforms web`): il blocco vero
   non era il target in sé ma tre dipendenze Android/desktop-only, trovate
   leggendo il codice prima di iniziare:
@@ -1465,6 +1477,58 @@ la build fallisce con "AGP/Gradle/KGP version too low"). Il workflow Gitea
   altri test — regressione concreta invece che solo teorica. Lo stesso bug
   e la stessa correzione sono stati applicati in parallelo al porting Go del
   parser in un progetto separato (`Progetti/MOS`, temporaneo).
+- **Migrazione CI/registry da Gitea a GitHub Actions (2026-08-12)**: il
+  server che ospitava l'istanza Gitea del progetto è stato violato — repo
+  spostato su GitHub (`enne139/ambuturni`, pubblico), dismessa ogni
+  infrastruttura self-hosted per la CI. `.gitea/workflows/` rimosso,
+  sostituito da `.github/workflows/build-android.yml`/`build-web.yml`:
+  stessi trigger (tag `vX.Y.Z` + `workflow_dispatch`) e stessa logica di
+  build, ma:
+  - **Runner self-hosted (label `android`, >= 8 GB RAM) → runner
+    GitHub-hosted `ubuntu-latest`** per entrambi i workflow: i runner
+    standard GitHub-hosted (4 vCPU/16 GB RAM) coprono ampiamente il
+    requisito, supportano nativamente i job `container:` (usati per
+    l'immagine `ghcr.io/cirruslabs/flutter`) e hanno Docker/buildx già
+    pronti — nessuna infrastruttura propria da tenere online, il motivo
+    stesso della migrazione. Rimosso anche lo step di installazione manuale
+    di Node.js nel container Flutter (necessario per l'act_runner di
+    Gitea): i runner GitHub-hosted montano da soli il proprio Node dentro
+    qualunque container di job per eseguire le action JS, senza bisogno che
+    l'immagine lo includa.
+  - **Container Registry Gitea → GitHub Container Registry (`ghcr.io`)**:
+    `build-web.yml` pubblica su `ghcr.io/enne139/ambuturni-web` (stesso
+    nome immagine, stesso schema di tag `latest`/SHA/`vX.Y.Z`).
+  - **Niente più secret `REGISTRY_TOKEN` (PAT)**: sia il push su `ghcr.io`
+    sia la pubblicazione della Release usano il `GITHUB_TOKEN` generato
+    automaticamente a ogni run (permessi `packages: write`/`contents:
+    write` dichiarati nel workflow) — un secret in meno da custodire e
+    ruotare. `akkuman/gitea-release-action` (specifica di Gitea) è
+    sostituita da `gh release create` (CLI preinstallata sui runner
+    GitHub-hosted), in un job **separato** (`release`) che gira fuori dal
+    container Flutter — non è detto che `gh` sia presente in
+    un'immagine di terze parti pensata solo per build Flutter — e scarica
+    l'APK come artifact dal job `build`.
+  - **Restano solo due secret**: `KEYSTORE_B64`/`KEYSTORE_PASSWORD`. Il
+    keystore è stato **rigenerato da zero**, non semplicemente ricopiato:
+    viveva come secret sull'istanza Gitea violata, quindi potenzialmente
+    esposto (vedi bullet "Keystore di release" più sopra per le
+    conseguenze accettate esplicitamente dall'utente).
+  - **`actions/upload-artifact` da v3 (SHA pinnato) a v4.6.2**: v3 è stato
+    dismesso da GitHub nel frattempo (le run che lo usano falliscono), non
+    una scelta di aggiornamento facoltativa — stesso motivo per
+    `actions/download-artifact` (v4.3.0, nuovo nel job `release`).
+    `actions/checkout` resta pinnato alla stessa versione/SHA di prima
+    (v4.3.1): è la stessa action upstream, nessun motivo di cambiarla.
+  - **Pacchetto `ghcr.io` privato di default anche con repo pubblico**: va
+    reso pubblico a mano una tantum dalle impostazioni del pacchetto su
+    GitHub, altrimenti il pull in produzione richiede un login.
+  - **Nessuna azione lato codice applicativo**: la migrazione tocca solo
+    workflow CI, `Dockerfile`/`.dockerignore` (path nei commenti, `.gitea`
+    → `.github` nell'exclude list), `android/app/build.gradle` (commento) e
+    `README.md`/`backend/README.md` (riferimenti a Gitea) — nessuna
+    modifica a `lib/`, `backend/*.go` o allo schema DB, quindi nessun bump
+    di versione DB né test manuale richiesti (regola 4, eccezione
+    documentazione/CI).
 
 ---
 
@@ -1530,7 +1594,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.
 - ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 140 test unitari.
-- ✅ **CI/Release**: build APK su Gitea, Release automatica sui tag `vX.Y.Z`.
+- ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
+  Release automatica sui tag `vX.Y.Z`.
 
 ## TODO
 

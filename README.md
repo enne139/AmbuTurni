@@ -83,7 +83,8 @@ le rotte del backend vivono sotto `/api/` sia in locale sia in produzione).
 ### Installazione in produzione
 
 L'immagine `ambuturni-web` (build multi-stage: web Flutter + backend Go +
-nginx, pubblicata sul Container Registry Gitea a ogni tag `vX.Y.Z`) include
+nginx, pubblicata sul GitHub Container Registry — `ghcr.io` — a ogni tag
+`vX.Y.Z`) include
 già il backend: serve solo un **PostgreSQL raggiungibile** dal container e
 le variabili d'ambiente del backend passate al container `ambuturni-web`
 (prima, quando l'immagine era solo statica, non servivano):
@@ -110,7 +111,9 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   web:
-    image: gitea.maratuck.com/enne139/ambuturni-web:latest   # o un tag vX.Y.Z
+    image: ghcr.io/enne139/ambuturni-web:latest   # o un tag vX.Y.Z
+    # Se il pacchetto su ghcr.io è privato serve prima un `docker login
+    # ghcr.io` con un PAT (scope read:packages) sul server di produzione.
     restart: unless-stopped
     depends_on: [db]
     environment:
@@ -154,15 +157,31 @@ keyPassword=<password>
 Se `key.properties` non esiste, `flutter build apk` firma con la chiave debug
 senza errori: comodo per provare la build, ma vedi l'avvertenza sopra.
 
-### In CI (Gitea)
+### In CI (GitHub Actions)
 
 Il workflow `build-android.yml` ricostruisce il keystore da due secret del
-repository e genera `android/key.properties` prima della build:
+repository GitHub e genera `android/key.properties` prima della build:
 
 | Secret | Contenuto |
 |---|---|
 | `KEYSTORE_B64` | il file `.jks` codificato in base64 |
 | `KEYSTORE_PASSWORD` | password di store e chiave (alias fisso `ambuturni`) |
+
+Impostabili da Settings → Secrets and variables → Actions → New repository
+secret, o via `gh secret set NOME --repo enne139/ambuturni`.
+
+**Keystore rigenerato dopo la violazione del vecchio server Gitea (2026-08)**:
+i secret CI vivevano lì e sono considerati potenzialmente esposti — chi ha
+già installato l'app (anche via Obtainium) non riceve più aggiornamenti
+in-place con la nuova firma e deve disinstallare/reinstallare. Per generare
+un nuovo keystore:
+
+```bash
+keytool -genkeypair -v -storetype PKCS12 \
+  -keystore ambuturni-release.jks -alias ambuturni \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 ambuturni-release.jks   # da incollare in KEYSTORE_B64
+```
 
 ## Struttura
 

@@ -1,0 +1,129 @@
+# Workflow GitHub Actions: compila l'APK Android con Flutter.
+#
+# Trigger: manuale (workflow_dispatch) o push di tag vX.Y.Z.
+#
+# Migrato da Gitea Actions (self-hosted, runner label `android`) a runner
+# GitHub-hosted dopo la violazione del vecchio server Gitea (2026-08, vedi
+# CLAUDE.md → Decisioni tecniche): nessuna infrastruttura propria da tenere
+# online. Il runner standard `ubuntu-latest` (4 vCPU / 16 GB RAM) copre
+# ampiamente gli 8 GB minimi richiesti in precedenza e supporta nativamente
+# i job `container:`.
+#
+# Il job "build" gira nell'immagine ghcr.io/cirruslabs/flutter (Flutter +
+# JDK + Android SDK preinstallati): elimina i ~10 minuti di download/
+# estrazione di Flutter e Android SDK a ogni run. ghcr.io è pubblico e già
+# raggiungibile dai runner GitHub senza alcuna configurazione. La versione
+# dell'immagine è pinnata (build riproducibili): aggiornarla a mano quando
+# si aggiorna Flutter in locale. Le patch release di Flutter non sempre
+# hanno un tag immagine (es. 3.44.4 locale -> 3.44.0 qui, il più recente
+# disponibile): differenze di patch sono accettabili per la build. Se AGP
+# richiede platform/build-tools non inclusi nell'immagine, li scarica da
+# solo al primo build (licenze già accettate nell'immagine).
+#
+# APK compilato solo per arm64 (--target-platform android-arm64): dimezza
+# il tempo di build nativo rispetto al fat APK multi-ABI, ma non installa
+# su emulatori x86 o device 32-bit/molto vecchi.
+#
+# Niente actions/cache su Gradle/pub: stessa scelta di prima, il grosso del
+# guadagno è già nell'immagine precompilata (GitHub Actions ha una cache
+# backend funzionante, a differenza della vecchia istanza Gitea — se in
+# futuro il tempo di build diventa un problema, è la prima cosa da provare).
+#
+# Il job "release" gira invece FUORI dal container Flutter (immagine
+# minimale, non è detto includa `gh`) e si limita a scaricare l'APK già
+# pubblicato come artifact e a creare la Release: separare i due job evita
+# di dover verificare cosa c'è dentro l'immagine cirruslabs solo per questo.
+# Usa il GITHUB_TOKEN generato automaticamente a ogni run (permessi
+# `contents: write` sotto) — a differenza di Gitea non serve più alcun PAT
+# (`REGISTRY_TOKEN`) né l'action `akkuman/gitea-release-action` (specifica
+# di Gitea): `gh` è preinstallata sui runner GitHub-hosted.
+
+name: build-android-apk
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Flutter, JDK e Android SDK sono già dentro l'immagine: niente step di
+    # setup.
+    container: ghcr.io/cirruslabs/flutter:3.44.0
+
+    steps:
+      - name: Checkout
+        # Action pinnata per commit SHA (non per tag): un tag può essere
+        # spostato su codice diverso, lo SHA no. Aggiornare SHA e commento
+        # insieme quando si fa il bump di versione. I runner GitHub-hosted
+        # montano automaticamente il proprio Node.js dentro il container
+        # (dalla cartella "externals" del runner) per eseguire le action
+        # JS: a differenza di Gitea (act_runner) non serve installarlo a
+        # mano — se un giorno uno step dovesse fallire con "node: command
+        # not found", è la prima cosa da reintrodurre (vedi storia git).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Installa dipendenze Dart
+        run: flutter pub get
+
+      - name: Prepara keystore di release
+        # Ricostruisce il keystore dai secret e genera android/key.properties
+        # (gitignorato): build.gradle lo legge e firma l'APK con la chiave di
+        # release. Senza questo step la build ricadrebbe sulla firma debug,
+        # che cambia tra runner e rompe gli aggiornamenti via Obtainium.
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > /tmp/ambuturni-release.jks
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            /tmp/ambuturni-release.jks "$KEYSTORE_PASSWORD" ambuturni "$KEYSTORE_PASSWORD" \
+            > android/key.properties
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+
+      - name: Build APK release
+        # target-platform limitato ad arm64 (praticamente tutti i device
+        # recenti): evita di compilare anche per armeabi-v7a/x86_64, il
+        # grosso del tempo di build nativo. Tradeoff esplicito: l'APK non
+        # installa su emulatori x86 o device molto vecchi/32-bit.
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Pubblica APK come artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ambuturni-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  release:
+    # Job separato (vedi commento in testa al file): niente `container:`,
+    # gira sull'immagine standard del runner dove `gh` è già disponibile.
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # richiesto da `gh release create`
+
+    steps:
+      - name: Scarica l'APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ambuturni-apk
+          path: apk
+
+      - name: Pubblica la Release su GitHub
+        # continue-on-error: un fallimento qui non deve far fallire il
+        # workflow: l'APK è già pubblicato come artifact dal job "build".
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            apk/app-release.apk \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "Build automatica da ${{ github.sha }}."
