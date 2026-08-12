@@ -59,21 +59,17 @@ jobs:
         # GITHUB_TOKEN via stdin: utente = chi ha lanciato il workflow.
         run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Build dell'immagine
-        # Builder "default" (driver docker) + --load: l'immagine entra nello
-        # store locale del daemon (il builder docker-container non carica in
-        # locale e gira in rete isolata che non raggiunge il registry).
+      - name: Build e push dell'immagine
+        # Un'unico `buildx build --push` con più `-t`, non build --load
+        # seguita da N `docker push` separati: al primo run reale su
+        # ghcr.io tre push sequenziali sulla stessa immagine (SHA/latest/
+        # vX.Y.Z) hanno fatto scattare il secondary rate limit del
+        # registry ("You have exceeded a secondary rate limit") su un
+        # pacchetto appena creato. Un push atomico multi-tag è anche il
+        # pattern raccomandato per buildx: i layer sono condivisi tra i
+        # tag, un solo giro di richieste al registry invece di tre.
         # Contesto la radice del repo (dove sta il Dockerfile, che ha
-        # bisogno di tutto il progetto Flutter + backend/). Tag sia con lo
-        # SHA e "latest" sia col nome del tag vX.Y.Z (come build-android.yml):
-        # sul server si puo' puntare a una versione precisa invece che solo
-        # all'ultima.
+        # bisogno di tutto il progetto Flutter + backend/).
         run: |
-          docker buildx build --builder default --load \
+          docker buildx build --builder default --push \
             -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" -t "$IMAGE:${{ github.ref_name }}" .
-
-      - name: Push dell'immagine
-        run: |
-          docker push "$IMAGE:$GITHUB_SHA"
-          docker push "$IMAGE:latest"
-          docker push "$IMAGE:${{ github.ref_name }}"

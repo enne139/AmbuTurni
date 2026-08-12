@@ -1529,6 +1529,13 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     modifica a `lib/`, `backend/*.go` o allo schema DB, quindi nessun bump
     di versione DB né test manuale richiesti (regola 4, eccezione
     documentazione/CI).
+  - **Bug trovato al primo run reale su `ghcr.io`**: `build-web.yml` faceva
+    `buildx build --load` seguito da tre `docker push` sequenziali (SHA/
+    latest/`vX.Y.Z`) — su un pacchetto appena creato ha fatto scattare il
+    secondary rate limit del registry ("You have exceeded a secondary rate
+    limit"), run fallita. Corretto in un unico `buildx build --push` con i
+    tre `-t`: un solo giro di richieste al registry, layer condivisi tra i
+    tag, pattern comunque più idiomatico per buildx multi-tag.
 
 ---
 
