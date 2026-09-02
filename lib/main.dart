@@ -31,6 +31,7 @@ class AmbuTurniApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ToolsProvider()),
         ChangeNotifierProvider(create: (_) => NavigazioneProvider()),
         ChangeNotifierProvider(create: (_) => TutorialProvider()),
+        ChangeNotifierProvider(create: (_) => AccountProvider()),
       ],
       child: MaterialApp(
         title: 'AmbuTurni',

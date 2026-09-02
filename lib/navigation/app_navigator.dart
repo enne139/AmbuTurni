@@ -56,6 +56,7 @@ class _AppNavigatorState extends State<AppNavigator> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<AnagraficheProvider>().carica();
       context.read<ToolsProvider>().carica();
+      context.read<AccountProvider>().carica();
       final nav = context.read<NavigazioneProvider>();
       await nav.carica();
       // Pagina principale scelta in Impostazioni → Navigazione: applicata

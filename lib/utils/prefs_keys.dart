@@ -64,6 +64,22 @@ const kPrefToolsAttivi = 'tools_attivi';
 // origine, riattivando quelli disattivati esplicitamente prima del backup.
 const kPrefToolsConosciuti = 'tools_conosciuti';
 
+// Account "utente-app" (AccountProvider, widgets/accesso_richiesto.dart):
+// sblocca i contenuti riservati dell'app (Repository formazione, Archivio
+// comunicati). Credenziali create SOLO dalla pagina admin del backend
+// condiviso, mai da questa app — qui si fa solo login/cambio password.
+// Stato di sessione locale al device, come kPrefTutorialCompletato: NON va
+// nel backup (db/backup.dart non le tocca), un JWT dentro un backup
+// esportabile sarebbe anche un problema di sicurezza, non solo una
+// preferenza da ripristinare altrove.
+const kPrefAccountToken = 'account_token';
+const kPrefAccountUsername = 'account_username';
+// true finché la password provvisoria data dall'admin non è stata
+// cambiata (vedi backend: utenti_app.deve_cambiare_password); persistito
+// così un riavvio dell'app durante il cambio forzato lo ripropone invece
+// di lasciar entrare nei contenuti riservati.
+const kPrefAccountDeveCambiarePassword = 'account_deve_cambiare_password';
+
 // Tutorial di navigazione a schermo intero (widgets/tutorial_overlay.dart,
 // TutorialProvider): mostrato una sola volta al primo avvio, poi rivedibile
 // dal pulsante in Impostazioni → Navigazione. Stato puramente locale al

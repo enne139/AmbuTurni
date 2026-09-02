@@ -219,32 +219,120 @@ void main() {
   });
 
   group('getRepositoryFormazione', () {
-    test('chiama GET /api/repository-formazione e restituisce l\'url', () async {
+    test('chiama GET /api/repository-formazione con Authorization e restituisce l\'url', () async {
       final richieste = <http.Request>[];
       final api = _api(
         _json({'url': 'https://esempio.it/formazione', 'updated_at': '2026-07-20T10:00:00Z'}, 200),
         richieste,
       );
-      expect(await api.getRepositoryFormazione(), 'https://esempio.it/formazione');
+      expect(await api.getRepositoryFormazione(token: 'abc'), 'https://esempio.it/formazione');
       expect(richieste.single.url.toString(), 'https://backend.test/api/repository-formazione');
+      expect(richieste.single.headers['Authorization'], 'Bearer abc');
     });
 
     test('url assente o vuoto restituisce null (mai configurato)', () async {
       final api = _api(_json({'url': ''}, 200), []);
-      expect(await api.getRepositoryFormazione(), isNull);
+      expect(await api.getRepositoryFormazione(token: 'abc'), isNull);
     });
 
     test('risposta non-oggetto lancia BackendApiException', () async {
       final api = _api(_json([], 200), []);
-      expect(() => api.getRepositoryFormazione(), throwsA(isA<BackendApiException>()));
+      expect(() => api.getRepositoryFormazione(token: 'abc'), throwsA(isA<BackendApiException>()));
     });
 
     test('errore HTTP riporta il messaggio del server', () async {
       final api = _api(_json({'error': 'fuori servizio'}, 500), []);
       expect(
-        () => api.getRepositoryFormazione(),
+        () => api.getRepositoryFormazione(token: 'abc'),
         throwsA(isA<BackendApiException>().having((e) => e.message, 'message', contains('fuori servizio'))),
       );
+    });
+
+    test('401 lancia BackendApiUnauthorized (per il logout automatico)', () async {
+      final api = _api(_json({'error': 'Token mancante o non valido'}, 401), []);
+      expect(() => api.getRepositoryFormazione(token: 'scaduto'), throwsA(isA<BackendApiUnauthorized>()));
+    });
+  });
+
+  group('loginUtente', () {
+    test('chiama POST /api/utenti/login col body corretto', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json({'token': 'jwt-utente', 'deveCambiarePassword': true}, 200), richieste);
+      final risultato = await api.loginUtente(username: 'volontario1', password: 'temp123');
+      expect(risultato.token, 'jwt-utente');
+      expect(risultato.deveCambiarePassword, isTrue);
+      expect(richieste.single.method, 'POST');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/utenti/login');
+      expect(jsonDecode(richieste.single.body), {'username': 'volontario1', 'password': 'temp123'});
+    });
+
+    test('deveCambiarePassword assente viene letto come false', () async {
+      final api = _api(_json({'token': 'jwt-utente'}, 200), []);
+      final risultato = await api.loginUtente(username: 'u', password: 'p');
+      expect(risultato.deveCambiarePassword, isFalse);
+    });
+
+    test('credenziali non valide (401) lanciano BackendApiUnauthorized', () async {
+      final api = _api(_json({'error': 'Credenziali non valide'}, 401), []);
+      expect(
+        () => api.loginUtente(username: 'u', password: 'sbagliata'),
+        throwsA(isA<BackendApiUnauthorized>()),
+      );
+    });
+  });
+
+  group('cambiaPassword', () {
+    test('chiama PUT /api/utenti/password con Authorization e body corretti', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json({'ok': true}, 200), richieste);
+      await api.cambiaPassword(token: 'abc', passwordAttuale: 'vecchia', passwordNuova: 'nuovaLunga1');
+      expect(richieste.single.method, 'PUT');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/utenti/password');
+      expect(richieste.single.headers['Authorization'], 'Bearer abc');
+      expect(jsonDecode(richieste.single.body), {'passwordAttuale': 'vecchia', 'passwordNuova': 'nuovaLunga1'});
+    });
+
+    test('password attuale errata riporta il messaggio del server', () async {
+      final api = _api(_json({'error': 'password attuale errata'}, 400), []);
+      expect(
+        () => api.cambiaPassword(token: 'abc', passwordAttuale: 'x', passwordNuova: 'nuovaLunga1'),
+        throwsA(isA<BackendApiException>().having((e) => e.message, 'message', contains('password attuale errata'))),
+      );
+    });
+  });
+
+  group('getComunicati', () {
+    test('chiama GET /api/comunicati con Authorization e restituisce l\'elenco', () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json([
+          {'id': '1', 'titolo': 'Assemblea', 'fileName': 'a.pdf', 'fileSize': 1234},
+        ], 200),
+        richieste,
+      );
+      final lista = await api.getComunicati(token: 'abc');
+      expect(lista, hasLength(1));
+      expect(lista.first['titolo'], 'Assemblea');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/comunicati');
+      expect(richieste.single.headers['Authorization'], 'Bearer abc');
+    });
+  });
+
+  group('getComunicatoFile', () {
+    test('chiama GET /api/comunicati/:id/file con Authorization e restituisce i byte', () async {
+      final richieste = <http.Request>[];
+      final bytes = utf8.encode('%PDF-contenuto-finto');
+      final api = BackendApi(
+        baseUrl: 'https://backend.test',
+        client: MockClient((req) async {
+          richieste.add(req);
+          return http.Response.bytes(bytes, 200);
+        }),
+      );
+      final risultato = await api.getComunicatoFile(token: 'abc', id: 'xyz');
+      expect(risultato, bytes);
+      expect(richieste.single.url.toString(), 'https://backend.test/api/comunicati/xyz/file');
+      expect(richieste.single.headers['Authorization'], 'Bearer abc');
     });
   });
 

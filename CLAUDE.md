@@ -114,7 +114,9 @@ lib/
 │                                    Piattaforma web)
 ├── providers/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider,
-│                                   StatisticheProvider, ToolsProvider, NavigazioneProvider
+│                                   StatisticheProvider, ToolsProvider, NavigazioneProvider,
+│                                   TutorialProvider, AccountProvider (sessione utente-app:
+│                                   login/cambio password/logout, sblocca i contenuti riservati)
 ├── navigation/
 │   └── app_navigator.dart         Scaffold con NavigationBar (2-5 tab, IndexedStack, tab
 │                                   selezionata per identità con l'enum _TabId); la tab Attività
@@ -129,11 +131,17 @@ lib/
 │   ├── calendario_mensile.dart    CalendarioMensile<T>: vista calendario generica (turni e assistenze)
 │   ├── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
 │   ├── nota_markdown.dart         NotaMarkdown: rendering markdown delle note, stile coerente col tema scuro
-│   └── tutorial_overlay.dart      avviaTutorial(): overlay spotlight a schermo intero (nessun
-│                                   package) per il tutorial di navigazione, vedi TutorialProvider
+│   ├── tutorial_overlay.dart      avviaTutorial(): overlay spotlight a schermo intero (nessun
+│   │                               package) per il tutorial di navigazione, vedi TutorialProvider
+│   └── accesso_richiesto.dart     AccessoRichiesto (gate di login per un contenuto riservato,
+│                                   nessuno Scaffold proprio) + LoginForm condiviso con
+│                                   Impostazioni → Account
 └── screens/
     ├── shared/
-    │   └── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
+    │   ├── note_editor_screen.dart NoteEditorScreen: editor note a schermo intero, condiviso turno/assistenza
+    │   └── cambia_password_screen.dart CambiaPasswordScreen (pagina, uso volontario da
+    │                                    Impostazioni) + CambiaPasswordForm (contenuto riusato
+    │                                    anche inline, forzato, da AccessoRichiesto)
     ├── anagrafiche/
     │   ├── anagrafiche_screen.dart CRUD associazioni/persone/ospedali/tipologie turno (spostato
     │   │                            da Impostazioni), raggiungibile dall'icona nell'AppBar di
@@ -177,12 +185,14 @@ lib/
     │   │                               pulsante per scaricare il catalogo dal backend condiviso
     │   └── repository_formazione_screen.dart apre nel browser l'unico link condiviso ai
     │                                   materiali di formazione (impostato solo dalla pagina admin
-    │                                   del backend condiviso, non configurabile qui)
+    │                                   del backend condiviso, non configurabile qui). CONTENUTO
+    │                                   RISERVATO: avvolto in AccessoRichiesto, richiede login.
     └── impostazioni/
         └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
                                       fogli turni) + Navigazione (pagina principale, disattiva
-                                      Attività+Statistiche, Piano turni in navbar). Le anagrafiche (associazioni/
+                                      Attività+Statistiche, Piano turni in navbar) + Account
+                                      (login/cambio password/logout utente-app). Le anagrafiche (associazioni/
                                       persone/ospedali/tipologie) sono in screens/anagrafiche/
 
 backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome, via,
@@ -1654,6 +1664,86 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     originale (identico), upload di un file non-PDF rifiutato (400),
     eliminazione; un token utente-app legge sia repository-formazione sia
     comunicati (200) ma non può caricarne uno (401, confine di ruolo).
+- **Login utente-app lato client, sblocca Repository formazione
+  (2026-09-02)**: terzo commit della funzionalità, primo a toccare l'app
+  Flutter — i due bullet precedenti erano solo backend.
+  - **`AccountProvider`** (`providers/app_provider.dart`): stesso motivo di
+    `ToolsProvider`/`NavigazioneProvider` (Impostazioni e il tool aperto
+    restano entrambe montate nell'`IndexedStack`, un login/logout/cambio
+    password fatto in un punto deve riflettersi subito nell'altro).
+    `carica()` ripristina la sessione da SharedPreferences all'avvio,
+    chiamata da `AppNavigator.initState` insieme ad `AnagraficheProvider`/
+    `ToolsProvider`. Token/username/`deveCambiarePassword` **non vanno nel
+    backup** (`kPrefAccountToken`/`kPrefAccountUsername`/
+    `kPrefAccountDeveCambiarePassword` in `prefs_keys.dart`, `db/backup.dart`
+    non li tocca): stato di sessione locale al device, come
+    `kPrefTutorialCompletato` — un JWT dentro un backup esportabile sarebbe
+    anche un problema di sicurezza, non solo una preferenza da ripristinare
+    altrove.
+  - **`AccessoRichiesto`** (`widgets/accesso_richiesto.dart`): avvolge il
+    contenuto di un tool riservato, nessuno Scaffold/AppBar propri (li mette
+    già la schermata chiamante) — mostra `LoginForm` se non autenticati,
+    `CambiaPasswordForm(forzato: true)` se `deveCambiarePassword`, altrimenti
+    il `builder(context, token)` del tool. `LoginForm` è pubblico e condiviso
+    con la sezione Account di Impostazioni (stesso campo, stesso
+    comportamento, non duplicato).
+  - **`CambiaPasswordForm`/`CambiaPasswordScreen`**
+    (`screens/shared/cambia_password_screen.dart`): stesso pattern
+    contenuto-condiviso-in-due-contesti di `note_editor_screen.dart` — il
+    form (`CambiaPasswordForm`) è riusato inline da `AccessoRichiesto` (caso
+    forzato, niente Scaffold) e dentro `CambiaPasswordScreen` (caso
+    volontario da Impostazioni, Scaffold+AppBar+back, pop con snackbar a
+    fine cambio). Verifica sempre la password attuale lato server
+    (`PUT /api/utenti/password`), anche nel caso forzato: nessuna
+    scorciatoia solo perché il token è appena stato emesso. Caso forzato:
+    niente pulsante indietro, solo "Esci" come via di fuga (mai un vicolo
+    cieco per chi non vuole cambiarla subito) — nessuna navigazione
+    esplicita al successo, `AccountProvider.cambiaPassword()` azzera
+    `deveCambiarePassword` e notifica, `AccessoRichiesto` passa da solo al
+    contenuto vero.
+  - **401 → logout automatico**: `BackendApiUnauthorized extends
+    BackendApiException` (nuova, `backend_api.dart`, lanciata da
+    `_lanciaErrore` sullo status 401) invece del generico
+    `BackendApiException` — i chiamanti delle rotte autenticate
+    (`_RepositoryFormazioneContenuto`, e Archivio comunicati quando arriva)
+    la intercettano per chiamare `AccountProvider.logout()` invece di
+    mostrare un errore con un "Riprova" destinato a fallire per sempre finché
+    non si rifà login.
+  - **`getRepositoryFormazione` ora richiede `token`** (era pubblica):
+    `RepositoryFormazioneScreen` avvolta in `AccessoRichiesto`, estratto il
+    contenuto vero in `_RepositoryFormazioneContenuto` (stessa logica di
+    prima, solo parametrizzata sul token).
+  - **Sezione "Account" in Impostazioni** (`_SezioneAccount`, stesso pattern
+    collassato-di-default di `_SezioneBackendCondiviso`): da sloggato
+    riusa `LoginForm`, da loggato mostra "Accesso effettuato come
+    {username}" + "Cambia password" (`Navigator.push` su
+    `CambiaPasswordScreen`) + "Esci".
+  - **Test**: `test/utils/backend_api_test.dart` esteso con `loginUtente`,
+    `cambiaPassword`, `getComunicati`, `getComunicatoFile` (header
+    `Authorization` verificato su ognuna) e un caso 401 →
+    `BackendApiUnauthorized` per `getRepositoryFormazione`/`loginUtente`.
+    `flutter analyze` pulito, `flutter test` verde (155/155).
+  - **Due bug trovati dal test manuale dell'utente** (non da `analyze`/
+    `test`, entrambi richiedevano l'app vera):
+    1. **`_SezioneAccount` non controllava `deveCambiarePassword`**: un
+       login fatto da Impostazioni → Account (invece che aprendo
+       direttamente un tool riservato, l'unico percorso testato a mente
+       durante lo sviluppo) mostrava subito "Accesso effettuato come..."
+       saltando il cambio password obbligatorio — `AccessoRichiesto` aveva
+       il controllo, questa sezione no. Corretto allineando la stessa
+       cascata di condizioni (`!caricato` → `!loggedIn` → `deveCambiarePassword`
+       → stato loggato) in entrambi i punti.
+    2. **CORS del backend senza `PUT` in `Access-Control-Allow-Methods`**
+       (`httputil.go`, bug preesistente): il cambio password (`PUT
+       /api/utenti/password`) falliva silenziosamente su Flutter web con un
+       errore di rete generico — il browser blocca la richiesta reale già
+       in fase di preflight se il metodo non è nell'elenco dichiarato.
+       Colpiva già `PUT /api/ospedali/:id`/`PUT /api/materiali/:id`, mai
+       notato prima perché mai esercitati da un client web reale. `curl`
+       non lo intercetta (CORS è imposto dal browser, non dal server): per
+       questo era passato inosservato in tutta la verifica end-to-end fatta
+       finora via `curl`, lezione aggiunta alla lista di cose che una
+       verifica solo-backend non copre.
 
 ---
 
@@ -1678,7 +1768,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   persona/ospedale, export/import ospedali, badge con quante volte ogni
   voce compare in turni/assistenze/servizi.
 - ✅ **Impostazioni**: backup, Tools attivi (attiva/disattiva i tool
-  mostrati in Tools), backend condiviso, navigazione.
+  mostrati in Tools), backend condiviso, navigazione, account (login/cambio
+  password/logout utente-app).
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.
 - ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
 - ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione),
@@ -1702,7 +1793,13 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   condiviso (`backend/`).
 - ✅ **Tools → Repository formazione**: apre nel browser l'unico link
   condiviso ai materiali di formazione, impostato dalla pagina admin del
-  backend condiviso.
+  backend condiviso. CONTENUTO RISERVATO: richiede login (account
+  utente-app, creato solo dalla pagina admin).
+- ✅ **Impostazioni → Account**: login/logout con le credenziali
+  utente-app (create solo dalla pagina admin del backend condiviso, mai da
+  questa app) che sbloccano i contenuti riservati (Repository formazione,
+  Archivio comunicati); cambio password, obbligatorio al primo accesso con
+  la password provvisoria data dall'admin, poi libero in ogni momento.
 - ✅ **Impostazioni → Backend condiviso**: indirizzo del server (spostato da
   Lista ospedali) e interruttore per la sincronizzazione automatica dei
   fogli turni (default attivo).
@@ -1714,7 +1811,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Backend condiviso** (`backend/`, Go+PostgreSQL): API pubblica di sola
   lettura per ospedali (per città/regione), fogli turni e catalogo
   materiali + pagina admin (login) per gestirli uno alla volta o in blocco
-  da file JSON, incorporato nell'immagine Docker della versione web.
+  da file JSON, incorporato nell'immagine Docker della versione web. Gestisce
+  anche gli account utente-app (contenuti riservati dell'app) e i comunicati
+  PDF, entrambi creabili/caricabili SOLO dalla pagina admin.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.

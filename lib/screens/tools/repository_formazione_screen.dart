@@ -1,25 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../providers/app_provider.dart';
 import '../../utils/backend_api.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
+import '../../widgets/accesso_richiesto.dart';
 
 /// Tool "Repository formazione": un solo link condiviso (impostato
 /// dall'admin sul backend condiviso, non configurabile qui) ai materiali di
-/// formazione dell'associazione, aperto nel browser esterno. Non un
-/// semplice redirect invisibile: se il link non è ancora configurato o il
-/// server non risponde l'utente deve vedere un messaggio, non restare
-/// bloccato su una schermata bianca — per questo resta una schermata vera,
-/// con un pulsante per riaprire il link a piacere.
-class RepositoryFormazioneScreen extends StatefulWidget {
+/// formazione dell'associazione, aperto nel browser esterno. CONTENUTO
+/// RISERVATO (vedi CLAUDE.md): il body è avvolto in AccessoRichiesto, che
+/// mostra il login (o il cambio password obbligatorio) finché l'utente non
+/// è autenticato.
+class RepositoryFormazioneScreen extends StatelessWidget {
   const RepositoryFormazioneScreen({super.key});
 
   @override
-  State<RepositoryFormazioneScreen> createState() => _RepositoryFormazioneScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Repository formazione')),
+      // Il Center/Padding avvolge solo il contenuto vero (post-login): gli
+      // stati di login/cambio password si centrano già da soli dentro
+      // AccessoRichiesto, avvolgerli anche qui raddoppierebbe solo il padding.
+      body: AccessoRichiesto(
+        builder: (context, token) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _RepositoryFormazioneContenuto(token: token),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _RepositoryFormazioneScreenState extends State<RepositoryFormazioneScreen> {
+/// Contenuto vero del tool, mostrato solo a login effettuato — non un
+/// semplice redirect invisibile: se il link non è ancora configurato o il
+/// server non risponde l'utente deve vedere un messaggio, non restare
+/// bloccato su una schermata bianca, per questo resta uno stato vero con un
+/// pulsante per riaprire il link a piacere.
+class _RepositoryFormazioneContenuto extends StatefulWidget {
+  final String token;
+  const _RepositoryFormazioneContenuto({required this.token});
+
+  @override
+  State<_RepositoryFormazioneContenuto> createState() => _RepositoryFormazioneContenutoState();
+}
+
+class _RepositoryFormazioneContenutoState extends State<_RepositoryFormazioneContenuto> {
   bool _loading = true;
   String? _url;
   String? _errore;
@@ -43,7 +73,7 @@ class _RepositoryFormazioneScreenState extends State<RepositoryFormazioneScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       final baseUrl = prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
-      final url = await BackendApi(baseUrl: baseUrl).getRepositoryFormazione();
+      final url = await BackendApi(baseUrl: baseUrl).getRepositoryFormazione(token: widget.token);
       if (!mounted) return;
       setState(() {
         _url = url;
@@ -54,12 +84,20 @@ class _RepositoryFormazioneScreenState extends State<RepositoryFormazioneScreen>
         _apri();
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _errore = messaggioErroreBackend(e);
-        });
+      if (!mounted) return;
+      // Token scaduto/revocato: logout automatico invece di un errore
+      // generico con un "Riprova" destinato a fallire di nuovo per sempre.
+      // AccountProvider.logout() notifica AccessoRichiesto, che rimonta il
+      // form di login al posto di questo widget — nessun setState locale da
+      // fare qui, il widget sta per essere sostituito.
+      if (e is BackendApiUnauthorized) {
+        context.read<AccountProvider>().logout();
+        return;
       }
+      setState(() {
+        _loading = false;
+        _errore = messaggioErroreBackend(e);
+      });
     }
   }
 
@@ -76,15 +114,7 @@ class _RepositoryFormazioneScreenState extends State<RepositoryFormazioneScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Repository formazione')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: _loading ? const CircularProgressIndicator() : _contenuto(),
-        ),
-      ),
-    );
+    return _loading ? const CircularProgressIndicator() : _contenuto();
   }
 
   Widget _contenuto() {

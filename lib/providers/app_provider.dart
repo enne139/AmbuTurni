@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../db/helpers.dart';
 import '../db/models.dart';
+import '../utils/backend_api.dart';
 import '../utils/prefs_keys.dart';
 import '../utils/tools_config.dart';
 
@@ -390,5 +391,83 @@ class TutorialProvider extends ChangeNotifier {
     _completato = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(kPrefTutorialCompletato, true);
+  }
+}
+
+/// Provider per l'account "utente-app" che sblocca i contenuti riservati
+/// dell'app (Repository formazione, Archivio comunicati). Le credenziali
+/// sono create SOLO dalla pagina admin del backend condiviso, mai da questa
+/// app (vedi CLAUDE.md): qui si può solo fare login, cambiare la propria
+/// password e restare loggati. Provider condiviso per lo stesso motivo di
+/// ToolsProvider/NavigazioneProvider: Impostazioni e il tool aperto restano
+/// entrambe montate nell'IndexedStack, un login/logout/cambio-password
+/// fatto in un punto deve riflettersi subito nell'altro.
+class AccountProvider extends ChangeNotifier {
+  String? _username;
+  String? _token;
+  bool _deveCambiarePassword = false;
+  bool _caricato = false;
+
+  bool get caricato => _caricato;
+  bool get loggedIn => _token != null;
+  String? get username => _username;
+  String? get token => _token;
+  bool get deveCambiarePassword => _deveCambiarePassword;
+
+  /// Ripristina la sessione salvata (se presente) all'avvio dell'app.
+  Future<void> carica() async {
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString(kPrefAccountToken);
+    _username = prefs.getString(kPrefAccountUsername);
+    _deveCambiarePassword = prefs.getBool(kPrefAccountDeveCambiarePassword) ?? false;
+    _caricato = true;
+    notifyListeners();
+  }
+
+  Future<void> login(String username, String password) async {
+    final risultato = await BackendApi(baseUrl: await _backendUrl())
+        .loginUtente(username: username, password: password);
+    _username = username;
+    _token = risultato.token;
+    _deveCambiarePassword = risultato.deveCambiarePassword;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kPrefAccountToken, risultato.token);
+    await prefs.setString(kPrefAccountUsername, username);
+    await prefs.setBool(kPrefAccountDeveCambiarePassword, risultato.deveCambiarePassword);
+  }
+
+  /// Cambia la password (attuale verificata sempre lato server, anche per
+  /// il primo cambio obbligatorio) e azzera deveCambiarePassword.
+  Future<void> cambiaPassword(String passwordAttuale, String passwordNuova) async {
+    final t = _token;
+    if (t == null) return;
+    await BackendApi(baseUrl: await _backendUrl())
+        .cambiaPassword(token: t, passwordAttuale: passwordAttuale, passwordNuova: passwordNuova);
+    _deveCambiarePassword = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kPrefAccountDeveCambiarePassword, false);
+  }
+
+  /// Chiamato sia dal pulsante "Esci" sia internamente quando una chiamata
+  /// autenticata torna 401 (token scaduto/revocato): l'utente torna al
+  /// form di login invece di restare bloccato su un errore generico.
+  Future<void> logout() async {
+    _username = null;
+    _token = null;
+    _deveCambiarePassword = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(kPrefAccountToken);
+    await prefs.remove(kPrefAccountUsername);
+    await prefs.remove(kPrefAccountDeveCambiarePassword);
+  }
+
+  /// Stessa fonte (kPrefBackendUrl) usata dagli altri tool del backend
+  /// condiviso: nessuna configurazione separata per l'account.
+  Future<String> _backendUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
   }
 }

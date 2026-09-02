@@ -8,6 +8,8 @@ import '../../utils/backend_api.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
 import '../../utils/tools_config.dart';
+import '../../widgets/accesso_richiesto.dart';
+import '../shared/cambia_password_screen.dart';
 
 /// Schermata Impostazioni: backup/ripristino, navigazione, tool attivi e
 /// backend condiviso. Le anagrafiche (Associazioni/Persone/Ospedali/
@@ -31,6 +33,8 @@ class ImpostazioniScreen extends StatelessWidget {
           _SezioneToolsAttivi(),
           Divider(height: 24),
           _SezioneBackendCondiviso(),
+          Divider(height: 24),
+          _SezioneAccount(),
           Divider(height: 24),
           _VersioneApp(),
           SizedBox(height: 8),
@@ -624,6 +628,104 @@ class _ConfigServerDialogState extends State<_ConfigServerDialog> {
             onPressed: _onSalvaPressato,
             child: Text(_errore != null ? 'Salva comunque' : 'Verifica e salva'),
           ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account (utente-app: sblocca i contenuti riservati — Repository
+// formazione, Archivio comunicati). Credenziali create SOLO dalla pagina
+// admin del backend condiviso, mai da qui.
+// ---------------------------------------------------------------------------
+
+/// Sezione collassabile (stesso pattern di _SezioneBackendCondiviso/Tools
+/// attivi): da sloggato mostra lo stesso LoginForm di AccessoRichiesto (un
+/// solo widget condiviso, non duplicato); se la password è ancora quella
+/// provvisoria mostra CambiaPasswordForm(forzato: true), stessa regola di
+/// AccessoRichiesto — bug corretto dopo la prima versione: qui mancava
+/// questo controllo, quindi un login fatto da questa sezione (invece che
+/// aprendo un tool riservato) non chiedeva mai il cambio obbligatorio.
+/// Solo a password non provvisoria mostra lo stato dell'account con
+/// "Cambia password"/"Esci".
+class _SezioneAccount extends StatefulWidget {
+  const _SezioneAccount();
+
+  @override
+  State<_SezioneAccount> createState() => _SezioneAccountState();
+}
+
+class _SezioneAccountState extends State<_SezioneAccount> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final account = context.watch<AccountProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.person_outline, size: 18, color: kPrimary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Account',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: !account.caricato
+                ? const LinearProgressIndicator()
+                : !account.loggedIn
+                    ? const LoginForm()
+                    : account.deveCambiarePassword
+                        ? const CambiaPasswordForm(forzato: true)
+                        : _statoLoggato(account),
+          ),
+      ],
+    );
+  }
+
+  Widget _statoLoggato(AccountProvider account) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.check_circle_outline, color: kPrimary),
+          title: Text('Accesso effettuato come ${account.username}'),
+          subtitle: const Text(
+            'Sblocca Repository formazione e Archivio comunicati.',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+        Row(
+          children: [
+            OutlinedButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CambiaPasswordScreen()),
+              ),
+              child: const Text('Cambia password'),
+            ),
+            const SizedBox(width: 12),
+            TextButton(onPressed: account.logout, child: const Text('Esci')),
+          ],
+        ),
       ],
     );
   }

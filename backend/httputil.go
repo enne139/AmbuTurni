@@ -89,10 +89,14 @@ func clientIP(r *http.Request) string {
 // corsMiddleware: l'app (web/native) chiama il backend da un'origine diversa.
 // Dati pubblici in lettura (l'unica scrittura, /ospedali POST/DELETE, è
 // comunque protetta da JWT), quindi un Allow-Origin permissivo è accettabile.
+// PUT incluso in Allow-Methods (bug preesistente trovato testando il cambio
+// password su Flutter web, 2026-09-02): senza, il browser blocca in preflight
+// qualunque PUT — colpiva già anche /api/ospedali/:id e /api/materiali/:id,
+// solo mai notato perché mai esercitati da un client web reale finora.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

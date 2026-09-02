@@ -5,6 +5,7 @@
 // con un http.Client finto (MockClient).
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 /// Errore dell'API con messaggio già pronto da mostrare all'utente.
@@ -14,6 +15,25 @@ class BackendApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Token scaduto/non valido (401) su una chiamata autenticata: distinta da
+/// BackendApiException generica così i chiamanti possono intercettarla e
+/// fare logout automatico (AccountProvider.logout()) invece di mostrare un
+/// errore generico "impossibile contattare il server".
+class BackendApiUnauthorized extends BackendApiException {
+  const BackendApiUnauthorized(super.message);
+}
+
+/// Esito di un login utente-app: token da usare come Bearer sulle chiamate
+/// autenticate e se la password è ancora quella provvisoria data dall'admin
+/// (deve_cambiare_password lato backend) — l'app mostra la schermata di
+/// cambio password obbligatorio prima di lasciar entrare nei contenuti
+/// riservati.
+class LoginUtenteResult {
+  final String token;
+  final bool deveCambiarePassword;
+  const LoginUtenteResult({required this.token, required this.deveCambiarePassword});
 }
 
 /// Traduce una qualunque eccezione della chiamata in un messaggio leggibile.
@@ -140,8 +160,12 @@ class BackendApi {
   /// di formazione (tool "Repository formazione"), impostato dalla pagina
   /// admin. Restituisce null se non è mai stato configurato: non è un
   /// errore, è uno stato legittimo finché un admin non lo imposta.
-  Future<String?> getRepositoryFormazione() async {
-    final resp = await _client.get(Uri.parse('$baseUrl/api/repository-formazione')).timeout(_timeout);
+  /// CONTENUTO RISERVATO (contentAuthMiddleware lato server, non più
+  /// pubblica): richiede il token di un login utente-app o admin.
+  Future<String?> getRepositoryFormazione({required String token}) async {
+    final resp = await _client
+        .get(Uri.parse('$baseUrl/api/repository-formazione'), headers: _authHeader(token))
+        .timeout(_timeout);
     if (resp.statusCode != 200) _lanciaErrore(resp);
     final decoded = _decodeJson(resp);
     if (decoded is! Map) {
@@ -150,6 +174,74 @@ class BackendApi {
     final url = decoded['url'];
     return (url is String && url.isNotEmpty) ? url : null;
   }
+
+  /// POST /api/utenti/login — login di un account utente-app (credenziali
+  /// create SOLO dalla pagina admin, mai da questa app). Lancia
+  /// BackendApiUnauthorized su credenziali errate (401), non restituisce
+  /// mai un token vuoto.
+  Future<LoginUtenteResult> loginUtente({required String username, required String password}) async {
+    final resp = await _client
+        .post(
+          Uri.parse('$baseUrl/api/utenti/login'),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({'username': username, 'password': password}),
+        )
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = _decodeJson(resp);
+    if (decoded is! Map || decoded['token'] is! String) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return LoginUtenteResult(
+      token: decoded['token'] as String,
+      deveCambiarePassword: decoded['deveCambiarePassword'] == true,
+    );
+  }
+
+  /// PUT /api/utenti/password — cambia la propria password (verificando
+  /// sempre quella attuale, anche per il primo cambio obbligatorio: nessuna
+  /// scorciatoia solo perché il token è appena stato emesso). Lo username è
+  /// implicito nel token, mai passato qui.
+  Future<void> cambiaPassword({
+    required String token,
+    required String passwordAttuale,
+    required String passwordNuova,
+  }) async {
+    final resp = await _client
+        .put(
+          Uri.parse('$baseUrl/api/utenti/password'),
+          headers: {..._authHeader(token), 'Content-Type': 'application/json'},
+          body: jsonEncode({'passwordAttuale': passwordAttuale, 'passwordNuova': passwordNuova}),
+        )
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+  }
+
+  /// GET /api/comunicati — elenco metadati dei comunicati (mai il PDF, che
+  /// si scarica a parte con getComunicatoFile). CONTENUTO RISERVATO.
+  Future<List<Map<String, dynamic>>> getComunicati({required String token}) async {
+    final resp = await _client
+        .get(Uri.parse('$baseUrl/api/comunicati'), headers: _authHeader(token))
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = _decodeJson(resp);
+    if (decoded is! List) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return decoded.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+  }
+
+  /// GET /api/comunicati/:id/file — i byte del PDF di un comunicato.
+  /// CONTENUTO RISERVATO.
+  Future<Uint8List> getComunicatoFile({required String token, required String id}) async {
+    final resp = await _client
+        .get(Uri.parse('$baseUrl/api/comunicati/$id/file'), headers: _authHeader(token))
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    return resp.bodyBytes;
+  }
+
+  Map<String, String> _authHeader(String token) => {'Authorization': 'Bearer $token'};
 
   /// Decodifica il body come JSON, incapsulando un body non-JSON (es. pagina
   /// d'errore di un proxy/CDN davanti al backend con uno status 200) in
@@ -173,8 +265,12 @@ class BackendApi {
     } catch (_) {
       // Body non JSON (es. pagina d'errore del reverse proxy): basta il codice.
     }
-    throw BackendApiException(
-        'Errore del server (${resp.statusCode})'
-        '${messaggioServer == null ? '' : ': $messaggioServer'}.');
+    final messaggio = 'Errore del server (${resp.statusCode})'
+        '${messaggioServer == null ? '' : ': $messaggioServer'}.';
+    // 401 distinto (token mancante/scaduto/non valido): i chiamanti delle
+    // rotte autenticate lo intercettano per fare logout automatico invece
+    // di mostrare un errore generico.
+    if (resp.statusCode == 401) throw BackendApiUnauthorized(messaggio);
+    throw BackendApiException(messaggio);
   }
 }
