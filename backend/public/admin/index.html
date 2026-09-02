@@ -114,7 +114,7 @@
     <div class="topbar">
       <div>
         <h1>AmbuTurni — Admin</h1>
-        <p class="sottotitolo">Ospedali, fogli turni, materiali e utenti condivisi</p>
+        <p class="sottotitolo">Ospedali, fogli turni, materiali, utenti admin e utenti app condivisi</p>
       </div>
       <button class="secondary" onclick="esci()" style="margin-top:0;">Esci</button>
     </div>
@@ -124,6 +124,7 @@
       <button class="tab" data-tab="fogli" onclick="mostraTab('fogli')">Fogli turni</button>
       <button class="tab" data-tab="materiali" onclick="mostraTab('materiali')">Materiali</button>
       <button class="tab" data-tab="utenti" onclick="mostraTab('utenti')">Utenti</button>
+      <button class="tab" data-tab="utenti-app" onclick="mostraTab('utenti-app')">Utenti app</button>
       <button class="tab" data-tab="formazione" onclick="mostraTab('formazione')">Formazione</button>
     </nav>
 
@@ -316,6 +317,39 @@
         </div>
       </section>
 
+      <!-- Utenti app ------------------------------------------------------ -->
+      <section class="panel" data-panel="utenti-app">
+        <div class="card">
+          <strong>Utenti app</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Account che sbloccano i contenuti riservati nell'app (Repository
+            formazione, Comunicati) — diversi dagli "Utenti admin" sopra, che
+            invece accedono a questa pagina. La password inserita qui è
+            provvisoria: al primo accesso nell'app verrà chiesto di cambiarla.
+          </p>
+          <div class="row">
+            <div>
+              <label for="ua-username">Utente</label>
+              <input id="ua-username" autocomplete="off" />
+            </div>
+            <div>
+              <label for="ua-password">Password provvisoria</label>
+              <input id="ua-password" type="password" autocomplete="new-password" />
+            </div>
+          </div>
+          <button onclick="aggiungiUtenteApp()">Crea utente</button>
+          <div class="errore" id="errore-utente-app"></div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Utente</th><th>Creato il</th><th>Deve cambiare password</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-utenti-app"><tr><td colspan="4"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Repository formazione ---------------------------------------- -->
       <section class="panel" data-panel="formazione">
         <div class="card">
@@ -486,7 +520,7 @@ async function carica() {
   const resp = await fetch('/api/ospedali');
   ospedaliCache = await resp.json();
   filtraTabella();
-  await Promise.all([caricaFogli(), caricaMateriali(), caricaUtenti(), caricaFormazione()]);
+  await Promise.all([caricaFogli(), caricaMateriali(), caricaUtenti(), caricaUtentiApp(), caricaFormazione()]);
 }
 
 function filtraTabella() {
@@ -807,6 +841,73 @@ async function eliminaUtente(username) {
     if (!resp.ok) throw new Error(dati.error || 'Errore di eliminazione');
     await caricaUtenti();
     toast('Utente eliminato.');
+  } catch (e) {
+    toast(e.message, false);
+  }
+}
+
+// --- Utenti app ---
+// Account separati dagli "Utenti admin" sopra: sbloccano i contenuti
+// riservati nell'app (Repository formazione, Comunicati), non danno accesso
+// a questa pagina. Nessun form di modifica/reset password da qui: se serve,
+// si elimina e si ricrea (stessa filosofia "create/list/delete, niente
+// update" già in uso per gli utenti admin) — comunque chi la riceve la
+// cambia al primo accesso nell'app (deveCambiarePassword).
+
+async function caricaUtentiApp() {
+  const resp = await fetch('/api/utenti', { headers: { Authorization: `Bearer ${token()}` } });
+  const utenti = await resp.json();
+  renderTabellaGenerica('tabella-utenti-app', 4, utenti, (u) => {
+    const riga = document.createElement('tr');
+    const creato = u.createdAt ? new Date(u.createdAt).toLocaleDateString('it-IT') : '—';
+    riga.innerHTML = `
+      <td>${escapeHtml(u.username)}</td>
+      <td>${creato}</td>
+      <td>${u.deveCambiarePassword ? 'Sì' : 'No'}</td>
+      <td><button class="danger small">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => eliminaUtenteApp(u.username);
+    return riga;
+  }, 'Nessun utente app.');
+}
+
+async function aggiungiUtenteApp() {
+  const erroreEl = document.getElementById('errore-utente-app');
+  erroreEl.textContent = '';
+  const username = document.getElementById('ua-username').value.trim();
+  const password = document.getElementById('ua-password').value;
+  if (!username || !password) {
+    erroreEl.textContent = 'Utente e password sono richiesti.';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/utenti', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ username, password }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di creazione');
+    document.getElementById('ua-username').value = '';
+    document.getElementById('ua-password').value = '';
+    await caricaUtentiApp();
+    toast('Utente app creato.');
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+async function eliminaUtenteApp(username) {
+  if (!confirm(`Eliminare l'utente app "${username}"?`)) return;
+  try {
+    const resp = await fetch(`/api/utenti/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token()}` },
+    });
+    const dati = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dati.error || 'Errore di eliminazione');
+    await caricaUtentiApp();
+    toast('Utente app eliminato.');
   } catch (e) {
     toast(e.message, false);
   }

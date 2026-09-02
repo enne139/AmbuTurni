@@ -135,6 +135,115 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
+	// --- UTENTI APP ---
+	// Account che sbloccano i contenuti riservati dell'app (Repository
+	// formazione, Comunicati): creati SOLO dalla pagina admin — l'app
+	// Flutter non li crea/elenca/elimina mai, chiama solo login e cambio
+	// password (vedi CLAUDE.md, confine esplicito voluto dall'utente).
+
+	// Login: come /api/auth/login ma per gli account utente-app (Role:
+	// "utente" nel JWT, tabella utenti_app separata da users). Stesso
+	// rate-limiter dell'admin (budget condiviso per IP): comunque
+	// sufficiente a fermare un bruteforce automatizzato.
+	mux.HandleFunc("POST /api/utenti/login", func(w http.ResponseWriter, r *http.Request) {
+		chiave := clientIP(r)
+		if loginRateLimitato(chiave) {
+			writeError(w, http.StatusTooManyRequests, "troppi tentativi falliti, riprova tra qualche minuto")
+			return
+		}
+		var body struct{ Username, Password string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		if body.Username == "" || body.Password == "" {
+			writeError(w, http.StatusBadRequest, "username e password richiesti")
+			return
+		}
+		token, deveCambiarePassword, err := loginUtenteApp(r.Context(), pool, body.Username, body.Password)
+		if err != nil {
+			log.Printf("[utenti] errore login: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if token == "" {
+			loginRegistraFallito(chiave)
+			writeError(w, http.StatusUnauthorized, "Credenziali non valide")
+			return
+		}
+		loginResettaTentativi(chiave)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"token": token, "deveCambiarePassword": deveCambiarePassword,
+		})
+	})
+
+	// Cambio password: protetta da utenteAuthMiddleware (solo un token
+	// Role="utente", un admin non è ammesso). Lo username viene dal token
+	// (usernameFromContext), mai dal body.
+	mux.HandleFunc("PUT /api/utenti/password", utenteAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ PasswordAttuale, PasswordNuova string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		if len(body.PasswordNuova) < 8 {
+			writeError(w, http.StatusBadRequest, "la nuova password deve avere almeno 8 caratteri")
+			return
+		}
+		err := cambiaPasswordUtenteApp(r.Context(), pool, usernameFromContext(r), body.PasswordAttuale, body.PasswordNuova)
+		if errors.Is(err, errPasswordAttualeErrata) {
+			writeError(w, http.StatusBadRequest, "password attuale errata")
+			return
+		}
+		if err != nil {
+			log.Printf("[utenti] errore cambio password: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
+	// Creazione, elenco e revoca: protette da authMiddleware (solo admin).
+	// Chiamate SOLO dalla pagina admin (tab "Utenti app").
+	mux.HandleFunc("POST /api/utenti", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Username, Password string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		if body.Username == "" || body.Password == "" {
+			writeError(w, http.StatusBadRequest, "username e password richiesti")
+			return
+		}
+		if err := createUtenteApp(r.Context(), pool, body.Username, body.Password); err != nil {
+			log.Printf("[utenti] errore creazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]bool{"ok": true})
+	}))
+
+	mux.HandleFunc("GET /api/utenti", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		utenti, err := listUtentiApp(r.Context(), pool)
+		if err != nil {
+			log.Printf("[utenti] errore lista: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, utenti)
+	}))
+
+	mux.HandleFunc("DELETE /api/utenti/{username}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		rimosso, err := deleteUtenteApp(r.Context(), pool, r.PathValue("username"))
+		if err != nil {
+			log.Printf("[utenti] errore eliminazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !rimosso {
+			writeError(w, http.StatusNotFound, "Utente non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
 	// --- OSPEDALI ---
 
 	// Pubblica: i client (app AmbuTurni) scaricano l'elenco per popolare Lista

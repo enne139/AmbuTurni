@@ -7,6 +7,12 @@ del piano turni mensile (sincronizzati automaticamente dal tool "Piano
 turni") e il catalogo condiviso dei nomi materiali (tool "Materiali usati"),
 tutto gestibile da una pagina admin statica con login.
 
+Gestisce anche gli account "utente-app": credenziali create **solo** dalla
+pagina admin (mai dall'app) che un volontario usa per sbloccare i contenuti
+riservati dell'app — Repository formazione e Archivio comunicati (PDF).
+Sono account distinti dagli utenti admin sopra: non danno accesso a questa
+pagina, servono solo a leggere quei due contenuti.
+
 **Non è un backend di sincronizzazione**: i dati dell'app (turni, persone,
 associazioni…) restano solo locali sul device, trasferibili tra dispositivi
 col backup JSON di Impostazioni. Questo backend serve solo a condividere
@@ -44,15 +50,29 @@ chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
 | POST | `/api/fogli` | sì | `{chiave,url}` → crea o aggiorna il link di un mese |
 | DELETE | `/api/fogli/:chiave` | sì | elimina il link di un mese |
 | GET | `/api/materiali` | no | catalogo condiviso dei nomi materiali |
-| POST | `/api/materiali` | sì | `{nome}` → crea un materiale |
-| PUT | `/api/materiali/:id` | sì | `{nome}` → rinomina un materiale |
-| POST | `/api/materiali/import` | sì | `[{nome},...]` o `{"materiali":[...]}` → upsert per nome in blocco |
-| DELETE | `/api/materiali/:id` | sì | elimina un materiale |
-| GET | `/admin/` | no (poi login nella pagina) | interfaccia web per gestire ospedali, fogli turni e materiali |
+| POST | `/api/materiali` | sì (admin) | `{nome}` → crea un materiale |
+| PUT | `/api/materiali/:id` | sì (admin) | `{nome}` → rinomina un materiale |
+| POST | `/api/materiali/import` | sì (admin) | `[{nome},...]` o `{"materiali":[...]}` → upsert per nome in blocco |
+| DELETE | `/api/materiali/:id` | sì (admin) | elimina un materiale |
+| GET | `/api/repository-formazione` | sì (admin o utente) | `{url,updated_at}`, link condiviso ai materiali di formazione |
+| POST | `/api/repository-formazione` | sì (admin) | `{url}` → imposta/aggiorna il link |
+| POST | `/api/utenti/login` | no (rate-limited) | `{username,password}` → `{token, deveCambiarePassword}` — login di un account utente-app |
+| PUT | `/api/utenti/password` | sì (utente) | `{passwordAttuale,passwordNuova}` → cambia la propria password (azzera `deveCambiarePassword`) |
+| POST | `/api/utenti` | sì (admin) | `{username,password}` → crea un utente-app con password provvisoria |
+| GET | `/api/utenti` | sì (admin) | elenco utenti-app |
+| DELETE | `/api/utenti/:username` | sì (admin) | elimina un utente-app |
+| GET | `/admin/` | no (poi login nella pagina) | interfaccia web per gestire ospedali, fogli turni, materiali e utenti-app |
 
-Le rotte protette richiedono l'header `Authorization: Bearer <token>`.
-`GET /api/ospedali` è pubblica di proposito: è quella che chiama l'app, che
-non ha (e non deve avere) credenziali.
+Le rotte protette richiedono l'header `Authorization: Bearer <token>`. Il
+token porta un ruolo (`role`, nel JWT): **admin** (login `/api/auth/login`,
+accesso completo, incluse tutte le rotte "sì (admin)") o **utente**
+(login `/api/utenti/login`, solo cambio della propria password e lettura dei
+contenuti riservati — "sì (admin o utente)"). Un token utente-app non passa
+mai le rotte "sì (admin)", e viceversa un token admin non passa
+`PUT /api/utenti/password` (identifica sempre il chiamante dal token, mai da
+un campo nel body). `GET /api/ospedali` (e `/citta`, `/regioni`, `/fogli`,
+`/materiali`) restano pubbliche di proposito: sono quelle che chiama l'app,
+che non ha (e non deve avere) credenziali per l'anagrafica condivisa.
 
 ## Sviluppo locale con Docker / Podman
 
@@ -72,7 +92,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 ```
 
 Apri `http://localhost:3000/admin/` per la pagina di gestione ospedali,
-fogli turni e materiali. L'utente admin viene creato al primo avvio da
+fogli turni, materiali e utenti-app. L'utente admin viene creato al primo avvio da
 `ADMIN_USERNAME`/`ADMIN_PASSWORD`. Nell'app Flutter, l'indirizzo del server
 da configurare (Impostazioni → Backend condiviso) è la base senza `/api/`,
 es. `http://localhost:3000` o `http://<IP-del-PC>:3000` da telefono: è
@@ -102,3 +122,8 @@ solo per lo sviluppo locale via `docker compose` sopra.
 - `GET /api/ospedali` è volutamente pubblica (nessun dato sensibile): non
   richiede autenticazione né in sviluppo né in produzione.
 - Aggiungi altri utenti admin con `POST /api/auth/users` (da loggato).
+- Gli utenti-app si creano **solo** dalla pagina admin (`POST /api/utenti`):
+  l'app Flutter non li crea/elenca/elimina mai, chiama solo login e cambio
+  password. Dopo questo deploy i token admin emessi in precedenza (senza
+  `role` nelle claims) non passano più le rotte protette: richiedi un nuovo
+  login dalla pagina admin.

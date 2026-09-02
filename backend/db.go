@@ -39,6 +39,11 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 //   - repository_formazione: un solo link condiviso (non una collezione) ai
 //     materiali di formazione dell'associazione, aperto nel browser dal
 //     tool "Repository formazione". Riga singola forzata dal CHECK (id = 1).
+//   - utenti_app: account (creati SOLO dalla pagina admin) che sbloccano i
+//     contenuti riservati dell'app — Repository formazione e Comunicati.
+//     Tabella separata da `users` apposta: un account-contenuto non deve
+//     mai poter transitare per i controlli riservati agli admin. Vedi
+//     auth.go (Role nei JWT) e utenti_app.go.
 //
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
 // migrazioni (assente qui, a differenza del client Flutter): un solo campo
@@ -86,6 +91,13 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			url TEXT NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			CHECK (id = 1)
+		);
+
+		CREATE TABLE IF NOT EXISTS utenti_app (
+			username TEXT PRIMARY KEY,
+			password_hash TEXT NOT NULL,
+			deve_cambiare_password BOOLEAN NOT NULL DEFAULT true,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 	`)
 	return err

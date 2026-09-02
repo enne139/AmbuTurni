@@ -60,6 +60,18 @@ func tokenTTL() time.Duration {
 	return 30 * 24 * time.Hour
 }
 
+// claims sono le informazioni portate da ogni JWT emesso da questo backend.
+// Role distingue un account admin (pagina /admin/, accesso completo alle
+// rotte di scrittura) da un account utente-app (solo lettura dei contenuti
+// riservati in app + cambio della propria password, vedi
+// contentAuthMiddleware/utenteAuthMiddleware in fondo al file): senza questo
+// campo un token utente-app, firmato con lo stesso JWT_SECRET, varrebbe
+// anche per le rotte admin.
+type claims struct {
+	Role string `json:"role"`
+	jwt.RegisteredClaims
+}
+
 // seedAdmin crea l'utente admin iniziale dalle variabili d'ambiente, se non esiste già.
 func seedAdmin(ctx context.Context, pool *pgxpool.Pool) error {
 	username := os.Getenv("ADMIN_USERNAME")
@@ -169,11 +181,14 @@ func login(ctx context.Context, pool *pgxpool.Pool, username, password string) (
 	if !utenteTrovato || !credenzialiValide {
 		return "", nil
 	}
-	claims := jwt.RegisteredClaims{
-		Subject:   username,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenTTL())),
+	c := claims{
+		Role: "admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   username,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenTTL())),
+		},
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret)
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(jwtSecret)
 }
 
 // --- Rate limit sui tentativi di login falliti ---
@@ -230,23 +245,84 @@ func loginResettaTentativi(chiave string) {
 	delete(loginRateStato, chiave)
 }
 
-// authMiddleware avvolge un handler richiedendo un token JWT valido
-// nell'header Authorization (Bearer).
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+// parseToken valida il JWT nell'header Authorization (Bearer) e ne
+// restituisce le claims; errore per token mancante/malformato/scaduto.
+func parseToken(r *http.Request) (*claims, error) {
+	header := r.Header.Get("Authorization")
+	tokenStr, haBearer := strings.CutPrefix(header, "Bearer ")
+	if !haBearer || tokenStr == "" {
+		return nil, errors.New("token mancante")
+	}
+	var c claims
+	if _, err := jwt.ParseWithClaims(tokenStr, &c, func(t *jwt.Token) (any, error) {
+		return jwtSecret, nil
+	}); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// ctxKey evita collisioni con altre chiavi di context.Context eventualmente
+// usate altrove (tipo privato, non un semplice string).
+type ctxKey int
+
+const ctxKeyUsername ctxKey = iota
+
+// usernameFromContext restituisce lo username (claims.Subject) del titolare
+// del token già validato da uno dei middleware sotto — mai passato a mano
+// dal chiamante (es. nel body): un handler come il cambio password deve
+// sapere CHI sta scrivendo senza fidarsi di un username arbitrario, altrimenti
+// un utente-app potrebbe cambiare la password di un altro semplicemente
+// indovinandone lo username.
+func usernameFromContext(r *http.Request) string {
+	u, _ := r.Context().Value(ctxKeyUsername).(string)
+	return u
+}
+
+// roleMiddleware avvolge un handler richiedendo un JWT valido il cui Role sia
+// tra quelli ammessi; mette lo username autenticato nel context della
+// richiesta (vedi usernameFromContext). Base comune di authMiddleware
+// (solo admin), utenteAuthMiddleware (solo utente-app) e
+// contentAuthMiddleware (admin o utente-app, per la sola lettura dei
+// contenuti riservati).
+func roleMiddleware(next http.HandlerFunc, ruoliAmmessi ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		header := r.Header.Get("Authorization")
-		token, haBearer := strings.CutPrefix(header, "Bearer ")
-		if !haBearer || token == "" {
-			writeError(w, http.StatusUnauthorized, "Token mancante")
+		c, err := parseToken(r)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "Token mancante o non valido")
 			return
 		}
-		_, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
-			return jwtSecret, nil
-		})
-		if err != nil {
+		ammesso := false
+		for _, ruolo := range ruoliAmmessi {
+			if c.Role == ruolo {
+				ammesso = true
+				break
+			}
+		}
+		if !ammesso {
 			writeError(w, http.StatusUnauthorized, "Token non valido o scaduto")
 			return
 		}
-		next(w, r)
+		next(w, r.WithContext(context.WithValue(r.Context(), ctxKeyUsername, c.Subject)))
 	}
+}
+
+// authMiddleware: rotte riservate alla pagina admin (gestione ospedali,
+// fogli, materiali, utenti-app, comunicati...).
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return roleMiddleware(next, "admin")
+}
+
+// utenteAuthMiddleware: rotte che un account utente-app scrive su se stesso
+// (oggi solo il cambio password) — un token admin non è ammesso, non deve
+// poter agire "per conto" di un utente-app.
+func utenteAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return roleMiddleware(next, "utente")
+}
+
+// contentAuthMiddleware: lettura dei contenuti riservati dell'app
+// (comunicati, repository-formazione) — sia un utente-app sia un admin
+// possono leggerli.
+func contentAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return roleMiddleware(next, "admin", "utente")
 }

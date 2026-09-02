@@ -187,12 +187,18 @@ lib/
 
 backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome, via,
                                      città, regione, coordinate), dei link ai fogli turni mensili,
-                                     del catalogo materiali e del link al repository di formazione,
-                                     + pagina admin statica; NON è un backend di sincronizzazione,
-                                     vedi Decisioni tecniche.
-                                     ospedali.go/fogli.go/materiali.go/formazione.go: CRUD (o
-                                     lettura/scrittura per formazione.go, un solo valore) di
-                                     ciascuna risorsa.
+                                     del catalogo materiali, del link al repository di formazione
+                                     e degli account "utente-app" che sbloccano i contenuti
+                                     riservati dell'app (Repository formazione, Archivio
+                                     comunicati) + pagina admin statica; NON è un backend di
+                                     sincronizzazione, vedi Decisioni tecniche.
+                                     ospedali.go/fogli.go/materiali.go/formazione.go/utenti_app.go:
+                                     CRUD (o lettura/scrittura per formazione.go, un solo valore;
+                                     create/list/delete/login/cambio-password per utenti_app.go)
+                                     di ciascuna risorsa. auth.go: JWT con ruolo (`admin`/`utente`)
+                                     e i tre middleware di autenticazione (authMiddleware,
+                                     utenteAuthMiddleware, contentAuthMiddleware), vedi Decisioni
+                                     tecniche.
                                      backend/Dockerfile + docker-compose.yml sono solo per
                                      sviluppo locale (`docker compose up --build`) — in
                                      produzione il binario è incorporato nell'immagine web
@@ -1536,6 +1542,69 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     limit"), run fallita. Corretto in un unico `buildx build --push` con i
     tre `-t`: un solo giro di richieste al registry, layer condivisi tra i
     tag, pattern comunque più idiomatico per buildx multi-tag.
+- **Account "utente-app" + ruoli nei JWT del backend condiviso (2026-09-02,
+  primo passo di "Contenuti riservati" — vedi bullet successivo per
+  Comunicati)**: fin qui il backend aveva un solo tipo di credenziali, gli
+  account admin (tabella `users`) per la pagina `/admin/`. Richiesta
+  esplicita dell'utente: un secondo tipo di account, creato **solo**
+  dall'admin dalla pagina del sito (mai dall'app), che serve a sbloccare
+  contenuti nell'app — non a gestire il backend. Primo tool a diventarne
+  dipendente: Repository formazione (bullet a parte per quando la
+  protezione è stata attivata).
+  - **Tabella `utenti_app` separata da `users`**, non un campo `role` sulla
+    tabella admin: un account-contenuto non deve mai poter transitare per i
+    controlli riservati agli admin nemmeno per errore. `deve_cambiare_password`
+    parte sempre `true` alla creazione (la password data dall'admin è sempre
+    provvisoria) e si azzera solo dal cambio password riuscito.
+  - **Ruolo (`role: "admin"|"utente"`) aggiunto alle claims JWT** (`auth.go`,
+    struct `claims` con `jwt.RegisteredClaims` embedded): senza, un token
+    utente-app varrebbe anche per le rotte admin, firmate con lo stesso
+    `JWT_SECRET`. Tre middleware condividono `roleMiddleware(next,
+    ruoliAmmessi...)`: `authMiddleware` (solo `admin`, tutte le rotte di
+    scrittura esistenti + gestione utenti-app/comunicati), `utenteAuthMiddleware`
+    (solo `utente`, l'unica rotta di scrittura lato utente: il cambio
+    password), `contentAuthMiddleware` (`admin` o `utente`, sola lettura dei
+    contenuti riservati). Tutti e tre scrivono lo username (`claims.Subject`)
+    nel `context.Context` della richiesta (`usernameFromContext`): il cambio
+    password identifica sempre il chiamante dal token, mai da uno username
+    nel body, altrimenti chiunque potrebbe cambiare la password di un altro
+    account indovinandone lo username.
+  - **Effetto collaterale accettato**: i token admin già emessi prima di
+    questo deploy non hanno `role` e non passano più `authMiddleware` — un
+    admin già loggato deve rifare il login dopo l'aggiornamento del server.
+    Stesso genere di rottura deliberata già accettato per JWT_SECRET/keystore.
+  - **Cambio password obbligatorio al primo login, poi libero** (richiesta
+    esplicita): `PUT /api/utenti/password` (`{passwordAttuale,passwordNuova}`,
+    minimo 8 caratteri) verifica sempre `passwordAttuale` via bcrypt anche
+    per il primo cambio — stesso schema di sicurezza del login, nessuna
+    scorciatoia solo perché è appena arrivato un token fresco. Login
+    (`POST /api/utenti/login`) restituisce anche `deveCambiarePassword`,
+    letto dalla riga: dice all'app se mostrare subito la schermata di
+    cambio password prima di lasciar entrare nei contenuti riservati (lato
+    client, vedi bullet dedicato quando arriva).
+  - **`utenti_app.go` mirror della parte admin di `auth.go`**: stesso
+    `dummyHash` per timing costante, stesso rate-limiter di login condiviso
+    per IP chiamante (budget in comune con l'admin, comunque sufficiente a
+    fermare un bruteforce). A differenza di `deleteUser` (admin), `deleteUtenteApp`
+    non ha il vincolo "non l'ultimo": zero utenti-app è uno stato legittimo,
+    nessuna funzionalità del sistema ne dipende per esistere.
+  - **Confine esplicito voluto dall'utente: la gestione degli account è SOLO
+    della pagina admin del sito, mai dell'app Flutter** — l'app Flutter
+    chiamerà solo login, cambio password e lettura dei contenuti riservati;
+    creare/elencare/eliminare un utente-app resta un'azione della tab
+    "Utenti app" in `backend/public/admin/index.html` (mirror della tab
+    "Utenti" esistente, stesso pattern `renderTabellaGenerica`/`toast()`),
+    mai un endpoint richiamato da `utils/backend_api.dart`.
+  - **Verificato end-to-end** (nessun framework di test Go nel repo, come
+    per le altre risorse): Postgres usa e getta via Podman + `go run .`,
+    `curl` per l'intero flusso — login admin, login utente-app inesistente
+    (401), un token utente-app rifiutato su una rotta admin e un token admin
+    rifiutato su `PUT /api/utenti/password` (401 su entrambi, confermano il
+    confine di ruolo), creazione utente-app con password provvisoria, cambio
+    password con la password attuale sbagliata (rifiutato) e poi corretta
+    (accettato, `deveCambiarePassword` torna `false` al login successivo),
+    eliminazione — più uno smoke test di non regressione su `POST
+    /api/ospedali` (continua a funzionare identico con un token admin).
 
 ---
 
