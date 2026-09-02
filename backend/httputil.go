@@ -52,11 +52,13 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 // centinaia di righe — comunque un tetto, non un via libera.
 const maxImportBodyBytes = 10 << 20
 
-// maxComunicatoBytes: limite del corpo multipart di POST /api/comunicati
-// (titolo + descrizione + PDF). 20 MiB è ampio per un PDF di comunicato
-// associativo, comunque un tetto contro un upload sproporzionato — i PDF
-// finiscono in una colonna bytea di Postgres (vedi CLAUDE.md), non su disco.
-const maxComunicatoBytes = 20 << 20
+// maxComunicatoBytes: limite del corpo multipart di POST /api/comunicati,
+// che accetta più file PDF in un solo upload (vedi main.go) — il tetto è
+// sul TOTALE della richiesta, non per singolo file. 50 MiB è ampio per un
+// pacchetto di comunicati associativi (tipicamente poche pagine ciascuno),
+// comunque un tetto contro un upload sproporzionato — i PDF finiscono in
+// una colonna bytea di Postgres (vedi CLAUDE.md), non su disco.
+const maxComunicatoBytes = 50 << 20
 
 // readBodyLimited legge l'intero body limitandone la dimensione; scrive già
 // la risposta 400 e restituisce ok=false se la lettura fallisce (corpo

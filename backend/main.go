@@ -661,47 +661,52 @@ func main() {
 		w.Write(data)
 	}))
 
-	// Upload: multipart, non JSON (readJSON non si applica qui). titolo +
-	// descrizione (opzionale) + file, validato per dimensione (MaxBytesReader,
-	// prima di ParseMultipartForm) e per contenuto (primi 4 byte "%PDF": un
-	// file rinominato a caso non basta a farlo passare per un comunicato).
+	// Upload: multipart, non JSON (readJSON non si applica qui). Uno o più
+	// file sotto lo stesso campo "file" (upload multiplo, richiesta esplicita
+	// dell'utente: carica in un colpo solo tutti i PDF di un mese) — nessun
+	// titolo/descrizione, il nome del file è ciò che viene mostrato in app.
+	// Ogni file è validato per contenuto (primi 4 byte "%PDF": un file
+	// rinominato a caso non basta a farlo passare per un comunicato); un file
+	// non valido nel gruppo viene scartato e contato, non blocca gli altri —
+	// stesso pattern "creati/scartati" già in uso per gli import massivi di
+	// ospedali/materiali/fogli. La dimensione totale della richiesta è
+	// limitata da MaxBytesReader prima di ParseMultipartForm.
 	mux.HandleFunc("POST /api/comunicati", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxComunicatoBytes)
 		if err := r.ParseMultipartForm(10 << 20); err != nil {
-			writeError(w, http.StatusBadRequest, "file troppo grande o corpo della richiesta non valido (max 20 MB)")
+			writeError(w, http.StatusBadRequest, "file troppo grandi o corpo della richiesta non valido (max 50 MB totali)")
 			return
 		}
-		titolo := strings.TrimSpace(r.FormValue("titolo"))
-		if titolo == "" {
-			writeError(w, http.StatusBadRequest, "titolo richiesto")
+		files := r.MultipartForm.File["file"]
+		if len(files) == 0 {
+			writeError(w, http.StatusBadRequest, "almeno un file PDF richiesto")
 			return
 		}
-		var descrizione *string
-		if d := strings.TrimSpace(r.FormValue("descrizione")); d != "" {
-			descrizione = &d
+		creati, scartati := 0, 0
+		for _, header := range files {
+			ok := func() bool {
+				file, err := header.Open()
+				if err != nil {
+					return false
+				}
+				defer file.Close()
+				data, err := io.ReadAll(file)
+				if err != nil || !bytes.HasPrefix(data, []byte("%PDF")) {
+					return false
+				}
+				if _, err := createComunicato(r.Context(), pool, header.Filename, data); err != nil {
+					log.Printf("[comunicati] errore creazione %q: %v\n", header.Filename, err)
+					return false
+				}
+				return true
+			}()
+			if ok {
+				creati++
+			} else {
+				scartati++
+			}
 		}
-		file, header, err := r.FormFile("file")
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "file PDF richiesto")
-			return
-		}
-		defer file.Close()
-		data, err := io.ReadAll(file)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "impossibile leggere il file")
-			return
-		}
-		if !bytes.HasPrefix(data, []byte("%PDF")) {
-			writeError(w, http.StatusBadRequest, "il file non è un PDF valido")
-			return
-		}
-		creato, err := createComunicato(r.Context(), pool, titolo, descrizione, header.Filename, data)
-		if err != nil {
-			log.Printf("[comunicati] errore creazione: %v\n", err)
-			writeError(w, http.StatusInternalServerError, "errore interno")
-			return
-		}
-		writeJSON(w, http.StatusCreated, creato)
+		writeJSON(w, http.StatusOK, map[string]int{"creati": creati, "scartati": scartati})
 	}))
 
 	mux.HandleFunc("DELETE /api/comunicati/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {

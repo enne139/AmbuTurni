@@ -354,18 +354,16 @@
       <!-- Comunicati ------------------------------------------------------ -->
       <section class="panel" data-panel="comunicati">
         <div class="card">
-          <strong>Nuovo comunicato</strong>
+          <strong>Carica comunicati</strong>
           <p class="sottotitolo" style="margin: 8px 0 12px;">
-            Un PDF diventa visibile e scaricabile nel tool "Archivio
-            comunicati" dell'app, solo per chi ha fatto login con un
-            account utente-app.
+            Seleziona uno o più PDF: diventano visibili e scaricabili nel
+            tool "Archivio comunicati" dell'app, solo per chi ha fatto
+            login con un account utente-app. Il nome del file è quello
+            mostrato nell'app (nessun titolo/descrizione da compilare) — i
+            comunicati con nome "AAAAMMGG_..." vengono raggruppati per mese.
           </p>
-          <label for="cm-titolo">Titolo</label>
-          <input id="cm-titolo" />
-          <label for="cm-descrizione">Descrizione (opzionale)</label>
-          <input id="cm-descrizione" />
-          <label for="cm-file">File PDF</label>
-          <input id="cm-file" type="file" accept="application/pdf" />
+          <label for="cm-file">File PDF (puoi selezionarne più di uno)</label>
+          <input id="cm-file" type="file" accept="application/pdf" multiple />
           <button onclick="aggiungiComunicato()">Carica</button>
           <div class="errore" id="errore-comunicato"></div>
         </div>
@@ -375,9 +373,9 @@
           <div class="table-scroll">
             <table>
               <thead>
-                <tr><th>Titolo</th><th>Descrizione</th><th>Dimensione</th><th>Caricato il</th><th></th></tr>
+                <tr><th>Nome file</th><th>Dimensione</th><th>Caricato il</th><th></th></tr>
               </thead>
-              <tbody id="tabella-comunicati"><tr><td colspan="5"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+              <tbody id="tabella-comunicati"><tr><td colspan="4"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -955,12 +953,11 @@ async function eliminaUtenteApp(username) {
 async function caricaComunicati() {
   const resp = await fetch('/api/comunicati', { headers: { Authorization: `Bearer ${token()}` } });
   const comunicati = await resp.json();
-  renderTabellaGenerica('tabella-comunicati', 5, comunicati, (c) => {
+  renderTabellaGenerica('tabella-comunicati', 4, comunicati, (c) => {
     const riga = document.createElement('tr');
     const creato = c.createdAt ? new Date(c.createdAt).toLocaleDateString('it-IT') : '—';
     riga.innerHTML = `
-      <td>${escapeHtml(c.titolo)}</td>
-      <td>${escapeHtml(c.descrizione ?? '')}</td>
+      <td>${escapeHtml(c.fileName)}</td>
       <td>${dimensioneLeggibile(c.fileSize)}</td>
       <td>${creato}</td>
       <td>
@@ -983,21 +980,22 @@ function dimensioneLeggibile(bytes) {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${unita[i]}`;
 }
 
+// Upload multiplo: ogni file selezionato va nello stesso campo "file" del
+// FormData (più append con la stessa chiave = più parti nel multipart, Go
+// li legge tutti da r.MultipartForm.File["file"]). Il riepilogo
+// creati/scartati arriva già pronto dal server (stesso pattern degli
+// import massivi di ospedali/materiali/fogli).
 async function aggiungiComunicato() {
   const erroreEl = document.getElementById('errore-comunicato');
   erroreEl.textContent = '';
-  const titolo = document.getElementById('cm-titolo').value.trim();
-  const descrizione = document.getElementById('cm-descrizione').value.trim();
   const fileInput = document.getElementById('cm-file');
-  const file = fileInput.files[0];
-  if (!titolo || !file) {
-    erroreEl.textContent = 'Titolo e file PDF sono richiesti.';
+  const selezionati = fileInput.files;
+  if (!selezionati || selezionati.length === 0) {
+    erroreEl.textContent = 'Seleziona almeno un file PDF.';
     return;
   }
   const form = new FormData();
-  form.append('titolo', titolo);
-  if (descrizione) form.append('descrizione', descrizione);
-  form.append('file', file);
+  for (const file of selezionati) form.append('file', file);
   try {
     const resp = await fetch('/api/comunicati', {
       method: 'POST',
@@ -1006,11 +1004,10 @@ async function aggiungiComunicato() {
     });
     const dati = await resp.json();
     if (!resp.ok) throw new Error(dati.error || 'Errore di caricamento');
-    document.getElementById('cm-titolo').value = '';
-    document.getElementById('cm-descrizione').value = '';
     fileInput.value = '';
     await caricaComunicati();
-    toast('Comunicato caricato.');
+    const scartatiTxt = dati.scartati ? `, ${dati.scartati} scartati (non PDF valido)` : '';
+    toast(`${dati.creati} comunicati caricati${scartatiTxt}.`);
   } catch (e) {
     erroreEl.textContent = e.message;
   }

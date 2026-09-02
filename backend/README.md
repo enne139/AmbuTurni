@@ -56,9 +56,9 @@ chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
 | DELETE | `/api/materiali/:id` | sì (admin) | elimina un materiale |
 | GET | `/api/repository-formazione` | sì (admin o utente) | `{url,updated_at}`, link condiviso ai materiali di formazione |
 | POST | `/api/repository-formazione` | sì (admin) | `{url}` → imposta/aggiorna il link |
-| GET | `/api/comunicati` | sì (admin o utente) | elenco metadati dei comunicati (titolo, descrizione, nome file, dimensione, data — mai il PDF) |
+| GET | `/api/comunicati` | sì (admin o utente) | elenco metadati dei comunicati (nome file, dimensione, data — mai il PDF; nessun titolo/descrizione, il nome del file è ciò che viene mostrato in app) |
 | GET | `/api/comunicati/:id/file` | sì (admin o utente) | scarica il PDF di un comunicato |
-| POST | `/api/comunicati` | sì (admin) | multipart: `titolo`, `descrizione` (opz.), `file` (PDF, max 20 MB) → crea un comunicato |
+| POST | `/api/comunicati` | sì (admin) | multipart, uno o più campi `file` (PDF, max 50 MB totali) → `{creati,scartati}`, upload multiplo |
 | DELETE | `/api/comunicati/:id` | sì (admin) | elimina un comunicato |
 | POST | `/api/utenti/login` | no (rate-limited) | `{username,password}` → `{token, deveCambiarePassword}` — login di un account utente-app |
 | PUT | `/api/utenti/password` | sì (utente) | `{passwordAttuale,passwordNuova}` → cambia la propria password (azzera `deveCambiarePassword`) |

@@ -48,7 +48,10 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 //     "Archivio comunicati", contenuto riservato: richiede login). Il PDF
 //     vive dentro Postgres (file_data bytea), non su disco — nessun volume
 //     dedicato da aggiungere al deploy, stesso volume `pgdata` già
-//     persistito (scelta discussa con l'utente, vedi CLAUDE.md).
+//     persistito (scelta discussa con l'utente, vedi CLAUDE.md). Nessun
+//     titolo/descrizione: il nome del file è ciò che viene mostrato in
+//     app, i comunicati reali sono già nominati con una convenzione propria
+//     (AAAAMMGG_NUMERO_...).
 //
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
 // migrazioni (assente qui, a differenza del client Flutter): un solo campo
@@ -107,13 +110,18 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 		CREATE TABLE IF NOT EXISTS comunicati (
 			id TEXT PRIMARY KEY,
-			titolo TEXT NOT NULL,
-			descrizione TEXT,
 			file_name TEXT NOT NULL,
 			file_data BYTEA NOT NULL,
 			file_size BIGINT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
+		-- titolo/descrizione erano nella primissima versione di questa
+		-- tabella (mai arrivata in produzione, solo su istanze di sviluppo):
+		-- tolti via DROP COLUMN IF EXISTS invece di una vera migrazione,
+		-- stesso idioma "niente sistema di migrazioni qui" già in uso per
+		-- ospedali.regione.
+		ALTER TABLE comunicati DROP COLUMN IF EXISTS titolo;
+		ALTER TABLE comunicati DROP COLUMN IF EXISTS descrizione;
 	`)
 	return err
 }

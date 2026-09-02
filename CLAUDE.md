@@ -1631,13 +1631,14 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     già seguito per ospedali/fogli/materiali. Limite pratico accettato:
     adatta a documenti associativi (poche pagine), non a un archivio enorme.
   - **`comunicati.go`**: `listComunicati` restituisce solo i metadati (id,
-    titolo, descrizione, nome file, dimensione, data) — MAI `file_data`, che
-    appesantirebbe inutilmente l'elenco; il download è l'endpoint a parte
-    `GET /api/comunicati/{id}/file`.
+    nome file, dimensione, data) — MAI `file_data`, che appesantirebbe
+    inutilmente l'elenco; il download è l'endpoint a parte
+    `GET /api/comunicati/{id}/file`. (Niente titolo/descrizione fin da subito:
+    tolti nella revisione dello stesso giorno, vedi bullet successivo.)
   - **Upload multipart, non JSON**: `POST /api/comunicati` usa
     `r.ParseMultipartForm` dopo `http.MaxBytesReader(w, r.Body,
-    maxComunicatoBytes)` (20 MiB, `httputil.go`) — `readJSON` non si applica
-    a un body multipart. Validazione doppia: titolo non vuoto e primi 4 byte
+    maxComunicatoBytes)` (`httputil.go`) — `readJSON` non si applica
+    a un body multipart. Validazione per contenuto: primi 4 byte
     del file uguali a `%PDF` (un file rinominato a caso non basta a farlo
     passare per un comunicato).
   - **`Content-Disposition` costruito con `mime.FormatMediaType`** (stdlib)
@@ -1650,9 +1651,9 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     `authMiddleware` (solo admin) — stesso confine "gestione solo dalla
     pagina admin" del bullet precedente: nessuno di questi due endpoint di
     scrittura verrà mai chiamato da `utils/backend_api.dart`.
-  - **Pagina admin**: nuova tab "Comunicati" (form titolo+descrizione+file,
-    upload via `fetch` con `FormData` — niente `Content-Type` manuale, lo
-    imposta il browser col boundary corretto — tabella con Scarica/Elimina).
+  - **Pagina admin**: nuova tab "Comunicati" (form file, upload via `fetch`
+    con `FormData` — niente `Content-Type` manuale, lo imposta il browser
+    col boundary corretto — tabella con Scarica/Elimina).
     `caricaFormazione()` doveva anche lei aggiungere l'header
     `Authorization`: prima era una `GET` pubblica, senza l'header avrebbe
     iniziato a ricevere 401 col cambio sopra — trovato e corretto prima del
@@ -1664,6 +1665,34 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     originale (identico), upload di un file non-PDF rifiutato (400),
     eliminazione; un token utente-app legge sia repository-formazione sia
     comunicati (200) ma non può caricarne uno (401, confine di ruolo).
+- **Comunicati: niente titolo/descrizione, upload multiplo (2026-09-02,
+  revisione lo stesso giorno del bullet precedente, prima ancora del test
+  manuale dell'app)**: richiesta esplicita dell'utente — i comunicati reali
+  dell'associazione sono già nominati con una propria convenzione
+  (`AAAAMMGG_NUMERO_...`, il numero progressivo si azzera ogni anno),
+  compilare anche un titolo ad ogni caricamento sarebbe stato un campo in
+  più senza reale valore aggiunto. **Il nome del file stesso è ciò che
+  l'app mostra** (e ciò che serve per il raggruppamento per mese, vedi
+  bullet successivo sul tool Flutter).
+  - Colonne `titolo`/`descrizione` tolte dalla tabella `comunicati` via
+    `ALTER TABLE ... DROP COLUMN IF EXISTS` (mai arrivate in produzione,
+    solo su istanze di sviluppo — stesso idioma "niente sistema di
+    migrazioni qui" già in uso per `ospedali.regione`).
+  - **`POST /api/comunicati` accetta più file in un solo upload** (stesso
+    campo multipart `file` ripetuto, `r.MultipartForm.File["file"]` in Go
+    restituisce tutti gli allegati con quel nome): richiesta esplicita, per
+    caricare in un colpo solo tutti i PDF di un mese invece che uno alla
+    volta. Risposta `{creati, scartati}` — stesso pattern già in uso per gli
+    import massivi di ospedali/materiali/fogli: un file non-PDF nel gruppo
+    viene scartato e contato, non blocca gli altri. `maxComunicatoBytes`
+    salito a 50 MiB (era 20): il tetto ora è sul totale della richiesta, non
+    per singolo file.
+  - Pagina admin: form ridotto al solo file (`<input type=file multiple>`),
+    tabella con "Nome file" al posto di "Titolo"/"Descrizione".
+  - Lato Flutter (`archivio_comunicati_screen.dart`, `utils/comunicati.dart`):
+    nessun impatto sul raggruppamento per mese, che già usava il nome file e
+    mai `titolo`; solo `_ComunicatoCard` aggiornata a mostrare `fileName`
+    come titolo della card invece di un campo `titolo` mai esistito lì.
 - **Login utente-app lato client, sblocca Repository formazione
   (2026-09-02)**: terzo commit della funzionalità, primo a toccare l'app
   Flutter — i due bullet precedenti erano solo backend.
