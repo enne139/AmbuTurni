@@ -56,6 +56,10 @@ chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
 | DELETE | `/api/materiali/:id` | sì (admin) | elimina un materiale |
 | GET | `/api/repository-formazione` | sì (admin o utente) | `{url,updated_at}`, link condiviso ai materiali di formazione |
 | POST | `/api/repository-formazione` | sì (admin) | `{url}` → imposta/aggiorna il link |
+| GET | `/api/comunicati` | sì (admin o utente) | elenco metadati dei comunicati (titolo, descrizione, nome file, dimensione, data — mai il PDF) |
+| GET | `/api/comunicati/:id/file` | sì (admin o utente) | scarica il PDF di un comunicato |
+| POST | `/api/comunicati` | sì (admin) | multipart: `titolo`, `descrizione` (opz.), `file` (PDF, max 20 MB) → crea un comunicato |
+| DELETE | `/api/comunicati/:id` | sì (admin) | elimina un comunicato |
 | POST | `/api/utenti/login` | no (rate-limited) | `{username,password}` → `{token, deveCambiarePassword}` — login di un account utente-app |
 | PUT | `/api/utenti/password` | sì (utente) | `{passwordAttuale,passwordNuova}` → cambia la propria password (azzera `deveCambiarePassword`) |
 | POST | `/api/utenti` | sì (admin) | `{username,password}` → crea un utente-app con password provvisoria |

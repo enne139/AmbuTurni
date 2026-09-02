@@ -2,10 +2,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
+	"mime"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -584,11 +587,12 @@ func main() {
 	}))
 
 	// --- REPOSITORY FORMAZIONE ---
-	// Un solo link condiviso (non una collezione): stesso schema di fiducia
-	// di ospedali/fogli/materiali (lettura pubblica, scrittura solo admin),
-	// ma senza upsert per chiave — c'è un solo valore per tutta l'istanza.
+	// Un solo link condiviso (non una collezione): scrittura solo admin,
+	// come ospedali/fogli/materiali, ma la lettura è un CONTENUTO RISERVATO
+	// (contentAuthMiddleware, non più pubblica): richiede login in app come
+	// utente-app o admin. Vedi CLAUDE.md per il perché di questo cambio.
 
-	mux.HandleFunc("GET /api/repository-formazione", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/repository-formazione", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		rf, err := getRepositoryFormazione(r.Context(), pool)
 		if err != nil {
 			log.Printf("[formazione] errore lettura: %v\n", err)
@@ -596,7 +600,7 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, rf)
-	})
+	}))
 
 	mux.HandleFunc("POST /api/repository-formazione", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Url string }
@@ -619,6 +623,99 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, rf)
+	}))
+
+	// --- COMUNICATI ---
+	// Avvisi con un PDF allegato (tool "Archivio comunicati"): CONTENUTO
+	// RISERVATO come repository-formazione (lettura solo con login), upload/
+	// eliminazione SOLO dalla pagina admin. Il PDF vive in Postgres (bytea),
+	// vedi CLAUDE.md.
+
+	// Elenco metadati (mai il PDF, vedi listComunicati).
+	mux.HandleFunc("GET /api/comunicati", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listComunicati(r.Context(), pool)
+		if err != nil {
+			log.Printf("[comunicati] errore lista: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, lista)
+	}))
+
+	// Download del PDF. Content-Disposition costruito con mime.FormatMediaType
+	// (escaping corretto del filename) invece di concatenare la stringa a
+	// mano, per non rischiare un header injection da un nome file malevolo.
+	mux.HandleFunc("GET /api/comunicati/{id}/file", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		fileName, data, err := getComunicatoFile(r.Context(), pool, r.PathValue("id"))
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Comunicato non trovato")
+			return
+		}
+		if err != nil {
+			log.Printf("[comunicati] errore download: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": fileName}))
+		w.Write(data)
+	}))
+
+	// Upload: multipart, non JSON (readJSON non si applica qui). titolo +
+	// descrizione (opzionale) + file, validato per dimensione (MaxBytesReader,
+	// prima di ParseMultipartForm) e per contenuto (primi 4 byte "%PDF": un
+	// file rinominato a caso non basta a farlo passare per un comunicato).
+	mux.HandleFunc("POST /api/comunicati", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxComunicatoBytes)
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			writeError(w, http.StatusBadRequest, "file troppo grande o corpo della richiesta non valido (max 20 MB)")
+			return
+		}
+		titolo := strings.TrimSpace(r.FormValue("titolo"))
+		if titolo == "" {
+			writeError(w, http.StatusBadRequest, "titolo richiesto")
+			return
+		}
+		var descrizione *string
+		if d := strings.TrimSpace(r.FormValue("descrizione")); d != "" {
+			descrizione = &d
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "file PDF richiesto")
+			return
+		}
+		defer file.Close()
+		data, err := io.ReadAll(file)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "impossibile leggere il file")
+			return
+		}
+		if !bytes.HasPrefix(data, []byte("%PDF")) {
+			writeError(w, http.StatusBadRequest, "il file non è un PDF valido")
+			return
+		}
+		creato, err := createComunicato(r.Context(), pool, titolo, descrizione, header.Filename, data)
+		if err != nil {
+			log.Printf("[comunicati] errore creazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusCreated, creato)
+	}))
+
+	mux.HandleFunc("DELETE /api/comunicati/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		rimosso, err := deleteComunicato(r.Context(), pool, r.PathValue("id"))
+		if err != nil {
+			log.Printf("[comunicati] errore eliminazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !rimosso {
+			writeError(w, http.StatusNotFound, "Comunicato non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
 	// --- PAGINA ADMIN ---

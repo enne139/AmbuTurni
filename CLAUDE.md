@@ -192,13 +192,16 @@ backend/                            API Go+PostgreSQL dell'elenco condiviso ospe
                                      riservati dell'app (Repository formazione, Archivio
                                      comunicati) + pagina admin statica; NON è un backend di
                                      sincronizzazione, vedi Decisioni tecniche.
-                                     ospedali.go/fogli.go/materiali.go/formazione.go/utenti_app.go:
-                                     CRUD (o lettura/scrittura per formazione.go, un solo valore;
-                                     create/list/delete/login/cambio-password per utenti_app.go)
-                                     di ciascuna risorsa. auth.go: JWT con ruolo (`admin`/`utente`)
-                                     e i tre middleware di autenticazione (authMiddleware,
-                                     utenteAuthMiddleware, contentAuthMiddleware), vedi Decisioni
-                                     tecniche.
+                                     ospedali.go/fogli.go/materiali.go/formazione.go/utenti_app.go/
+                                     comunicati.go: CRUD (o lettura/scrittura per formazione.go,
+                                     un solo valore; create/list/delete/login/cambio-password per
+                                     utenti_app.go; upload multipart per comunicati.go, PDF in una
+                                     colonna bytea) di ciascuna risorsa. auth.go: JWT con ruolo
+                                     (`admin`/`utente`) e i tre middleware di autenticazione
+                                     (authMiddleware, utenteAuthMiddleware, contentAuthMiddleware),
+                                     vedi Decisioni tecniche. Repository formazione e Comunicati
+                                     sono "contenuti riservati": lettura protetta da
+                                     contentAuthMiddleware, richiede login nell'app.
                                      backend/Dockerfile + docker-compose.yml sono solo per
                                      sviluppo locale (`docker compose up --build`) — in
                                      produzione il binario è incorporato nell'immagine web
@@ -1605,6 +1608,52 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     (accettato, `deveCambiarePassword` torna `false` al login successivo),
     eliminazione — più uno smoke test di non regressione su `POST
     /api/ospedali` (continua a funzionare identico con un token admin).
+- **Archivio comunicati (PDF) sul backend condiviso, protetto da login
+  (2026-09-02)**: secondo tool a diventare "contenuto riservato" insieme a
+  Repository formazione (bullet precedente), che con questo commit smette
+  davvero di essere pubblica — `GET /api/repository-formazione` passa da
+  handler nudo a `contentAuthMiddleware`.
+  - **I PDF vivono dentro Postgres** (`comunicati.file_data bytea`), non su
+    filesystem: decisione discussa esplicitamente con l'utente. Zero
+    modifiche al deploy — stesso volume `pgdata` già persistito, nessun
+    volume Docker dedicato da aggiungere né in `backend/docker-compose.yml`
+    né in produzione — coerente con lo stile "niente infrastruttura nuova"
+    già seguito per ospedali/fogli/materiali. Limite pratico accettato:
+    adatta a documenti associativi (poche pagine), non a un archivio enorme.
+  - **`comunicati.go`**: `listComunicati` restituisce solo i metadati (id,
+    titolo, descrizione, nome file, dimensione, data) — MAI `file_data`, che
+    appesantirebbe inutilmente l'elenco; il download è l'endpoint a parte
+    `GET /api/comunicati/{id}/file`.
+  - **Upload multipart, non JSON**: `POST /api/comunicati` usa
+    `r.ParseMultipartForm` dopo `http.MaxBytesReader(w, r.Body,
+    maxComunicatoBytes)` (20 MiB, `httputil.go`) — `readJSON` non si applica
+    a un body multipart. Validazione doppia: titolo non vuoto e primi 4 byte
+    del file uguali a `%PDF` (un file rinominato a caso non basta a farlo
+    passare per un comunicato).
+  - **`Content-Disposition` costruito con `mime.FormatMediaType`** (stdlib)
+    invece di concatenare la stringa a mano: escaping corretto del nome
+    file, evita un header injection da un nome file malevolo caricato
+    dall'admin (difesa in profondità, l'upload è comunque protetto da
+    `authMiddleware`).
+  - **Lettura protetta da `contentAuthMiddleware`** (`admin` o `utente`,
+    vedi bullet precedente sui ruoli JWT), scrittura (`POST`/`DELETE`) da
+    `authMiddleware` (solo admin) — stesso confine "gestione solo dalla
+    pagina admin" del bullet precedente: nessuno di questi due endpoint di
+    scrittura verrà mai chiamato da `utils/backend_api.dart`.
+  - **Pagina admin**: nuova tab "Comunicati" (form titolo+descrizione+file,
+    upload via `fetch` con `FormData` — niente `Content-Type` manuale, lo
+    imposta il browser col boundary corretto — tabella con Scarica/Elimina).
+    `caricaFormazione()` doveva anche lei aggiungere l'header
+    `Authorization`: prima era una `GET` pubblica, senza l'header avrebbe
+    iniziato a ricevere 401 col cambio sopra — trovato e corretto prima del
+    test end-to-end, non dopo.
+  - **Verificato end-to-end** come il bullet precedente (Podman + `go run
+    .` + `curl`, incluso un vero PDF minimo generato al volo): `GET
+    /api/repository-formazione` senza token ora dà 401; upload di un PDF
+    vero, elenco, download con confronto **byte-per-byte** col file
+    originale (identico), upload di un file non-PDF rifiutato (400),
+    eliminazione; un token utente-app legge sia repository-formazione sia
+    comunicati (200) ma non può caricarne uno (401, confine di ruolo).
 
 ---
 

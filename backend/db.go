@@ -44,6 +44,11 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 //     Tabella separata da `users` apposta: un account-contenuto non deve
 //     mai poter transitare per i controlli riservati agli admin. Vedi
 //     auth.go (Role nei JWT) e utenti_app.go.
+//   - comunicati: avvisi dell'associazione con un PDF allegato (tool
+//     "Archivio comunicati", contenuto riservato: richiede login). Il PDF
+//     vive dentro Postgres (file_data bytea), non su disco — nessun volume
+//     dedicato da aggiungere al deploy, stesso volume `pgdata` già
+//     persistito (scelta discussa con l'utente, vedi CLAUDE.md).
 //
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
 // migrazioni (assente qui, a differenza del client Flutter): un solo campo
@@ -97,6 +102,16 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			username TEXT PRIMARY KEY,
 			password_hash TEXT NOT NULL,
 			deve_cambiare_password BOOLEAN NOT NULL DEFAULT true,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		CREATE TABLE IF NOT EXISTS comunicati (
+			id TEXT PRIMARY KEY,
+			titolo TEXT NOT NULL,
+			descrizione TEXT,
+			file_name TEXT NOT NULL,
+			file_data BYTEA NOT NULL,
+			file_size BIGINT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 	`)
