@@ -229,7 +229,8 @@ Dockerfile                          build multi-stage: web Flutter + binario bac
                                      nginx (root: serve tutto il progetto, backend/ incluso)
 docker-entrypoint.sh                avvia backend Go in sottofondo + nginx in primo piano
 nginx.conf                          SPA fallback + cache statica + reverse proxy /api/ e
-                                     /admin/ verso il backend Go
+                                     /admin/ verso il backend Go + header X-Robots-Tag
+                                     (sito non indicizzato, vedi Decisioni tecniche)
 windows/                            progetto CMake generato da flutter create --platforms windows
 assets/icon/                        sorgenti icona app (SVG + PNG 1024×1024), vedi sotto
 ```
@@ -2013,6 +2014,27 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     conteggio comunicati invariato dopo), ripristino con un ospedale nuovo
     (conta "creati"), corpo che non è uno zip valido (400 con messaggio
     esplicito invece di un crash).
+- **Sito non indicizzato dai motori di ricerca (2026-09-03)**: richiesta
+  esplicita dell'utente — è uno strumento interno dell'associazione, non ha
+  senso comparire in una ricerca Google. Tre livelli ridondanti (un motore
+  che ignorasse uno dei tre legge comunque gli altri):
+  - **`web/robots.txt`** (nuovo, `Disallow: /` per tutti gli user agent):
+    copiato in `build/web/` da `flutter build web` come ogni altro file di
+    `web/`, servito da nginx alla radice senza configurazione aggiuntiva.
+  - **`<meta name="robots" content="noindex, nofollow">`** sia in
+    `web/index.html` (l'app) sia in `backend/public/admin/index.html` (la
+    pagina admin, il caso più sensibile da tenere fuori dall'indice).
+  - **Header `X-Robots-Tag: noindex, nofollow` in `nginx.conf`**, a livello
+    di `server` (eredita su `/api/` e `/admin/`, che non hanno un
+    `add_header` proprio) e ripetuto esplicitamente in `location /` (che ne
+    ha già uno per `Cache-Control`: un `location` con almeno un `add_header`
+    proprio smette di ereditare quelli del blocco padre, vanno ripetuti
+    tutti lì — insidia nota di nginx). `always`: presente anche sulle
+    risposte di errore (4xx/5xx), non solo 2xx/3xx. Verificato con
+    `nginx -t` (sintassi) e un container nginx:alpine locale con questa
+    config: header presente su `/` e su `/api/health` (anche con un 502,
+    backend non raggiungibile in quel test), `robots.txt` servito con
+    contenuto corretto.
 
 ---
 
