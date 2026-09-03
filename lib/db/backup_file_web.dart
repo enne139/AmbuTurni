@@ -2,6 +2,7 @@
 // niente dart:io (non disponibile sul target web) né dialog "Salva come"
 // (file_picker non implementa saveFile nel browser, solo pickFiles).
 import 'dart:convert';
+import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,6 +20,53 @@ Future<String?> salvaFilePiattaforma(
   final file = XFile.fromData(bytes, name: nomeFile, mimeType: 'application/json');
   await SharePlus.instance.share(ShareParams(files: [file], text: shareText));
   return nomeFile;
+}
+
+/// Salva [bytes] nel browser — variante binaria di salvaFilePiattaforma
+/// (pensata per testo), usata per scaricare il PDF di un comunicato
+/// (Tools → Archivio comunicati). Stesso meccanismo XFile.fromData +
+/// share_plus, [mimeType] passato esplicitamente (qui non è mai JSON).
+Future<String?> salvaFileBinarioPiattaforma(
+    Uint8List bytes, String nomeFile, String shareText, String mimeType) async {
+  final file = XFile.fromData(bytes, name: nomeFile, mimeType: mimeType);
+  await SharePlus.instance.share(ShareParams(files: [file], text: shareText));
+  return nomeFile;
+}
+
+/// Apre in una nuova scheda del browser il PDF prodotto da [caricaBytes],
+/// invece di scaricarlo — usata dal pulsante "Visualizza" di Archivio
+/// comunicati.
+///
+/// Due insidie reali dei browser moderni, trovate testando in Chrome (non
+/// intercettabili da analyze/test):
+/// 1. **`data:` URI bloccata**: una prima versione usava
+///    `Uri.dataFromBytes` + `launchUrl` — Chrome rifiuta la navigazione
+///    diretta a una `data:` URI per motivi di sicurezza (anti-phishing),
+///    la scheda restava vuota senza alcun errore visibile.
+/// 2. **`window.open` dopo un'attesa di rete viene trattato come popup non
+///    richiesto**: il fetch del PDF (`caricaBytes`, la chiamata autenticata
+///    al backend) è asincrono; se si apre la finestra solo DOPO aver
+///    scaricato i byte, il browser non riconosce più l'apertura come
+///    conseguenza diretta del tap dell'utente e la blocca in silenzio.
+///
+/// Soluzione: apre subito una scheda vuota (`html.window.open`, ultima
+/// istruzione sincrona di questa funzione, ancora dentro la catena del
+/// gesto di tap originale — [caricaBytes] è passata come callback proprio
+/// per poterla invocare DOPO l'apertura, mai prima), poi ci carica dentro
+/// il PDF (Blob URL, non una data: URI: un Blob creato in pagina non
+/// ricade nella restrizione del punto 1) una volta arrivati i byte.
+Future<void> apriFileBinarioPiattaforma(
+    Future<Uint8List> Function() caricaBytes, String nomeFile, String mimeType) async {
+  final finestra = html.window.open('', '_blank');
+  try {
+    final bytes = await caricaBytes();
+    final blob = html.Blob([bytes], mimeType);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    finestra.location.href = url;
+  } catch (e) {
+    finestra.close();
+    rethrow;
+  }
 }
 
 /// Apre il file picker del browser e legge il contenuto testuale del backup

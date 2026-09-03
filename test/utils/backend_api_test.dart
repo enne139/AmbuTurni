@@ -306,13 +306,13 @@ void main() {
       final richieste = <http.Request>[];
       final api = _api(
         _json([
-          {'id': '1', 'titolo': 'Assemblea', 'fileName': 'a.pdf', 'fileSize': 1234},
+          {'id': '1', 'fileName': '20260115_001_assemblea.pdf', 'fileSize': 1234},
         ], 200),
         richieste,
       );
       final lista = await api.getComunicati(token: 'abc');
       expect(lista, hasLength(1));
-      expect(lista.first['titolo'], 'Assemblea');
+      expect(lista.first['fileName'], '20260115_001_assemblea.pdf');
       expect(richieste.single.url.toString(), 'https://backend.test/api/comunicati');
       expect(richieste.single.headers['Authorization'], 'Bearer abc');
     });

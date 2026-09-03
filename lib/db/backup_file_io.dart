@@ -3,9 +3,11 @@
 // tutta la feature backup (vedi backup_file.dart per il perché).
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../utils/platform_check.dart';
 
 /// Salva [contenuto] su filesystem nativo.
@@ -47,6 +49,60 @@ Future<String?> salvaFilePiattaforma(
   await file.writeAsString(contenuto, encoding: utf8);
   await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: shareText));
   return file.path;
+}
+
+/// Salva [bytes] su filesystem nativo — variante binaria di
+/// salvaFilePiattaforma (pensata per testo: JSON/.ics), usata per scaricare
+/// il PDF di un comunicato (Tools → Archivio comunicati). Stesso
+/// comportamento per piattaforma: dialog "Salva come" su desktop, share
+/// sheet su mobile (mimeType passato a XFile per farla riconoscere ai
+/// destinatari della condivisione, es. "Apri con" un lettore PDF).
+Future<String?> salvaFileBinarioPiattaforma(
+    Uint8List bytes, String nomeFile, String shareText, String mimeType) async {
+  if (isDesktop) {
+    final outputPath = await FilePicker.saveFile(
+      dialogTitle: 'Salva file',
+      fileName: nomeFile,
+      type: FileType.any,
+    );
+    if (outputPath == null) return null;
+    await File(outputPath).writeAsBytes(bytes);
+    return outputPath;
+  }
+
+  final dir = await getTemporaryDirectory();
+  final file = File('${dir.path}/$nomeFile');
+  await file.writeAsBytes(bytes);
+  await SharePlus.instance
+      .share(ShareParams(files: [XFile(file.path, mimeType: mimeType)], text: shareText));
+  return file.path;
+}
+
+/// Apre il PDF prodotto da [caricaBytes] con l'app predefinita del sistema
+/// per [mimeType], invece di forzare un salvataggio/condivisione — usata dal
+/// pulsante "Visualizza" di Archivio comunicati. Callback invece di bytes
+/// già pronti per avere la stessa firma della variante web (backup_file_web.dart),
+/// dove l'ordine "apri la finestra, poi carica i byte" non è opzionale (vedi
+/// i commenti lì) — qui nessun popup blocker da aggirare, ma l'interfaccia
+/// condivisa evita due firme diverse per lo stesso scopo.
+/// Su desktop scrive un file temporaneo e lo apre via url_launcher
+/// (`Uri.file`, delega all'app associata all'estensione, es. il lettore PDF
+/// predefinito). Su mobile un `file://` diretto non è affidabile da un'app
+/// terza (Android blocca l'accesso, servirebbe un FileProvider dedicato) —
+/// ripiega sulla share sheet già usata da salvaFileBinarioPiattaforma: tra le
+/// app di destinazione include comunque i lettori PDF installati, quindi
+/// "visualizzare" resta possibile, solo con un tap in più per scegliere l'app.
+Future<void> apriFileBinarioPiattaforma(
+    Future<Uint8List> Function() caricaBytes, String nomeFile, String mimeType) async {
+  final bytes = await caricaBytes();
+  final dir = await getTemporaryDirectory();
+  final file = File('${dir.path}/$nomeFile');
+  await file.writeAsBytes(bytes);
+  if (isDesktop) {
+    final aperto = await launchUrl(Uri.file(file.path));
+    if (aperto) return;
+  }
+  await SharePlus.instance.share(ShareParams(files: [XFile(file.path, mimeType: mimeType)]));
 }
 
 /// Apre il file picker e legge il contenuto testuale del backup scelto.

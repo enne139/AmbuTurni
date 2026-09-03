@@ -99,6 +99,9 @@ lib/
 │   │                               Lista ospedali, testato con MockClient
 │   ├── backend_api.dart           client Dart puro del backend condiviso ospedali (backend/,
 │   │                               Go): GET /api/ospedali?citta=, testato con MockClient
+│   ├── comunicati.dart            Dart puro, testato: raggruppaPerMese/dataComunicato per il
+│   │                               tool Archivio comunicati (data dal nome file AAAAMMGG,
+│   │                               fallback su createdAt)
 │   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
 │   │                               (Piano turni + Tools attivi + indirizzo del backend
 │   │                               condiviso ospedali + sincronizzazione fogli turni)
@@ -183,10 +186,14 @@ lib/
     │   ├── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
     │   │                               (doppioni case-insensitive bloccati: niente UNIQUE sul nome);
     │   │                               pulsante per scaricare il catalogo dal backend condiviso
-    │   └── repository_formazione_screen.dart apre nel browser l'unico link condiviso ai
-    │                                   materiali di formazione (impostato solo dalla pagina admin
-    │                                   del backend condiviso, non configurabile qui). CONTENUTO
-    │                                   RISERVATO: avvolto in AccessoRichiesto, richiede login.
+    │   ├── repository_formazione_screen.dart apre nel browser l'unico link condiviso ai
+    │   │                               materiali di formazione (impostato solo dalla pagina admin
+    │   │                               del backend condiviso, non configurabile qui). CONTENUTO
+    │   │                               RISERVATO: avvolto in AccessoRichiesto, richiede login.
+    │   └── archivio_comunicati_screen.dart elenco PDF caricati dall'admin, raggruppati per
+    │                                   mese; CONTENUTO RISERVATO (AccessoRichiesto, come sopra).
+    │                                   Tap su un comunicato → apriFileBinarioPiattaforma
+    │                                   (db/backup_file.dart) lo apre con un lettore PDF.
     └── impostazioni/
         └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
@@ -1594,7 +1601,8 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     (`POST /api/utenti/login`) restituisce anche `deveCambiarePassword`,
     letto dalla riga: dice all'app se mostrare subito la schermata di
     cambio password prima di lasciar entrare nei contenuti riservati (lato
-    client, vedi bullet dedicato quando arriva).
+    client, vedi bullet "Login utente-app lato client" e "Tool 'Archivio
+    comunicati' lato client" più sotto).
   - **`utenti_app.go` mirror della parte admin di `auth.go`**: stesso
     `dummyHash` per timing costante, stesso rate-limiter di login condiviso
     per IP chiamante (budget in comune con l'admin, comunque sufficiente a
@@ -1734,7 +1742,8 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     BackendApiException` (nuova, `backend_api.dart`, lanciata da
     `_lanciaErrore` sullo status 401) invece del generico
     `BackendApiException` — i chiamanti delle rotte autenticate
-    (`_RepositoryFormazioneContenuto`, e Archivio comunicati quando arriva)
+    (`_RepositoryFormazioneContenuto`, e `_ArchivioComunicatiContenuto` una
+    volta arrivata, vedi bullet dedicato più sotto)
     la intercettano per chiamare `AccountProvider.logout()` invece di
     mostrare un errore con un "Riprova" destinato a fallire per sempre finché
     non si rifà login.
@@ -1773,6 +1782,40 @@ Actions (`build-android.yml`) usa `flutter build apk`.
        questo era passato inosservato in tutta la verifica end-to-end fatta
        finora via `curl`, lezione aggiunta alla lista di cose che una
        verifica solo-backend non copre.
+- **Tool "Archivio comunicati" lato client (2026-09-03)**: quarto commit
+  della funzionalità "contenuti riservati" — dà finalmente un'interfaccia
+  nell'app al secondo contenuto riservato (dopo Repository formazione),
+  chiudendo i riferimenti "quando arriva" lasciati nei bullet precedenti.
+  - **`ArchivioComunicatiScreen`** (`screens/tools/archivio_comunicati_screen.dart`):
+    stesso pattern di `RepositoryFormazioneScreen` — avvolta in
+    `AccessoRichiesto`, contenuto vero estratto in
+    `_ArchivioComunicatiContenuto` (parametrizzato sul token). Nessuna cache
+    locale (a differenza del Piano turni): sempre online, i comunicati
+    cambiano raramente e non giustificano la complessità di una cache.
+    `RefreshIndicator` anche a lista vuota (serve comunque una `ListView`
+    scrollabile perché il pull-to-refresh funzioni).
+  - **`utils/comunicati.dart`**: Dart puro (niente import Flutter, come
+    `piano_mensile.dart`/`geocoding_api.dart`), testato in
+    `comunicati_test.dart`. `dataDaNomeFile` legge la data dai primi 8
+    caratteri del nome file (convenzione reale dell'associazione,
+    "AAAAMMGG_NUMERO_..."), `dataComunicato` ricade su `createdAt` se il
+    nome non la rispetta (mai perdere un comunicato dal raggruppamento solo
+    perché caricato senza rinominarlo), `raggruppaPerMese` ordina e
+    raggruppa per "Mese Anno" — stessa filosofia "niente package" del
+    raggruppamento per regione di Lista ospedali.
+  - **Voce nel catalogo tool** (`kToolArchivioComunicati` in
+    `tools_config.dart`, mappa id→schermata in `tools_screen.dart`), attiva
+    di default come gli altri.
+  - **`apriFileBinarioPiattaforma`/`salvaFileBinarioPiattaforma`** aggiunte
+    a `backup_file_io.dart`/`backup_file_web.dart`: varianti binarie
+    (`Uint8List`) delle funzioni testuali già esistenti per l'export/import
+    del backup JSON, usate per aprire/scaricare il PDF di un comunicato.
+    `apriFileBinarioPiattaforma` prende un `Future<Uint8List> Function()`
+    invece di bytes già pronti apposta per la variante web (vedi i commenti
+    lì): la finestra va aperta PRIMA di attendere il download, altrimenti il
+    browser la blocca come popup non richiesto.
+  - **Apertura PDF su Android — bug trovato dal test manuale dell'utente,
+    corretto con `open_filex`**: bullet dedicato subito sotto.
 
 ---
 
@@ -1824,6 +1867,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   condiviso ai materiali di formazione, impostato dalla pagina admin del
   backend condiviso. CONTENUTO RISERVATO: richiede login (account
   utente-app, creato solo dalla pagina admin).
+- ✅ **Tools → Archivio comunicati**: elenco dei PDF caricati dall'admin sul
+  backend condiviso, raggruppati per mese, tap per aprirli con un lettore
+  PDF esterno. CONTENUTO RISERVATO: richiede login (account utente-app).
 - ✅ **Impostazioni → Account**: login/logout con le credenziali
   utente-app (create solo dalla pagina admin del backend condiviso, mai da
   questa app) che sbloccano i contenuti riservati (Repository formazione,
@@ -1846,7 +1892,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 140 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 170 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

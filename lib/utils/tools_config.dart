@@ -7,6 +7,7 @@ const kToolMaterialiUsati = 'materiali_usati';
 const kToolPianoTurni = 'piano_turni';
 const kToolListaOspedali = 'lista_ospedali';
 const kToolRepositoryFormazione = 'repository_formazione';
+const kToolArchivioComunicati = 'archivio_comunicati';
 
 /// Metadati di un tool per la card in Tools e lo switch in Impostazioni:
 /// un'unica fonte così le due schermate restano coerenti (stesso titolo,
@@ -54,5 +55,11 @@ const kToolsDisponibili = [
     titolo: 'Repository formazione',
     sottotitolo: 'Apri i materiali di formazione dell\'associazione',
     icon: Icons.school_outlined,
+  ),
+  ToolInfo(
+    id: kToolArchivioComunicati,
+    titolo: 'Archivio comunicati',
+    sottotitolo: 'Comunicati e avvisi dell\'associazione (richiede login)',
+    icon: Icons.campaign_outlined,
   ),
 ];
