@@ -1898,6 +1898,35 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   - **Verificato end-to-end** (Podman + `go run .`/container ricostruito +
     `curl`): imposta titolo+descrizione, svuota solo il titolo lasciando la
     descrizione, `PUT` su id inesistente (404), `PUT` senza token (401).
+- **Restyling della pagina admin (2026-09-03)**: richiesta esplicita
+  dell'utente, solo aspetto — stessa struttura/funzionalità di sempre
+  (stessi tab, stessi form, stesse azioni), nessuna modifica allo `<script>`
+  (verificato confrontando la lunghezza esatta del sorgente JS prima/dopo
+  ogni modifica: invariata, a conferma che l'unico file toccato dal punto di
+  vista funzionale è il CSS + poche aggiunte statiche innocue).
+  - **Design token in `:root`** (colori, radius, ombre) invece di valori
+    sparsi: `--accent` resta `#e94560`, lo stesso `kPrimary` di
+    `lib/utils/theme.dart` — la pagina admin non è un progetto grafico a
+    parte, condivide l'identità visiva dell'app.
+  - **Aggiunte statiche sicure** (nessun `id`/`onclick`/`data-*` toccato,
+    solo testo/markup puramente decorativo): icone emoji nei tab (🏥 📅 📦
+    🔑 👤 📣 🎓), un piccolo logo "AT" nella schermata di login, favicon SVG
+    inline, `<meta name="theme-color">`.
+  - **Tabelle non più forzate a una riga sola: bug di scroll orizzontale
+    trovato dall'utente**, presente anche su schermi larghi (non solo
+    mobile) — `white-space: nowrap` su ogni cella (scelta originale)
+    costringeva contenuti lunghi (Via, nome file...) su una riga sola,
+    allargando l'intera tabella oltre il contenitore. Corretto con
+    `white-space: normal` + `overflow-wrap: anywhere`: il testo va a capo,
+    `table-layout: auto` (default) distribuisce lo spazio in base al
+    contenuto (Lat/Lng restano stretti, Via/Nome più larghi) invece di dover
+    ospitare ogni cella su una riga. `.wrap` da 860px a 1180px, per dare più
+    respiro alle tabelle più larghe (Ospedali, 7 colonne) su schermi grandi.
+  - **`.table-scroll` resta** (overflow-x auto) come ultima rete di
+    sicurezza per viewport davvero stretti (mobile): un tavolo a 7 colonne
+    su 380px di larghezza avrà comunque bisogno di un minimo di scroll,
+    inerente al numero di colonne, non risolvibile senza nascondere colonne
+    (fuori scope per un restyling "solo aspetto").
 
 ---
 

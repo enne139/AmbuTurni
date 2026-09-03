@@ -3,100 +3,196 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#131320" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e94560'/%3E%3Ctext x='16' y='22' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='15' font-weight='700' fill='white' text-anchor='middle'%3EAT%3C/text%3E%3C/svg%3E" />
 <title>AmbuTurni — Admin</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 0; min-height: 100vh;
-    background: #1a1a2e; color: #fff;
-    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Design tokens: stessa palette dell'app Flutter (--accent = kPrimary,
+     lib/utils/theme.dart) — la pagina admin non è un progetto grafico a
+     parte, condivide l'identità visiva di AmbuTurni. */
+  :root {
+    color-scheme: dark;
+    --bg: #131320;
+    --bg-alt: #0f0f1a;
+    --surface: #181828;
+    --surface-2: #1f1f36;
+    --border: #2a2a45;
+    --border-soft: #ffffff14;
+    --text: #f5f6fa;
+    --text-muted: #ffffffad;
+    --text-faint: #ffffff66;
+    --accent: #e94560;
+    --accent-strong: #ff5c7a;
+    --accent-soft: #e9456026;
+    --success: #4caf50;
+    --danger: #e5677f;
+    --info: #3d9bf0;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 12px 28px -16px rgba(0,0,0,.65);
+    --shadow-pop: 0 8px 24px -6px rgba(0,0,0,.55);
   }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 20px 20px 60px; }
-  h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  .sottotitolo { color: #ffffff8a; font-size: 13px; margin: 4px 0 0; }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent-soft); color: #fff; }
+  body {
+    margin: 0; padding: 0; min-height: 100vh; color: var(--text);
+    background:
+      radial-gradient(1100px 520px at 12% -8%, #e9456022, transparent 60%),
+      radial-gradient(900px 460px at 100% 0%, #3d9bf01c, transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+  h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+  .sottotitolo { color: var(--text-faint); font-size: 13px; margin: 4px 0 0; line-height: 1.5; }
 
   .card {
-    background: #16213e; border: 1px solid #2a2a4e; border-radius: 12px;
-    padding: 20px; margin: 0 0 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    background: linear-gradient(180deg, var(--surface), var(--surface) 60%, #171726);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 22px; margin: 0 0 20px;
+    box-shadow: var(--shadow-card);
   }
-  label { display: block; font-size: 13px; color: #ffffffb3; margin: 12px 0 4px; }
-  label:first-child { margin-top: 0; }
-  input {
-    width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px;
-    border: 1px solid #2a2a4e; background: #1a1a2e; color: #fff; font-size: 15px;
+  .card > strong, .header-row > strong {
+    font-size: 14.5px; font-weight: 700; color: var(--text); letter-spacing: -.005em;
   }
-  input:focus { outline: none; border-color: #e94560; }
+
+  label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin: 14px 0 6px; letter-spacing: .01em; }
+  label:first-of-type { margin-top: 0; }
+  input, textarea {
+    width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg-alt); color: var(--text); font-size: 14.5px;
+    font-family: inherit; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  textarea { resize: vertical; }
+  input::placeholder, textarea::placeholder { color: var(--text-faint); }
+  input:hover, textarea:hover { border-color: #3a3a5e; }
+  input:focus, textarea:focus {
+    outline: none; border-color: var(--accent); background: var(--surface-2);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  input[type="file"] { padding: 9px 10px; cursor: pointer; }
+
   .row { display: flex; gap: 12px; }
-  .row > * { flex: 1; }
+  .row > * { flex: 1; min-width: 0; }
+
   button {
-    margin-top: 16px; padding: 10px 16px; border: none; border-radius: 8px;
-    background: #e94560; color: #fff; font-size: 15px; cursor: pointer;
-    transition: opacity .15s ease;
+    margin-top: 18px; padding: 10px 18px; border: none; border-radius: var(--radius-sm);
+    background: var(--accent); color: #fff; font-size: 14.5px; font-weight: 600;
+    letter-spacing: .005em; cursor: pointer; font-family: inherit;
+    box-shadow: 0 6px 16px -8px var(--accent-soft);
+    transition: filter .15s ease, transform .1s ease, box-shadow .15s ease, background .15s ease;
   }
-  button:hover { opacity: .88; }
-  button:disabled { opacity: .5; cursor: default; }
-  button.secondary { background: transparent; border: 1px solid #ffffff3d; color: #fff; }
-  button.danger { background: #cf6679; }
-  button.info { background: #1e88e5; }
-  button.small { padding: 6px 10px; margin: 8px 6px 0 0; font-size: 13px; }
-  .errore { color: #cf6679; font-size: 13px; margin-top: 10px; min-height: 1em; }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: default; filter: none; transform: none; box-shadow: none; }
+  button.secondary {
+    background: transparent; border: 1px solid var(--border-soft); color: var(--text);
+    box-shadow: none;
+  }
+  button.secondary:hover { background: #ffffff0d; border-color: #ffffff33; }
+  button.danger { background: var(--danger); box-shadow: 0 6px 16px -8px #e5677f40; }
+  button.info { background: var(--info); box-shadow: 0 6px 16px -8px #3d9bf040; }
+  button.small { padding: 7px 12px; margin: 8px 6px 0 0; font-size: 12.5px; border-radius: 7px; }
 
-  .table-scroll { overflow-x: auto; margin-top: 8px; }
+  .errore { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 1em; }
+  .errore:not(:empty)::before { content: "⚠ "; }
+
+  .table-scroll {
+    overflow-x: auto; margin-top: 10px; border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md); background: #ffffff03;
+  }
+  /* white-space: normal (non più nowrap): prima ogni cella forzava una
+     sola riga, quindi contenuti lunghi (Via, nome file, link) allargavano
+     l'intera tabella oltre il contenitore — causa reale dello scroll
+     orizzontale lamentato dall'utente anche su schermi larghi, non solo su
+     mobile. Con `table-layout: auto` (default) e il testo libero di andare
+     a capo, il browser distribuisce lo spazio in base al contenuto (Lat/Lng
+     restano stretti, Via/Nome più larghi) invece di dover ospitare ogni
+     cella su una riga sola. */
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2a2a4e; font-size: 14px; white-space: nowrap; }
-  th { color: #ffffffb3; font-weight: 600; }
-  tbody tr:hover td { background: #ffffff08; }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border-soft); font-size: 13.5px; white-space: normal; overflow-wrap: anywhere; }
+  thead th {
+    color: var(--text-faint); font-weight: 700; font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .06em; position: sticky; top: 0; background: var(--surface-2); z-index: 1;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #ffffff09; }
   .stato-vuoto, .stato-caricamento {
-    color: #ffffff66; font-size: 13px; padding: 18px 4px; text-align: center; white-space: normal;
+    color: var(--text-faint); font-size: 13px; padding: 22px 4px; text-align: center; white-space: normal;
   }
 
-  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 
   /* Login: card centrata, nessuna barra/tab. */
   #app-login {
     min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
   }
-  #app-login .card { width: 100%; max-width: 380px; margin: 0; }
+  #app-login .card { width: 100%; max-width: 380px; margin: 0; box-shadow: var(--shadow-pop), 0 0 0 1px #ffffff08 inset; }
   #app-login h1 { text-align: center; }
   #app-login .sottotitolo { text-align: center; }
+  .brand-mark {
+    width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), #ff8095);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px; letter-spacing: .01em; color: #fff;
+    box-shadow: 0 10px 24px -8px var(--accent-soft);
+  }
 
   #app-gestione { display: none; }
   .topbar {
-    position: sticky; top: 0; z-index: 10; background: #1a1a2e;
+    position: sticky; top: 0; z-index: 10;
+    background: #131320ee; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     display: flex; justify-content: space-between; align-items: center;
-    padding: 16px 20px; border-bottom: 1px solid #2a2a4e;
+    padding: 16px 20px; border-bottom: 1px solid var(--border-soft);
   }
   .tabs {
-    display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid #2a2a4e;
-    overflow-x: auto;
+    display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--border-soft);
+    overflow-x: auto; background: #ffffff02;
   }
   .tab {
-    background: none; border: none; color: #ffffff99; margin: 0; padding: 12px 14px;
-    font-size: 14px; cursor: pointer; border-radius: 0; white-space: nowrap;
-    border-bottom: 2px solid transparent;
+    background: none; border: none; color: var(--text-faint); margin: 0; padding: 13px 15px;
+    font-size: 13.5px; font-weight: 600; cursor: pointer; border-radius: 0; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color .15s ease, border-color .15s ease;
   }
-  .tab:hover { opacity: 1; color: #fff; }
-  .tab.active { color: #e94560; border-bottom-color: #e94560; font-weight: 600; }
-  .panel { display: none; padding: 20px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .panel { display: none; padding: 22px 0 0; }
   .panel.active { display: block; }
 
   .toast-host { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
   .toast {
-    background: #16213e; border: 1px solid #2a2a4e; border-left: 3px solid #4caf50;
-    padding: 12px 16px; border-radius: 8px; font-size: 14px; max-width: 320px;
-    box-shadow: 0 4px 12px rgba(0,0,0,.4);
-    opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease;
+    background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--success);
+    padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13.5px; max-width: 320px;
+    box-shadow: var(--shadow-pop);
+    opacity: 0; transform: translateY(8px) scale(.98); transition: opacity .2s ease, transform .2s ease;
   }
-  .toast.show { opacity: 1; transform: translateY(0); }
-  .toast.errore-toast { border-left-color: #cf6679; }
+  .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+  .toast.errore-toast { border-left-color: var(--danger); }
+
+  @media (max-width: 640px) {
+    .row { flex-direction: column; gap: 0; }
+    .wrap { padding: 18px 14px 48px; }
+    .topbar { padding: 14px; }
+    .tabs { padding: 0 14px; }
+    .card { padding: 16px; border-radius: var(--radius-md); }
+  }
 </style>
 </head>
 <body>
 
   <div class="card" id="app-login">
     <div>
+      <div class="brand-mark" aria-hidden="true">AT</div>
       <h1>AmbuTurni</h1>
       <p class="sottotitolo">Accesso amministrazione</p>
       <form onsubmit="event.preventDefault(); accedi();">
@@ -120,13 +216,13 @@
     </div>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="ospedali" onclick="mostraTab('ospedali')">Ospedali</button>
-      <button class="tab" data-tab="fogli" onclick="mostraTab('fogli')">Fogli turni</button>
-      <button class="tab" data-tab="materiali" onclick="mostraTab('materiali')">Materiali</button>
-      <button class="tab" data-tab="utenti" onclick="mostraTab('utenti')">Utenti</button>
-      <button class="tab" data-tab="utenti-app" onclick="mostraTab('utenti-app')">Utenti app</button>
-      <button class="tab" data-tab="comunicati" onclick="mostraTab('comunicati')">Comunicati</button>
-      <button class="tab" data-tab="formazione" onclick="mostraTab('formazione')">Formazione</button>
+      <button class="tab active" data-tab="ospedali" onclick="mostraTab('ospedali')">🏥 Ospedali</button>
+      <button class="tab" data-tab="fogli" onclick="mostraTab('fogli')">📅 Fogli turni</button>
+      <button class="tab" data-tab="materiali" onclick="mostraTab('materiali')">📦 Materiali</button>
+      <button class="tab" data-tab="utenti" onclick="mostraTab('utenti')">🔑 Utenti</button>
+      <button class="tab" data-tab="utenti-app" onclick="mostraTab('utenti-app')">👤 Utenti app</button>
+      <button class="tab" data-tab="comunicati" onclick="mostraTab('comunicati')">📣 Comunicati</button>
+      <button class="tab" data-tab="formazione" onclick="mostraTab('formazione')">🎓 Formazione</button>
     </nav>
 
     <div class="wrap" style="padding-top:0;">
@@ -399,6 +495,7 @@
           <p class="sottotitolo" id="rf-stato" style="margin-top:12px;"></p>
         </div>
       </section>
+
 
     </div>
   </div>
