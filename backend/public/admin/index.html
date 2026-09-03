@@ -358,9 +358,11 @@
           <p class="sottotitolo" style="margin: 8px 0 12px;">
             Seleziona uno o più PDF: diventano visibili e scaricabili nel
             tool "Archivio comunicati" dell'app, solo per chi ha fatto
-            login con un account utente-app. Il nome del file è quello
-            mostrato nell'app (nessun titolo/descrizione da compilare) — i
-            comunicati con nome "AAAAMMGG_..." vengono raggruppati per mese.
+            login con un account utente-app. Di default si mostra il nome
+            del file (i comunicati con nome "AAAAMMGG_..." vengono
+            raggruppati per mese) — titolo e descrizione sono opzionali, non
+            si compilano qui ma dopo, comunicato per comunicato, col
+            pulsante "Modifica" qui sotto.
           </p>
           <label for="cm-file">File PDF (puoi selezionarne più di uno)</label>
           <input id="cm-file" type="file" accept="application/pdf" multiple />
@@ -373,9 +375,9 @@
           <div class="table-scroll">
             <table>
               <thead>
-                <tr><th>Nome file</th><th>Dimensione</th><th>Caricato il</th><th></th></tr>
+                <tr><th>Nome file</th><th>Titolo</th><th>Dimensione</th><th>Caricato il</th><th></th></tr>
               </thead>
-              <tbody id="tabella-comunicati"><tr><td colspan="4"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+              <tbody id="tabella-comunicati"><tr><td colspan="5"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -950,26 +952,82 @@ async function eliminaUtenteApp(username) {
 // FormData lascia che il browser imposti da solo il Content-Type con il
 // boundary corretto.
 
+// editingComunicatoId: id del comunicato la cui riga è aperta in modifica
+// (null = nessuna) — stesso ruolo di editingId per gli ospedali, ma qui
+// resta un'edit INLINE nella riga stessa (colspan sull'intera larghezza)
+// invece di un form separato: solo due campi opzionali, un form a parte
+// sarebbe stato sproporzionato.
+let editingComunicatoId = null;
+
 async function caricaComunicati() {
   const resp = await fetch('/api/comunicati', { headers: { Authorization: `Bearer ${token()}` } });
   const comunicati = await resp.json();
-  renderTabellaGenerica('tabella-comunicati', 4, comunicati, (c) => {
-    const riga = document.createElement('tr');
-    const creato = c.createdAt ? new Date(c.createdAt).toLocaleDateString('it-IT') : '—';
+  renderTabellaGenerica('tabella-comunicati', 5, comunicati, renderRigaComunicato, 'Nessun comunicato.');
+}
+
+function renderRigaComunicato(c) {
+  const riga = document.createElement('tr');
+  if (editingComunicatoId === c.id) {
     riga.innerHTML = `
-      <td>${escapeHtml(c.fileName)}</td>
-      <td>${dimensioneLeggibile(c.fileSize)}</td>
-      <td>${creato}</td>
-      <td>
-        <button class="info small">Scarica</button>
-        <button class="danger small">Elimina</button>
+      <td colspan="5">
+        <div style="display:flex; flex-direction:column; gap:8px; padding:10px 0;">
+          <strong>${escapeHtml(c.fileName)}</strong>
+          <label>Titolo (opzionale)</label>
+          <input type="text" id="cm-edit-titolo" value="${escapeHtml(c.titolo || '')}" />
+          <label>Descrizione (opzionale)</label>
+          <textarea id="cm-edit-descrizione" rows="2">${escapeHtml(c.descrizione || '')}</textarea>
+          <div>
+            <button class="small">Salva</button>
+            <button class="secondary small">Annulla</button>
+          </div>
+        </div>
       </td>
     `;
-    const [btnScarica, btnElimina] = riga.querySelectorAll('button');
-    btnScarica.onclick = () => scaricaComunicato(c.id, c.fileName);
-    btnElimina.onclick = () => eliminaComunicato(c.id);
+    const [btnSalva, btnAnnulla] = riga.querySelectorAll('button');
+    btnSalva.onclick = () => salvaComunicato(c.id);
+    btnAnnulla.onclick = () => { editingComunicatoId = null; caricaComunicati(); };
     return riga;
-  }, 'Nessun comunicato.');
+  }
+  const creato = c.createdAt ? new Date(c.createdAt).toLocaleDateString('it-IT') : '—';
+  riga.innerHTML = `
+    <td>${escapeHtml(c.fileName)}</td>
+    <td>${c.titolo ? escapeHtml(c.titolo) : '<span class="sottotitolo">—</span>'}</td>
+    <td>${dimensioneLeggibile(c.fileSize)}</td>
+    <td>${creato}</td>
+    <td>
+      <button class="info small">Scarica</button>
+      <button class="small">Modifica</button>
+      <button class="danger small">Elimina</button>
+    </td>
+  `;
+  const [btnScarica, btnModifica, btnElimina] = riga.querySelectorAll('button');
+  btnScarica.onclick = () => scaricaComunicato(c.id, c.fileName);
+  btnModifica.onclick = () => { editingComunicatoId = c.id; caricaComunicati(); };
+  btnElimina.onclick = () => eliminaComunicato(c.id);
+  return riga;
+}
+
+// Salva titolo/descrizione del comunicato [id] in modifica. Stringa vuota
+// normalizzata a null qui (non lato server, coerente con lo stesso pattern
+// `.value.trim() || null` già in uso per via/citta/regione degli ospedali):
+// permette di svuotare un campo già compilato, l'app poi ricade sul nome file.
+async function salvaComunicato(id) {
+  const titolo = document.getElementById('cm-edit-titolo').value.trim() || null;
+  const descrizione = document.getElementById('cm-edit-descrizione').value.trim() || null;
+  try {
+    const resp = await fetch(`/api/comunicati/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ titolo, descrizione }),
+    });
+    const dati = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    editingComunicatoId = null;
+    await caricaComunicati();
+    toast('Comunicato aggiornato.');
+  } catch (e) {
+    toast(e.message, false);
+  }
 }
 
 function dimensioneLeggibile(bytes) {

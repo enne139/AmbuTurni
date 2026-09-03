@@ -48,10 +48,17 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 //     "Archivio comunicati", contenuto riservato: richiede login). Il PDF
 //     vive dentro Postgres (file_data bytea), non su disco — nessun volume
 //     dedicato da aggiungere al deploy, stesso volume `pgdata` già
-//     persistito (scelta discussa con l'utente, vedi CLAUDE.md). Nessun
-//     titolo/descrizione: il nome del file è ciò che viene mostrato in
-//     app, i comunicati reali sono già nominati con una convenzione propria
-//     (AAAAMMGG_NUMERO_...).
+//     persistito (scelta discussa con l'utente, vedi CLAUDE.md). titolo/
+//     descrizione OPZIONALI (nullable): l'upload multiplo dalla pagina admin
+//     non li chiede (il nome file resta ciò che si mostra di default, i
+//     comunicati reali sono già nominati con una convenzione propria
+//     AAAAMMGG_NUMERO_...) ma sono compilabili dopo, riga per riga, col
+//     pulsante "Modifica" — utile solo per i comunicati che meritano un
+//     titolo leggibile in più. Furono tolti e poi reintrodotti nello stesso
+//     giorno di sviluppo (richiesta esplicita dell'utente dopo averli
+//     rimossi, vedi CLAUDE.md): l'ADD COLUMN IF NOT EXISTS sotto è
+//     idempotente sia che la colonna sia già assente sia che sia già
+//     presente da un avvio precedente.
 //
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
 // migrazioni (assente qui, a differenza del client Flutter): un solo campo
@@ -115,13 +122,12 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			file_size BIGINT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
-		-- titolo/descrizione erano nella primissima versione di questa
-		-- tabella (mai arrivata in produzione, solo su istanze di sviluppo):
-		-- tolti via DROP COLUMN IF EXISTS invece di una vera migrazione,
-		-- stesso idioma "niente sistema di migrazioni qui" già in uso per
-		-- ospedali.regione.
-		ALTER TABLE comunicati DROP COLUMN IF EXISTS titolo;
-		ALTER TABLE comunicati DROP COLUMN IF EXISTS descrizione;
+		-- titolo/descrizione: opzionali (nullable), compilabili dopo il
+		-- caricamento dal pulsante "Modifica" della pagina admin — vedi il
+		-- commento sopra initSchema per la storia (tolti e reintrodotti lo
+		-- stesso giorno).
+		ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS titolo TEXT;
+		ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS descrizione TEXT;
 	`)
 	return err
 }

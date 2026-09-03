@@ -663,8 +663,10 @@ func main() {
 
 	// Upload: multipart, non JSON (readJSON non si applica qui). Uno o più
 	// file sotto lo stesso campo "file" (upload multiplo, richiesta esplicita
-	// dell'utente: carica in un colpo solo tutti i PDF di un mese) — nessun
-	// titolo/descrizione, il nome del file è ciò che viene mostrato in app.
+	// dell'utente: carica in un colpo solo tutti i PDF di un mese) — senza
+	// titolo/descrizione qui (il nome del file è ciò che si mostra di
+	// default in app): opzionali, si aggiungono dopo per il singolo
+	// comunicato con PUT /api/comunicati/{id}, vedi sotto.
 	// Ogni file è validato per contenuto (primi 4 byte "%PDF": un file
 	// rinominato a caso non basta a farlo passare per un comunicato); un file
 	// non valido nel gruppo viene scartato e contato, non blocca gli altri —
@@ -707,6 +709,30 @@ func main() {
 			}
 		}
 		writeJSON(w, http.StatusOK, map[string]int{"creati": creati, "scartati": scartati})
+	}))
+
+	// Modifica: solo titolo/descrizione (opzionali), mai il file — usata dal
+	// pulsante "Modifica" della pagina admin per aggiungerli dopo il
+	// caricamento, quando servono (l'upload multiplo sopra non li chiede).
+	mux.HandleFunc("PUT /api/comunicati/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Titolo      *string `json:"titolo"`
+			Descrizione *string `json:"descrizione"`
+		}
+		if !readJSON(w, r, &body) {
+			return
+		}
+		aggiornato, err := updateComunicato(r.Context(), pool, r.PathValue("id"), body.Titolo, body.Descrizione)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Comunicato non trovato")
+			return
+		}
+		if err != nil {
+			log.Printf("[comunicati] errore aggiornamento: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, aggiornato)
 	}))
 
 	mux.HandleFunc("DELETE /api/comunicati/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {

@@ -1676,7 +1676,9 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     comunicati (200) ma non può caricarne uno (401, confine di ruolo).
 - **Comunicati: niente titolo/descrizione, upload multiplo (2026-09-02,
   revisione lo stesso giorno del bullet precedente, prima ancora del test
-  manuale dell'app)**: richiesta esplicita dell'utente — i comunicati reali
+  manuale dell'app) — POI REINTRODOTTI COME OPZIONALI, vedi bullet
+  "Comunicati: titolo/descrizione opzionali" più sotto**: richiesta esplicita
+  dell'utente — i comunicati reali
   dell'associazione sono già nominati con una propria convenzione
   (`AAAAMMGG_NUMERO_...`, il numero progressivo si azzera ogni anno),
   compilare anche un titolo ad ogni caricamento sarebbe stato un campo in
@@ -1850,6 +1852,52 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   MAI nel manifest principale/release: la build di produzione resta
   solo-HTTPS. Stesso schema "eccezione locale al manifest di debug" già
   in uso per l'`INTERNET` di sviluppo.
+- **Comunicati: titolo/descrizione opzionali, modificabili da pagina admin
+  (2026-09-03)**: revisione della decisione "niente titolo/descrizione"
+  sopra — richiesta esplicita dell'utente dopo aver visto il tool in
+  funzione: il nome file resta il default (i comunicati reali sono già
+  nominati con la convenzione propria dell'associazione), ma un titolo
+  leggibile aiuta per i comunicati che lo meritano. Dato che l'upload resta
+  multiplo (più PDF in un colpo solo), un titolo per file al momento del
+  caricamento non avrebbe un'interfaccia sensata (quale titolo per quale
+  file, su N file insieme?) — scelto invece un flusso in due tempi: upload
+  senza titolo/descrizione come prima, poi un pulsante "Modifica" per riga
+  per aggiungerli solo quando servono.
+  - **Schema**: `ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS titolo/
+    descrizione TEXT` (entrambe nullable) — stesso idioma "niente sistema
+    di migrazioni qui" già in uso per `ospedali.regione`, stavolta
+    applicato al contrario (ri-aggiunta di colonne tolte lo stesso giorno):
+    idempotente sia che la colonna sia già assente sia già presente da un
+    avvio precedente.
+  - **`PUT /api/comunicati/{id}`** (`authMiddleware`, solo admin): aggiorna
+    SOLO titolo/descrizione, mai il file — per sostituirlo si elimina e si
+    ricarica, nessun caso d'uso reale per un endpoint dedicato. Stesso
+    pattern di `updateOspedale`/`PUT /api/ospedali/{id}` (`pgx.ErrNoRows` →
+    404). `POST /api/comunicati` (upload) resta invariato, titolo/
+    descrizione restano `NULL` alla creazione.
+  - **Pagina admin**: colonna "Titolo" in tabella, pulsante "Modifica" per
+    riga che apre un'edit INLINE nella riga stessa (colspan sull'intera
+    larghezza, due input Titolo/Descrizione + Salva/Annulla) invece di un
+    form separato — solo due campi opzionali, un form a parte sarebbe stato
+    sproporzionato (a differenza del form di modifica ospedali, che
+    riguarda molti più campi). Stringa vuota normalizzata a `null` lato JS
+    (`.value.trim() || null`, stesso pattern già in uso per via/città/
+    regione degli ospedali) prima di inviarla: permette di svuotare un
+    campo già compilato, l'app poi ricade sul nome file.
+  - **Lato Flutter**: `_ComunicatoCard` non usa più `ListTile` (pensato per
+    un numero fisso di righe) ma un `Row`/`Column` libero, per un contenuto
+    ad altezza variabile (nome file in più se c'è un titolo, descrizione in
+    più se compilata) — quando titolo/descrizione sono assenti la card
+    torna esattamente al comportamento originale (nome file come titolo,
+    nessuna riga in più). Titolo/descrizione arrivano dal backend come
+    `Map<String, dynamic>` già decodificato (`getComunicati` fa puro
+    pass-through JSON, nessuna modifica necessaria lì) — nessuna UI di
+    modifica nell'app: la gestione resta SOLO della pagina admin, stesso
+    confine già stabilito per la creazione/eliminazione degli utenti-app e
+    dei comunicati stessi.
+  - **Verificato end-to-end** (Podman + `go run .`/container ricostruito +
+    `curl`): imposta titolo+descrizione, svuota solo il titolo lasciando la
+    descrizione, `PUT` su id inesistente (404), `PUT` senza token (401).
 
 ---
 
@@ -1903,7 +1951,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   utente-app, creato solo dalla pagina admin).
 - ✅ **Tools → Archivio comunicati**: elenco dei PDF caricati dall'admin sul
   backend condiviso, raggruppati per mese, tap per aprirli con un lettore
-  PDF esterno. CONTENUTO RISERVATO: richiede login (account utente-app).
+  PDF esterno (vero "Apri con" su Android via `open_filex`). Titolo/
+  descrizione opzionali, compilabili dopo il caricamento dalla pagina
+  admin — assenti, la card mostra il nome file. CONTENUTO RISERVATO:
+  richiede login (account utente-app).
 - ✅ **Impostazioni → Account**: login/logout con le credenziali
   utente-app (create solo dalla pagina admin del backend condiviso, mai da
   questa app) che sbloccano i contenuti riservati (Repository formazione,

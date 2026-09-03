@@ -212,26 +212,70 @@ class _ComunicatoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Nessun titolo/descrizione (richiesta esplicita dell'utente): il nome
-    // del file è ciò che si mostra, coerente con la convenzione di nome già
-    // in uso dall'associazione (AAAAMMGG_NUMERO_...) e con lo stesso nome
-    // usato per il raggruppamento per mese (utils/comunicati.dart).
+    // Il nome del file resta il fallback: coerente con la convenzione già in
+    // uso dall'associazione (AAAAMMGG_NUMERO_...) e con lo stesso nome usato
+    // per il raggruppamento per mese (utils/comunicati.dart). Titolo/
+    // descrizione sono opzionali (compilabili SOLO dalla pagina admin, mai
+    // da qui — vedi CLAUDE.md sul confine di gestione), quindi qui è pura
+    // visualizzazione: quando assenti la card torna al comportamento
+    // originale (nome file come titolo, nessuna riga in più).
     final fileName = comunicato['fileName'] as String? ?? '';
-    final sottotitolo = [
+    final titolo = _testoONull(comunicato['titolo']);
+    final descrizione = _testoONull(comunicato['descrizione']);
+    final dettagli = [
       formatDate(comunicato['createdAt'] as String?),
       _dimensioneLeggibile(comunicato['fileSize']),
     ].join(' · ');
+    // ListTile con subtitle ha un'altezza pensata per 1-2 righe fisse: con
+    // un numero di righe variabile (nome file in più se c'è un titolo,
+    // descrizione in più se compilata) uso invece un layout Row/Column
+    // libero, stesso Card/icona/indicatore di prima.
     return Card(
-      child: ListTile(
-        leading: const Icon(Icons.picture_as_pdf_outlined, color: kPrimary),
-        title: Text(fileName),
-        subtitle: Text(sottotitolo, style: const TextStyle(color: Colors.white54)),
-        trailing: aprendo
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.visibility_outlined),
+      child: InkWell(
         onTap: aprendo ? null : onApri,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: Icon(Icons.picture_as_pdf_outlined, color: kPrimary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(titolo ?? fileName),
+                    if (titolo != null)
+                      Text(fileName, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text(dettagli, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    if (descrizione != null) ...[
+                      const SizedBox(height: 4),
+                      Text(descrizione, style: const TextStyle(color: Colors.white70)),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              aprendo
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.visibility_outlined),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  /// Stringa non vuota o null (tratta anche "" come assente): titolo/
+  /// descrizione arrivano dal backend come JSON, o mai valorizzati (null) o
+  /// eventualmente stringa vuota se svuotati dalla pagina admin.
+  String? _testoONull(dynamic v) {
+    final s = (v as String?)?.trim();
+    return (s == null || s.isEmpty) ? null : s;
   }
 
   /// Formattazione dimensione file (B/KB/MB/GB): nessun helper condiviso già
