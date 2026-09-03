@@ -60,6 +60,13 @@ const maxImportBodyBytes = 10 << 20
 // una colonna bytea di Postgres (vedi CLAUDE.md), non su disco.
 const maxComunicatoBytes = 50 << 20
 
+// maxBackupBytes: limite del corpo di POST /api/admin/restore — un
+// archivio zip coi PDF di tutti i comunicati, quindi un tetto più alto
+// degli altri import (che sono solo testo breve). 100 MiB copre ampiamente
+// un archivio di documenti associativi "poche pagine ciascuno" (vedi
+// CLAUDE.md), resta comunque un tetto contro un upload sproporzionato.
+const maxBackupBytes = 100 << 20
+
 // readBodyLimited legge l'intero body limitandone la dimensione; scrive già
 // la risposta 400 e restituisce ok=false se la lettura fallisce (corpo
 // malformato o oltre il limite).

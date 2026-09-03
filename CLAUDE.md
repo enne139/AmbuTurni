@@ -1927,6 +1927,92 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     su 380px di larghezza avrà comunque bisogno di un minimo di scroll,
     inerente al numero di colonne, non risolvibile senza nascondere colonne
     (fuori scope per un restyling "solo aspetto").
+- **Backup/ripristino completo del backend, con un click (2026-09-03)**:
+  richiesta esplicita dell'utente — ospedali/fogli/materiali avevano già
+  l'export/import a parte (2026-07-20) ma comunicati/utenti-app/formazione
+  ne erano rimasti privi, un vero disaster-recovery deve coprire tutto il
+  backend, non solo l'anagrafica leggera, con un solo file invece di sei
+  azioni separate.
+  - **Formato: uno ZIP, non un unico JSON con i PDF in base64 — correzione
+    suggerita dall'utente sulla prima versione**: `data.json` (solo
+    metadati, mai i byte del PDF) + un file `comunicati/<id>.pdf` per
+    comunicato. Il base64 gonfia i byte del PDF di ~33% e produce un unico
+    blob JSON enorme da tenere tutto in memoria; uno zip (che comprime
+    anche il testo di `data.json`) è il formato naturale per un mix di
+    testo e binari — sul backup di prova (44 comunicati, ~9,2 MB di PDF
+    reali) il file è passato da 12,5 MB (JSON+base64) a 9,0 MB (zip),
+    oltre a essere ispezionabile file per file senza decodificare nulla.
+    Nessuna dipendenza nuova: `archive/zip` è nella libreria standard di Go.
+  - **`backend/backup.go`** (nuovo file): `costruisciBackup` legge TUTTE le
+    tabelle (PDF inclusi, in memoria) in un colpo solo — un vero snapshot
+    coerente (stesso momento per ogni sezione) — **prima** di scrivere
+    qualunque byte sulla risposta HTTP, così un errore di query può ancora
+    tradursi in un 500 pulito; `scriviBackupZip` fa poi la sola scrittura
+    dello zip (raramente fallisce, e a quel punto comunque non si potrebbe
+    più cambiare lo status). Assembla ospedali/fogli/materiali (riusando
+    gli stessi tipi `*Input` degli import per-categoria già esistenti), il
+    link di formazione, gli utenti-app **con l'hash bcrypt della password**
+    (mai esposto da `GET /api/utenti`, che alimenta la tabella della pagina
+    admin — sicuro da includere qui perché l'endpoint di backup è protetto
+    come tutti gli altri e un hash bcrypt non permette di risalire alla
+    password in chiaro) e i comunicati **con il PDF** (voci separate dello
+    zip). Due nuove funzioni "ConHash"/"ConFile" in `utenti_app.go`/
+    `comunicati.go` (mai raggiunte da un endpoint pubblico, solo dal
+    backup) invece di appesantire le viste normali (`UtenteAppInfo`/
+    `ComunicatoMeta`) che alimentano le tabelle della pagina admin —
+    `ComunicatoBackup` lì non ha più tag JSON: da quando i PDF vivono come
+    voci dello zip invece che in base64 dentro il JSON, questo struct è
+    solo il tipo di trasporto interno tra la query DB e le voci dello zip,
+    mai serializzato direttamente (la sua metà "metadati" per `data.json` è
+    `ComunicatoBackupMeta`, in `backup.go`).
+  - **`ripristinaBackup` è un upsert per sezione, MAI distruttivo** — stessa
+    filosofia "niente cancellazioni automatiche" di `upsertOspedali`/
+    `upsertFogli`/`upsertMateriali`: un dato non presente nel file
+    semplicemente non viene toccato, non rimosso. Legge lo zip caricato con
+    `archive/zip.NewReader` (vuole un `io.ReaderAt`, quindi il corpo della
+    richiesta va comunque bufferizzato tutto in `[]byte` prima — inevitabile
+    per un formato zip, l'indice delle voci sta in fondo al file), smista le
+    voci per nome (`data.json` → metadati, `comunicati/<id>.pdf` → mappa
+    id→byte) e passa tutto agli stessi upsert. Comunicati ripristinati per
+    **`id`** (non per nome file, senza vincolo di unicità reale) — preserva
+    gli stessi id del backup, utile per un ripristino identico su un'altra
+    istanza; una voce `data.json` senza il corrispondente `.pdf` nello zip
+    produce un comunicato scartato (stessa validazione "%PDF" già in uso
+    per l'upload normale, su `FileData` nil non la supera). Utenti-app:
+    l'hash si scrive così com'è, **mai ri-hashato** (ri-hasharlo lo
+    renderebbe inutilizzabile per il login). `errBackupNonValido` (sentinel,
+    stesso ruolo di `errPasswordAttualeErrata`) distingue "il file non è
+    uno zip riconoscibile" (400) da un vero errore interno (500). Le sei
+    sezioni hanno ciascuna la propria transazione (nessuna transazione
+    unica per l'intero ripristino): un errore in una sola sezione non fa
+    perdere quelle già applicate con successo.
+  - **`GET/POST /api/admin/backup`/`restore`** (`authMiddleware`, solo
+    admin): il download stesso è "sola lettura" ma protetto comunque,
+    espone hash password e PDF riservati; `Content-Type: application/zip` +
+    `Content-Disposition` con nome file datato (`mime.FormatMediaType`,
+    stesso idioma di `getComunicatoFile`). `maxBackupBytes` (100 MiB, in
+    `httputil.go`) più ampio degli altri import — un archivio con tutti i
+    PDF dei comunicati.
+  - **Pagina admin**: nuovo tab "🗄️ Backup" con due card — "Scarica backup
+    completo" (`fetch` + `response.blob()` + `<a download>`, stesso pattern
+    già in uso per `scaricaComunicato`, non più `scaricaJson`) e "Ripristina
+    da backup" (upload file inoltrato come byte grezzi — niente
+    `file.text()`/JSON, il `File` va bene così com'è come body di `fetch` —
+    con un riepilogo per sezione invece di un totale unico, vedi
+    `testoRiepilogoRipristino`) con una `confirm()` esplicita prima di
+    procedere — a differenza degli import per-categoria (righe di testo
+    brevi, errore facile da correggere) qui il file include anche account e
+    PDF, un ripristino sbagliato non è banale da annullare senza un backup
+    precedente sottomano.
+  - **Verificato end-to-end** (Podman + container ricostruito + `curl` +
+    `python3 -c zipfile`): struttura dello zip scaricato (`data.json` senza
+    alcun campo PDF, una voce `comunicati/<id>.pdf` per comunicato, byte
+    che iniziano per `%PDF`), download (401 senza token, 200 con token, 9,0
+    MB con 44 comunicati di prova), ripristino roundtrip dello stesso file
+    scaricato (tutto "aggiornati", zero duplicati — riverificato il
+    conteggio comunicati invariato dopo), ripristino con un ospedale nuovo
+    (conta "creati"), corpo che non è uno zip valido (400 con messaggio
+    esplicito invece di un crash).
 
 ---
 
@@ -2002,7 +2088,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   materiali + pagina admin (login) per gestirli uno alla volta o in blocco
   da file JSON, incorporato nell'immagine Docker della versione web. Gestisce
   anche gli account utente-app (contenuti riservati dell'app) e i comunicati
-  PDF, entrambi creabili/caricabili SOLO dalla pagina admin.
+  PDF, entrambi creabili/caricabili SOLO dalla pagina admin. Pagina admin
+  con backup/ripristino completo con un click (tab "Backup"): un solo file
+  .zip con tutte le tabelle, PDF e account inclusi, upsert non distruttivo al
+  ripristino.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.

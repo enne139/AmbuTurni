@@ -749,6 +749,59 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
+	// --- BACKUP COMPLETO ---
+	// Scarica/ripristina in un solo file (zip) tutto ciò che il backend
+	// conosce (ospedali, fogli, materiali, link formazione, utenti app,
+	// comunicati coi PDF) — richiesta esplicita dell'utente per un vero
+	// disaster recovery: le tre entità "catalogo" avevano già l'export/
+	// import a parte (2026-07-20) ma comunicati/utenti-app/formazione ne
+	// erano rimasti privi. Solo admin (authMiddleware), come ogni endpoint
+	// di scrittura — il download stesso è "sola lettura" ma espone hash
+	// delle password e PDF riservati, quindi protetto comunque.
+	mux.HandleFunc("GET /api/admin/backup", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		// costruisciBackup legge tutto PRIMA di scrivere qualunque byte
+		// sulla risposta: se fallisce possiamo ancora rispondere 500 pulito,
+		// cosa non più possibile una volta iniziato lo streaming dello zip.
+		meta, comunicati, err := costruisciBackup(r.Context(), pool)
+		if err != nil {
+			log.Printf("[backup] errore costruzione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		nomeFile := "ambuturni_backup_" + meta.EsportatoIl.Format("20060102_150405") + ".zip"
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": nomeFile}))
+		if err := scriviBackupZip(w, meta, comunicati); err != nil {
+			// Qui non si può più cambiare lo status code (header/parte del
+			// body già scritti in streaming): solo log, il client riceverà
+			// un download troncato — evento raro (solo un errore di rete
+			// verso il chiamante durante lo streaming, i dati sono già letti).
+			log.Printf("[backup] errore scrittura zip: %v\n", err)
+		}
+	}))
+
+	// Ripristino: upsert per ogni sezione (mai distruttivo, vedi
+	// ripristinaBackup), stesso principio degli import per-categoria. Limite
+	// più ampio degli altri import (maxBackupBytes): un archivio zip con
+	// tutti i PDF dei comunicati.
+	mux.HandleFunc("POST /api/admin/restore", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		raw, ok := readBodyLimited(w, r, maxBackupBytes)
+		if !ok {
+			return
+		}
+		riepilogo, err := ripristinaBackup(r.Context(), pool, raw)
+		if errors.Is(err, errBackupNonValido) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			log.Printf("[backup] errore ripristino: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, riepilogo)
+	}))
+
 	// --- PAGINA ADMIN ---
 	// Pagina statica (HTML+JS vanilla, nessun framework) per login e gestione
 	// ospedali: chiama le API sopra da browser. Serve al gestore del server,

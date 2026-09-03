@@ -223,6 +223,7 @@
       <button class="tab" data-tab="utenti-app" onclick="mostraTab('utenti-app')">👤 Utenti app</button>
       <button class="tab" data-tab="comunicati" onclick="mostraTab('comunicati')">📣 Comunicati</button>
       <button class="tab" data-tab="formazione" onclick="mostraTab('formazione')">🎓 Formazione</button>
+      <button class="tab" data-tab="backup" onclick="mostraTab('backup')">🗄️ Backup</button>
     </nav>
 
     <div class="wrap" style="padding-top:0;">
@@ -496,6 +497,33 @@
         </div>
       </section>
 
+      <!-- Backup completo ---------------------------------------------- -->
+      <section class="panel" data-panel="backup">
+        <div class="card">
+          <strong>Backup completo</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Un unico archivio .zip con tutto ciò che questo backend conosce:
+            ospedali, fogli turni, materiali, il link di formazione, gli
+            account utente-app e i comunicati (PDF inclusi). Utile per
+            spostare i dati su un'altra istanza o come copia di sicurezza
+            prima di un intervento sul server.
+          </p>
+          <button onclick="scaricaBackupCompleto()">Scarica backup completo</button>
+        </div>
+
+        <div class="card">
+          <strong>Ripristina da backup</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Carica un file generato da "Scarica backup completo" (qui o su
+            un'altra istanza). Il ripristino aggiorna/aggiunge in base al
+            contenuto del file — non cancella mai dati esistenti che non ci
+            sono nel file.
+          </p>
+          <label for="bk-file">File di backup (.zip)</label>
+          <input id="bk-file" type="file" accept="application/zip,.zip" onchange="ripristinaBackupCompleto(this)" />
+          <div class="errore" id="esito-ripristino"></div>
+        </div>
+      </section>
 
     </div>
   </div>
@@ -1234,6 +1262,91 @@ async function salvaFormazione() {
     toast('Link salvato.');
   } catch (e) {
     erroreEl.textContent = e.message;
+  }
+}
+
+// --- Backup completo ---
+// Scarica/ripristina in un solo archivio .zip tutto ciò che il backend
+// conosce (GET/POST /api/admin/backup|restore, vedi backend/backup.go) —
+// oltre agli export/import già esistenti per singola categoria (ospedali/
+// fogli/materiali), utile per un vero disaster-recovery o per spostare i
+// dati su un'altra istanza in un colpo solo. Zip (data.json + un .pdf per
+// comunicato) invece di un unico JSON con i PDF in base64: niente
+// gonfiamento del ~33%, un archivio compresso è il formato naturale per un
+// mix di testo e binari — lo zip lo costruisce il server, qui è solo un
+// download/upload di byte grezzi, stesso pattern già usato per il download
+// di un singolo PDF (scaricaComunicato).
+
+async function scaricaBackupCompleto() {
+  try {
+    const resp = await fetch('/api/admin/backup', { headers: { Authorization: `Bearer ${token()}` } });
+    if (!resp.ok) throw new Error('Errore nello scaricare il backup');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeFileConData('backup_completo').replace(/\.json$/, '.zip');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Backup scaricato.');
+  } catch (e) {
+    toast(e.message, false);
+  }
+}
+
+// Riepilogo leggibile per sezione (vedi RiepilogoRipristino lato Go)
+// invece del solo JSON grezzo — stesso spirito del messaggio "N nuovi, N
+// aggiornati" già usato per gli import per-categoria, qui ripetuto per le
+// sei sezioni che un ripristino completo tocca.
+function testoRiepilogoRipristino(r) {
+  const sezione = (nome, c) =>
+    `${nome}: ${c.creati} nuovi, ${c.aggiornati} aggiornati${c.scartati ? `, ${c.scartati} scartati` : ''}`;
+  const righe = [
+    sezione('Ospedali', r.ospedali),
+    sezione('Fogli turni', r.fogli),
+    sezione('Materiali', r.materiali),
+    sezione('Utenti app', r.utentiApp),
+    sezione('Comunicati', r.comunicati),
+  ];
+  if (r.formazioneAggiornata) righe.push('Link di formazione aggiornato.');
+  return righe.join(' — ');
+}
+
+async function ripristinaBackupCompleto(input) {
+  const esitoEl = document.getElementById('esito-ripristino');
+  esitoEl.style.color = 'var(--danger)';
+  esitoEl.textContent = '';
+  const file = input.files[0];
+  if (!file) return;
+  // Conferma esplicita: a differenza degli import per-categoria (righe di
+  // testo brevi, errore facile da correggere ricaricando) qui il file può
+  // contenere anche account e PDF — un ripristino sbagliato non è banale
+  // da annullare senza un backup precedente a disposizione.
+  if (!confirm('Ripristinare da questo file? Aggiorna/aggiunge i dati in base al contenuto del file, non cancella nulla che non è nel file.')) {
+    input.value = '';
+    return;
+  }
+  try {
+    // Il file va inoltrato così com'è (byte grezzi dello zip): niente
+    // file.text()/JSON qui, il body binario è quello che POST
+    // /api/admin/restore si aspetta.
+    const resp = await fetch('/api/admin/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/zip', Authorization: `Bearer ${token()}` },
+      body: file,
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di ripristino');
+    esitoEl.style.color = 'var(--success)';
+    esitoEl.textContent = testoRiepilogoRipristino(dati);
+    await carica();
+    toast('Ripristino completato.');
+  } catch (e) {
+    esitoEl.textContent = e.message;
+  } finally {
+    input.value = '';
   }
 }
 

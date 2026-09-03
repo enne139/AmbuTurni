@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,6 +89,106 @@ func updateComunicato(ctx context.Context, pool *pgxpool.Pool, id string, titolo
 		titolo, descrizione, id,
 	).Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione)
 	return c, err
+}
+
+// ComunicatoBackup è la riga usata dal backup/ripristino completo
+// (backup.go): include il PDF come byte grezzi — a differenza di
+// ComunicatoMeta (mai il file, pensata per l'elenco) qui serve tutto per
+// poter ricreare la riga identica su un'altra istanza. Nessun tag JSON: il
+// backup vero è uno ZIP (data.json coi soli metadati + un file .pdf per
+// comunicato, vedi backup.go), questo struct non viene mai serializzato
+// direttamente — è solo il tipo di trasporto tra query DB e voci dello zip.
+type ComunicatoBackup struct {
+	ID          string
+	FileName    string
+	Titolo      *string
+	Descrizione *string
+	FileData    []byte
+}
+
+// listComunicatiConFile elenca tutti i comunicati CON il PDF — usata SOLO
+// dal backup completo, mai dall'elenco normale (appesantirebbe
+// inutilmente ogni GET /api/comunicati, vedi ComunicatoMeta).
+func listComunicatiConFile(ctx context.Context, pool *pgxpool.Pool) ([]ComunicatoBackup, error) {
+	rows, err := pool.Query(ctx,
+		"SELECT id, file_name, titolo, descrizione, file_data FROM comunicati ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	lista := []ComunicatoBackup{}
+	for rows.Next() {
+		var c ComunicatoBackup
+		if err := rows.Scan(&c.ID, &c.FileName, &c.Titolo, &c.Descrizione, &c.FileData); err != nil {
+			return nil, err
+		}
+		lista = append(lista, c)
+	}
+	return lista, rows.Err()
+}
+
+// upsertComunicatiConFile ripristina i comunicati da un backup: upsert per
+// id (non per nome file, che non ha un vincolo di unicità reale) — preserva
+// gli stessi id del backup, utile per un ripristino identico su un'altra
+// istanza. Righe senza PDF (voce comunicati/<id>.pdf mancante nello zip,
+// FileData nil) o che non superano la stessa validazione "%PDF" già in uso
+// per l'upload normale (POST /api/comunicati) vengono scartate.
+func upsertComunicatiConFile(ctx context.Context, pool *pgxpool.Pool, righe []ComunicatoBackup) (creati, aggiornati, scartati int, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	esistenti := map[string]bool{}
+	rows, err := tx.Query(ctx, "SELECT id FROM comunicati")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, 0, 0, err
+		}
+		esistenti[id] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, 0, 0, err
+	}
+
+	for _, r := range righe {
+		id := strings.TrimSpace(r.ID)
+		fileName := strings.TrimSpace(r.FileName)
+		if id == "" || fileName == "" || !bytes.HasPrefix(r.FileData, []byte("%PDF")) {
+			scartati++
+			continue
+		}
+		if esistenti[id] {
+			if _, err = tx.Exec(ctx,
+				"UPDATE comunicati SET file_name=$1, titolo=$2, descrizione=$3, file_data=$4, file_size=$5 WHERE id=$6",
+				fileName, r.Titolo, r.Descrizione, r.FileData, len(r.FileData), id,
+			); err != nil {
+				return 0, 0, 0, err
+			}
+			aggiornati++
+		} else {
+			if _, err = tx.Exec(ctx,
+				"INSERT INTO comunicati (id, file_name, file_data, file_size, titolo, descrizione) VALUES ($1,$2,$3,$4,$5,$6)",
+				id, fileName, r.FileData, len(r.FileData), r.Titolo, r.Descrizione,
+			); err != nil {
+				return 0, 0, 0, err
+			}
+			esistenti[id] = true
+			creati++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, 0, err
+	}
+	return creati, aggiornati, scartati, nil
 }
 
 // deleteComunicato elimina un comunicato per id; restituisce false se non

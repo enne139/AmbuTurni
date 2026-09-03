@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -109,6 +110,100 @@ func loginUtenteApp(ctx context.Context, pool *pgxpool.Pool, username, password 
 	}
 	token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(jwtSecret)
 	return token, deveCambiarePassword, err
+}
+
+// UtenteAppBackup è la riga usata dal backup/ripristino completo
+// (backup.go): include l'hash bcrypt della password, mai esposto da
+// UtenteAppInfo/listUtentiApp (pensata per la tabella della pagina admin,
+// mai deve mostrare l'hash) — sicuro da includere qui perché l'endpoint di
+// backup è protetto come tutti gli altri (solo admin, authMiddleware) e un
+// hash bcrypt non permette di risalire alla password in chiaro.
+type UtenteAppBackup struct {
+	Username             string `json:"username"`
+	PasswordHash         string `json:"passwordHash"`
+	DeveCambiarePassword bool   `json:"deveCambiarePassword"`
+}
+
+// listUtentiAppConHash elenca tutti gli account utente-app CON l'hash della
+// password — usata SOLO dal backup completo, mai da un endpoint raggiunto
+// dall'app o dalla tabella della pagina admin.
+func listUtentiAppConHash(ctx context.Context, pool *pgxpool.Pool) ([]UtenteAppBackup, error) {
+	rows, err := pool.Query(ctx,
+		"SELECT username, password_hash, deve_cambiare_password FROM utenti_app ORDER BY username ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	utenti := []UtenteAppBackup{}
+	for rows.Next() {
+		var u UtenteAppBackup
+		if err := rows.Scan(&u.Username, &u.PasswordHash, &u.DeveCambiarePassword); err != nil {
+			return nil, err
+		}
+		utenti = append(utenti, u)
+	}
+	return utenti, rows.Err()
+}
+
+// upsertUtentiAppConHash ripristina gli account da un backup: upsert per
+// username, scrivendo l'hash così com'è — MAI ri-hashato, è già un hash
+// bcrypt valido e ri-hasharlo lo renderebbe inutilizzabile per il login.
+// Righe senza username o hash vengono scartate.
+func upsertUtentiAppConHash(ctx context.Context, pool *pgxpool.Pool, righe []UtenteAppBackup) (creati, aggiornati, scartati int, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	esistenti := map[string]bool{}
+	rows, err := tx.Query(ctx, "SELECT username FROM utenti_app")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			rows.Close()
+			return 0, 0, 0, err
+		}
+		esistenti[u] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, 0, 0, err
+	}
+
+	for _, r := range righe {
+		username := strings.TrimSpace(r.Username)
+		if username == "" || r.PasswordHash == "" {
+			scartati++
+			continue
+		}
+		if esistenti[username] {
+			if _, err = tx.Exec(ctx,
+				"UPDATE utenti_app SET password_hash=$1, deve_cambiare_password=$2 WHERE username=$3",
+				r.PasswordHash, r.DeveCambiarePassword, username,
+			); err != nil {
+				return 0, 0, 0, err
+			}
+			aggiornati++
+		} else {
+			if _, err = tx.Exec(ctx,
+				"INSERT INTO utenti_app (username, password_hash, deve_cambiare_password) VALUES ($1,$2,$3)",
+				username, r.PasswordHash, r.DeveCambiarePassword,
+			); err != nil {
+				return 0, 0, 0, err
+			}
+			esistenti[username] = true
+			creati++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, 0, err
+	}
+	return creati, aggiornati, scartati, nil
 }
 
 // cambiaPasswordUtenteApp verifica passwordAttuale e, se corretta, aggiorna
