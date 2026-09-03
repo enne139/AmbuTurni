@@ -2035,6 +2035,29 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     config: header presente su `/` e su `/api/health` (anche con un 502,
     backend non raggiungibile in quel test), `robots.txt` servito con
     contenuto corretto.
+- **`client_max_body_size 100m` in `nginx.conf` (2026-09-03, bug trovato dal
+  test manuale dell'utente)**: `nginx.conf` non impostava questa direttiva,
+  quindi nginx applicava il suo default (1 MiB) — troppo basso per l'upload
+  multiplo di comunicati (fino a 50 MiB lato Go, `maxComunicatoBytes`) e per
+  il ripristino da backup (fino a 100 MiB, `maxBackupBytes`). Nginx
+  rifiutava la richiesta PRIMA che arrivasse al backend con un 413 Request
+  Entity Too Large **in HTML**, che il JS della pagina admin (si aspetta
+  sempre JSON dalle risposte) mostrava come errore illeggibile
+  (`Unexpected token '<'... is not valid JSON`) — sintomo tipico di una
+  pagina di errore HTML dove ci si aspettava JSON, capitava selezionando
+  più file insieme in "Carica comunicati". 100m copre il limite più alto
+  lato Go: i controlli veri restano quelli (`http.MaxBytesReader`), questo
+  è solo il tetto di nginx, che va tenuto pari o superiore. Verificato con
+  un container nginx:alpine locale: un body di 2 MiB (oltre il vecchio
+  default di 1 MiB) ora passa nginx (arriva al proxy, 502 nel test solo
+  perché senza un vero backend dietro — prima del fix sarebbe stato un 413
+  a livello nginx, mai arrivato al proxy).
+  - **Riguarda solo il nginx DENTRO il container** (questo file, incorporato
+    nell'immagine): se davanti c'è anche un nginx separato sull'host (reverse
+    proxy per TLS/dominio, non versionato in questo repo — caso reale
+    dell'utente), va controllato ANCHE lì: un `client_max_body_size` assente
+    o troppo basso in quella config applicherebbe lo stesso limite un
+    livello più all'esterno, prima ancora di raggiungere il container.
 
 ---
 
