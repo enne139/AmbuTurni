@@ -102,6 +102,7 @@ dependencies:
   # "Naviga"): link universale https://maps.google.com/..., nessun permesso
   # né voce <queries> nel manifest (a differenza di un intent geo: diretto).
   url_launcher: ^6.3.2
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

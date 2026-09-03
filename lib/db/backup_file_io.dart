@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -88,16 +89,30 @@ Future<String?> salvaFileBinarioPiattaforma(
 /// Su desktop scrive un file temporaneo e lo apre via url_launcher
 /// (`Uri.file`, delega all'app associata all'estensione, es. il lettore PDF
 /// predefinito). Su mobile un `file://` diretto non è affidabile da un'app
-/// terza (Android blocca l'accesso, servirebbe un FileProvider dedicato) —
-/// ripiega sulla share sheet già usata da salvaFileBinarioPiattaforma: tra le
-/// app di destinazione include comunque i lettori PDF installati, quindi
-/// "visualizzare" resta possibile, solo con un tap in più per scegliere l'app.
+/// terza (Android blocca l'accesso, servirebbe un `FileProvider` dedicato) —
+/// **bug reale trovato dal test manuale dell'utente**: una prima versione
+/// ripiegava direttamente sulla share sheet (`ACTION_SEND`), che su Android
+/// elenca solo le app di CONDIVISIONE (chat, bluetooth, cloud...) — molti
+/// lettori PDF si registrano per `ACTION_VIEW` ma non per `ACTION_SEND`,
+/// quindi non comparivano affatto tra le opzioni e il file non si poteva
+/// davvero visualizzare, solo inoltrare altrove. Corretto con il package
+/// `open_filex`, che genera da solo un `content://` via `FileProvider`
+/// (dichiarato nel suo stesso `AndroidManifest.xml`, incluso in merge senza
+/// alcuna configurazione manuale qui) e lancia un vero `ACTION_VIEW` — mostra
+/// solo le app che sanno aprire un PDF, coerente col pulsante "Visualizza".
+/// La share sheet resta un ripiego per `ResultType.noAppToOpen`/errori (nessun
+/// lettore PDF installato): meglio poter comunque inoltrare il file altrove
+/// che un vicolo cieco.
 Future<void> apriFileBinarioPiattaforma(
     Future<Uint8List> Function() caricaBytes, String nomeFile, String mimeType) async {
   final bytes = await caricaBytes();
   final dir = await getTemporaryDirectory();
   final file = File('${dir.path}/$nomeFile');
   await file.writeAsBytes(bytes);
+  if (isMobile) {
+    final risultato = await OpenFilex.open(file.path, type: mimeType);
+    if (risultato.type == ResultType.done) return;
+  }
   if (isDesktop) {
     final aperto = await launchUrl(Uri.file(file.path));
     if (aperto) return;

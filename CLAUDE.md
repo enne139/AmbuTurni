@@ -68,6 +68,7 @@
 | Mappa (Lista ospedali) | `flutter_map` + `latlong2`, tile OpenStreetMap, nessuna API key (funziona anche su Windows/web) |
 | Geocoding indirizzi (Lista ospedali) | Nominatim (OpenStreetMap), nessuna API key, chiamato solo alla creazione/modifica di un ospedale |
 | Apertura navigatore esterno (Lista ospedali) | `url_launcher`, link universale Google Maps |
+| Apertura PDF (Archivio comunicati) | `open_filex` su Android (vero "Apri con" via FileProvider), `url_launcher` su desktop |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Versione app a runtime | `package_info_plus` (legge X.Y.Z+N dalla piattaforma, mostrata in Impostazioni) |
 | Localizzazione widget nativi | `flutter_localizations` (SDK), solo per `showDatePicker`: `locale` fisso `it`, il resto dell'app resta testo italiano hardcoded |
@@ -1816,6 +1817,26 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     browser la blocca come popup non richiesto.
   - **Apertura PDF su Android — bug trovato dal test manuale dell'utente,
     corretto con `open_filex`**: bullet dedicato subito sotto.
+- **Apertura PDF comunicati su Android: `open_filex` al posto della share
+  sheet diretta (2026-09-03, bug trovato dal test manuale dell'utente)**:
+  la prima versione di `apriFileBinarioPiattaforma` (bullet precedente)
+  ripiegava su mobile direttamente sulla condivisione (`SharePlus.share`,
+  `ACTION_SEND`), nell'assunzione che tra le app elencate comparissero
+  anche i lettori PDF. Sbagliato: `ACTION_SEND` è per le app di sola
+  CONDIVISIONE (chat, bluetooth, cloud...), molti lettori PDF si
+  registrano solo per `ACTION_VIEW` e non comparivano affatto — tap su
+  "Visualizza" mostrava una share sheet senza nessun modo reale di vedere
+  il PDF, non un semplice "tap in più" come inizialmente descritto.
+  Corretto con il package `open_filex`: genera da solo un `content://` via
+  un `FileProvider` (dichiarato nel suo `AndroidManifest.xml`, incluso in
+  merge senza alcuna configurazione manuale in questo repo) e lancia un
+  vero `ACTION_VIEW`, mostrando solo le app che sanno aprire un PDF. La
+  share sheet resta un ripiego per `ResultType.noAppToOpen`/errori (nessun
+  lettore PDF installato sul device) — meglio poter comunque inoltrare il
+  file altrove che un vicolo cieco. Su desktop nessun cambiamento
+  (`url_launcher`/`Uri.file` continua a funzionare); su iOS/web
+  `open_filex` non è nemmeno raggiunto (`isMobile` è già false sul web, e
+  il progetto non ha target iOS).
 
 ---
 
