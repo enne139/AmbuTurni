@@ -4,4 +4,10 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- usesCleartextTraffic: solo qui (manifest di debug, mai in quello di
+         release/main) per poter puntare l'app a un backend locale in HTTP
+         durante lo sviluppo (es. http://localhost:PORT via `adb reverse`) —
+         dalle API 28+ Android blocca di default il traffico in chiaro.
+         Nessun impatto sull'APK di produzione, che resta solo-HTTPS. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

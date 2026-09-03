@@ -1837,6 +1837,19 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   (`url_launcher`/`Uri.file` continua a funzionare); su iOS/web
   `open_filex` non è nemmeno raggiunto (`isMobile` è già false sul web, e
   il progetto non ha target iOS).
+- **`usesCleartextTraffic` SOLO nel manifest di debug (2026-09-03)**:
+  necessario per testare l'app su un telefono reale contro un backend
+  fatto girare in locale sul PC di sviluppo (`docker compose`/
+  `podman-compose up --build` in `backend/`, raggiunto dal telefono via
+  `adb reverse tcp:PORT tcp:PORT` sullo stesso cavo USB) — dalle API 28+
+  Android blocca di default il traffico HTTP in chiaro, e senza
+  quest'eccezione ogni chiamata a `http://localhost:PORT` falliva con un
+  errore di rete generico, anche a backend perfettamente funzionante.
+  Aggiunto in `android/app/src/debug/AndroidManifest.xml` (che già
+  dichiara l'`INTERNET` per l'hot reload, vedi bullet dedicato più sopra),
+  MAI nel manifest principale/release: la build di produzione resta
+  solo-HTTPS. Stesso schema "eccezione locale al manifest di debug" già
+  in uso per l'`INTERNET` di sviluppo.
 
 ---
 
