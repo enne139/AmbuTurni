@@ -138,6 +138,30 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
+	// Cambio password di un utente admin esistente, dalla pagina admin
+	// stessa: nessuna verifica della password attuale, vedi changeUserPassword.
+	mux.HandleFunc("PUT /api/auth/users/{username}/password", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Password string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		if len(body.Password) < 8 {
+			writeError(w, http.StatusBadRequest, "la nuova password deve avere almeno 8 caratteri")
+			return
+		}
+		trovato, err := changeUserPassword(r.Context(), pool, r.PathValue("username"), body.Password)
+		if err != nil {
+			log.Printf("[auth] errore cambio password: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !trovato {
+			writeError(w, http.StatusNotFound, "Utente non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
 	// --- UTENTI APP ---
 	// Account che sbloccano i contenuti riservati dell'app (Repository
 	// formazione, Comunicati): creati SOLO dalla pagina admin — l'app
@@ -241,6 +265,35 @@ func main() {
 			return
 		}
 		if !rimosso {
+			writeError(w, http.StatusNotFound, "Utente non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
+	// Reset della password di un utente app dalla pagina admin: imposta una
+	// nuova password provvisoria (deve_cambiare_password torna true), vedi
+	// resetPasswordUtenteApp. Distinta da PUT /api/utenti/password sopra
+	// (self-service, richiede la password attuale): net/http fa vincere il
+	// segmento letterale "password" su quello con lo username in mezzo solo
+	// perché i due pattern hanno un numero diverso di segmenti, nessuna
+	// ambiguità reale tra i due.
+	mux.HandleFunc("PUT /api/utenti/{username}/password", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Password string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		if len(body.Password) < 8 {
+			writeError(w, http.StatusBadRequest, "la nuova password deve avere almeno 8 caratteri")
+			return
+		}
+		trovato, err := resetPasswordUtenteApp(r.Context(), pool, r.PathValue("username"), body.Password)
+		if err != nil {
+			log.Printf("[utenti] errore reset password: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !trovato {
 			writeError(w, http.StatusNotFound, "Utente non trovato")
 			return
 		}

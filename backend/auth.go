@@ -144,6 +144,27 @@ func listUsers(ctx context.Context, pool *pgxpool.Pool) ([]UserInfo, error) {
 	return utenti, rows.Err()
 }
 
+// changeUserPassword imposta una nuova password per un utente admin
+// esistente; restituisce false se lo username non esiste. Chiamata SOLO
+// dalla pagina admin (PUT /api/auth/users/:username/password,
+// authMiddleware): qualunque admin può reimpostare la password di un altro
+// senza conoscere quella attuale, stesso livello di fiducia già in uso per
+// la creazione/eliminazione di un account admin — a differenza del cambio
+// password lato utente-app (cambiaPasswordUtenteApp), qui non c'è un
+// "proprietario" del token che deve dimostrare di conoscere la password
+// attuale: è un reset amministrativo, non un self-service.
+func changeUserPassword(ctx context.Context, pool *pgxpool.Pool, username, nuovaPassword string) (bool, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(nuovaPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return false, err
+	}
+	tag, err := pool.Exec(ctx, "UPDATE users SET password_hash = $1 WHERE username = $2", string(hash), username)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // deleteUser elimina un utente admin per username; restituisce false se non
 // esisteva. Impedisce di restare senza alcun account (l'unico modo per
 // rientrare sarebbe ricreare l'utente dalle variabili d'ambiente al riavvio).

@@ -78,6 +78,32 @@ func deleteUtenteApp(ctx context.Context, pool *pgxpool.Pool, username string) (
 	return tag.RowsAffected() > 0, nil
 }
 
+// resetPasswordUtenteApp imposta una nuova password provvisoria per un
+// account utente-app esistente (deve_cambiare_password torna a true, stessa
+// semantica della password data alla creazione): restituisce false se lo
+// username non esiste. Chiamata SOLO dalla pagina admin
+// (PUT /api/utenti/:username/password, authMiddleware) — a differenza di
+// cambiaPasswordUtenteApp (self-service dall'app, richiede la password
+// attuale) qui è l'admin a resettarla per conto dell'utente, quindi nessuna
+// verifica della password precedente: stesso livello di fiducia già in uso
+// per creare/eliminare un account utente-app da questa pagina. Rivede la
+// scelta precedente "niente reset da qui, si elimina e si ricrea" (vedi
+// CLAUDE.md): un reset preserva lo username e lo storico dell'account invece
+// di ricrearlo da zero.
+func resetPasswordUtenteApp(ctx context.Context, pool *pgxpool.Pool, username, nuovaPassword string) (bool, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(nuovaPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return false, err
+	}
+	tag, err := pool.Exec(ctx,
+		"UPDATE utenti_app SET password_hash = $1, deve_cambiare_password = true WHERE username = $2",
+		string(hash), username)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // loginUtenteApp verifica le credenziali di un account utente-app e
 // restituisce un token JWT (Role: "utente") più deveCambiarePassword, così
 // l'app sa se mostrare subito la schermata di cambio password obbligatorio.

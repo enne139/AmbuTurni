@@ -950,20 +950,76 @@ async function eliminaMateriale(id) {
 // deleteUser lato server rifiuta di eliminare l'ultimo utente rimasto,
 // l'errore del server (400 con messaggio) arriva già leggibile.
 
+// editingUtenteUsername: username la cui riga è aperta in modifica password
+// (null = nessuna) — stessa edit INLINE già in uso per i comunicati
+// (editingComunicatoId): un solo campo, un form a parte sarebbe sproporzionato.
+let editingUtenteUsername = null;
+
 async function caricaUtenti() {
   const resp = await fetch('/api/auth/users', { headers: { Authorization: `Bearer ${token()}` } });
   const utenti = await resp.json();
-  renderTabellaGenerica('tabella-utenti', 3, utenti, (u) => {
-    const riga = document.createElement('tr');
-    const creato = u.createdAt ? new Date(u.createdAt).toLocaleDateString('it-IT') : '—';
+  renderTabellaGenerica('tabella-utenti', 3, utenti, renderRigaUtente, 'Nessun utente.');
+}
+
+function renderRigaUtente(u) {
+  const riga = document.createElement('tr');
+  if (editingUtenteUsername === u.username) {
     riga.innerHTML = `
-      <td>${escapeHtml(u.username)}</td>
-      <td>${creato}</td>
-      <td><button class="danger small">Elimina</button></td>
+      <td colspan="3">
+        <div style="display:flex; flex-direction:column; gap:8px; padding:10px 0;">
+          <strong>${escapeHtml(u.username)}</strong>
+          <label>Nuova password</label>
+          <input type="password" id="ut-edit-password" autocomplete="new-password" />
+          <div>
+            <button class="small">Salva</button>
+            <button class="secondary small">Annulla</button>
+          </div>
+        </div>
+      </td>
     `;
-    riga.querySelector('button').onclick = () => eliminaUtente(u.username);
+    const [btnSalva, btnAnnulla] = riga.querySelectorAll('button');
+    btnSalva.onclick = () => salvaPasswordUtente(u.username);
+    btnAnnulla.onclick = () => { editingUtenteUsername = null; caricaUtenti(); };
     return riga;
-  }, 'Nessun utente.');
+  }
+  const creato = u.createdAt ? new Date(u.createdAt).toLocaleDateString('it-IT') : '—';
+  riga.innerHTML = `
+    <td>${escapeHtml(u.username)}</td>
+    <td>${creato}</td>
+    <td>
+      <button class="small">Cambia password</button>
+      <button class="danger small">Elimina</button>
+    </td>
+  `;
+  const [btnCambia, btnElimina] = riga.querySelectorAll('button');
+  btnCambia.onclick = () => { editingUtenteUsername = u.username; caricaUtenti(); };
+  btnElimina.onclick = () => eliminaUtente(u.username);
+  return riga;
+}
+
+// Cambia la password dell'utente admin [username] (PUT /api/auth/users/:username/password,
+// nessuna verifica della password attuale: chi ha accesso a questa pagina è
+// già un admin autenticato, stesso livello di fiducia di creazione/eliminazione).
+async function salvaPasswordUtente(username) {
+  const password = document.getElementById('ut-edit-password').value;
+  if (password.length < 8) {
+    toast('La nuova password deve avere almeno 8 caratteri.', false);
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/auth/users/${encodeURIComponent(username)}/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ password }),
+    });
+    const dati = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    editingUtenteUsername = null;
+    await caricaUtenti();
+    toast('Password aggiornata.');
+  } catch (e) {
+    toast(e.message, false);
+  }
 }
 
 async function aggiungiUtente() {
@@ -1011,26 +1067,80 @@ async function eliminaUtente(username) {
 // --- Utenti app ---
 // Account separati dagli "Utenti admin" sopra: sbloccano i contenuti
 // riservati nell'app (Repository formazione, Comunicati), non danno accesso
-// a questa pagina. Nessun form di modifica/reset password da qui: se serve,
-// si elimina e si ricrea (stessa filosofia "create/list/delete, niente
-// update" già in uso per gli utenti admin) — comunque chi la riceve la
-// cambia al primo accesso nell'app (deveCambiarePassword).
+// a questa pagina. "Cambia password" qui resetta una nuova password
+// provvisoria (deve_cambiare_password torna true, resetPasswordUtenteApp
+// lato server) — rivede la scelta precedente "si elimina e si ricrea": un
+// reset preserva lo username invece di ricrearlo da zero.
+
+// editingUtenteAppUsername: come editingUtenteUsername sopra, ma per la
+// tabella Utenti app.
+let editingUtenteAppUsername = null;
 
 async function caricaUtentiApp() {
   const resp = await fetch('/api/utenti', { headers: { Authorization: `Bearer ${token()}` } });
   const utenti = await resp.json();
-  renderTabellaGenerica('tabella-utenti-app', 4, utenti, (u) => {
-    const riga = document.createElement('tr');
-    const creato = u.createdAt ? new Date(u.createdAt).toLocaleDateString('it-IT') : '—';
+  renderTabellaGenerica('tabella-utenti-app', 4, utenti, renderRigaUtenteApp, 'Nessun utente app.');
+}
+
+function renderRigaUtenteApp(u) {
+  const riga = document.createElement('tr');
+  if (editingUtenteAppUsername === u.username) {
     riga.innerHTML = `
-      <td>${escapeHtml(u.username)}</td>
-      <td>${creato}</td>
-      <td>${u.deveCambiarePassword ? 'Sì' : 'No'}</td>
-      <td><button class="danger small">Elimina</button></td>
+      <td colspan="4">
+        <div style="display:flex; flex-direction:column; gap:8px; padding:10px 0;">
+          <strong>${escapeHtml(u.username)}</strong>
+          <label>Nuova password provvisoria</label>
+          <input type="password" id="ua-edit-password" autocomplete="new-password" />
+          <p class="sottotitolo" style="margin:0;">Al prossimo accesso nell'app verrà di nuovo chiesto di cambiarla.</p>
+          <div>
+            <button class="small">Salva</button>
+            <button class="secondary small">Annulla</button>
+          </div>
+        </div>
+      </td>
     `;
-    riga.querySelector('button').onclick = () => eliminaUtenteApp(u.username);
+    const [btnSalva, btnAnnulla] = riga.querySelectorAll('button');
+    btnSalva.onclick = () => salvaPasswordUtenteApp(u.username);
+    btnAnnulla.onclick = () => { editingUtenteAppUsername = null; caricaUtentiApp(); };
     return riga;
-  }, 'Nessun utente app.');
+  }
+  const creato = u.createdAt ? new Date(u.createdAt).toLocaleDateString('it-IT') : '—';
+  riga.innerHTML = `
+    <td>${escapeHtml(u.username)}</td>
+    <td>${creato}</td>
+    <td>${u.deveCambiarePassword ? 'Sì' : 'No'}</td>
+    <td>
+      <button class="small">Cambia password</button>
+      <button class="danger small">Elimina</button>
+    </td>
+  `;
+  const [btnCambia, btnElimina] = riga.querySelectorAll('button');
+  btnCambia.onclick = () => { editingUtenteAppUsername = u.username; caricaUtentiApp(); };
+  btnElimina.onclick = () => eliminaUtenteApp(u.username);
+  return riga;
+}
+
+// Resetta la password dell'utente app [username] (PUT /api/utenti/:username/password).
+async function salvaPasswordUtenteApp(username) {
+  const password = document.getElementById('ua-edit-password').value;
+  if (password.length < 8) {
+    toast('La nuova password deve avere almeno 8 caratteri.', false);
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/utenti/${encodeURIComponent(username)}/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ password }),
+    });
+    const dati = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    editingUtenteAppUsername = null;
+    await caricaUtentiApp();
+    toast('Password aggiornata.');
+  } catch (e) {
+    toast(e.message, false);
+  }
 }
 
 async function aggiungiUtenteApp() {

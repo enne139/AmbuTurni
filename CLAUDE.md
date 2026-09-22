@@ -2131,6 +2131,61 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     `tutorial_provider_test.dart` — primo provider "semplice" senza test
     dedicato prima di questo). `flutter analyze` pulito, `flutter test`
     verde (175/175).
+- **Cambio password dalla pagina admin, per entrambe le tabelle di utenti
+  (2026-09-22)**: richiesta esplicita — sia "Utenti admin" sia "Utenti app"
+  avevano solo crea/elenca/elimina, nessun modo di cambiare una password
+  senza eliminare e ricreare l'account (perdendo lo username/storico per gli
+  utenti app, e passando dal riavvio del server per l'admin — nessun altro
+  modo di rientrare se restava un solo admin). Tocca solo `backend/`, nessun
+  impatto sull'app Flutter.
+  - **`changeUserPassword`** (`auth.go`) e **`resetPasswordUtenteApp`**
+    (`utenti_app.go`): nuove funzioni, stesso stile hash bcrypt +
+    `UPDATE ... WHERE username = $2` con `RowsAffected` come "trovato" già
+    in uso per `deleteUser`/`deleteUtenteApp`. Nuove rotte
+    `PUT /api/auth/users/{username}/password` e
+    `PUT /api/utenti/{username}/password` (`authMiddleware`, solo admin in
+    entrambi i casi — anche per resettare un utente app, coerente col
+    confine "gestione solo dalla pagina admin" già stabilito per quella
+    tabella), validazione minimo 8 caratteri come il cambio password
+    self-service dell'app. `PUT /api/utenti/{username}/password` non collide
+    con `PUT /api/utenti/password` (self-service esistente, `usernameAuthMiddleware`,
+    richiede la password attuale): pattern con un numero diverso di segmenti,
+    nessuna ambiguità nel routing di `net/http`.
+  - **Nessuna verifica della password attuale in nessuno dei due nuovi
+    endpoint**: è un reset amministrativo fatto da un admin già autenticato
+    su questa pagina, stesso livello di fiducia già in uso per
+    creare/eliminare un account (admin o utente app) da qui — a differenza
+    di `cambiaPasswordUtenteApp` (self-service dall'app), che resta l'unico
+    endpoint a richiedere la password attuale perché lì il chiamante è il
+    proprietario dell'account, non un amministratore che agisce su di esso.
+  - **Reset di un utente app rimette `deve_cambiare_password = true`**:
+    stessa semantica della password provvisoria data alla creazione — un
+    reset dall'admin è per definizione una password provvisoria nuova, non
+    la scelta definitiva dell'utente. Questo bullet **rivede la decisione
+    precedente** "niente modifica/reset da qui, si elimina e si ricrea" (vedi
+    più sopra, 2026-09-02): un reset preserva lo username invece di
+    ricrearlo da zero, l'unico motivo per preferire elimina+ricrea non
+    reggeva più una volta che il reset è comunque protetto e semanticamente
+    equivalente a una nuova password provvisoria.
+  - **Pagina admin**: pulsante "Cambia password" per riga in entrambe le
+    tabelle, apre un'edit INLINE nella riga stessa (colspan sull'intera
+    larghezza, un solo campo password + Salva/Annulla) — stesso pattern già
+    in uso per titolo/descrizione dei comunicati (`editingComunicatoId`),
+    qui `editingUtenteUsername`/`editingUtenteAppUsername`. Per gli utenti
+    app l'edit mostra anche una nota ("al prossimo accesso verrà chiesto di
+    nuovo di cambiarla").
+  - **Verificato end-to-end** (`go build`/`go vet` puliti, Podman + `go run .`
+    + `curl`, stesso container Postgres di test già usato per le verifiche
+    precedenti): cambio password admin (login con la vecchia rifiutato,
+    login con la nuova accettato), validazione lunghezza minima (400),
+    utente inesistente (404), nessun token (401); reset utente app (login
+    con la password resettata ha `deveCambiarePassword: true`, la password
+    precedente non funziona più), un token utente-app che prova a
+    resettare se stesso o un altro viene rifiutato (401, confine di ruolo
+    rispettato) — nessun click-through reale nel browser, come per le altre
+    modifiche alla pagina admin (nessun modo di interagire con una GUI da
+    qui), solo un controllo statico di bilanciamento parentesi/graffe sullo
+    `<script>` (node non disponibile in questo ambiente).
 
 ---
 
