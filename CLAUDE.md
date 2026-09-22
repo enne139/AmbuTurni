@@ -2,8 +2,12 @@
 
 > Questo è il rewrite completo in Flutter dell'app originale React Native / Expo.
 > Il rewrite è stato integrato su `main` (2026-07-01). Il backend in
-> `backend/` (Go, dal 2026-07-14) espone l'elenco condiviso ospedali — non
-> è un backend di sincronizzazione dei dati dell'app, vedi Decisioni tecniche.
+> `backend/` (Go, dal 2026-07-14) espone risorse condivise tra installazioni/
+> associazioni diverse (ospedali, fogli turni, catalogo materiali, link al
+> repository di formazione, comunicati PDF, account "utente-app") con una
+> pagina admin di gestione — non è un backend di sincronizzazione dei dati
+> dell'app (turni, persone, assistenze... restano locali sul device, vedi
+> Decisioni tecniche).
 
 ---
 
@@ -2211,7 +2215,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
   al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
   Impostazioni → Navigazione.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 170 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 175 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

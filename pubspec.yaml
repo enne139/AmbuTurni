@@ -1,5 +1,5 @@
 name: ambu_turni
-description: App per la gestione di turni e assistenze in ambulanza. Offline-first, Android, tema scuro.
+description: App per la gestione di turni e assistenze in ambulanza. Offline-first, Android/Windows/web, tema chiaro/scuro/sistema.
 publish_to: 'none'
 version: 1.17.3+28
 

@@ -39,6 +39,8 @@ chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
 | GET | `/api/health` | no | stato del servizio |
 | POST | `/api/auth/login` | no | `{username,password}` → `{token}` |
 | POST | `/api/auth/users` | sì | crea un nuovo utente admin (solo se già loggato) |
+| GET | `/api/auth/users` | sì | elenco degli utenti admin |
+| DELETE | `/api/auth/users/:username` | sì | elimina un utente admin (rifiuta se è l'ultimo rimasto) |
 | GET | `/api/ospedali?citta=&regione=` | no | elenco ospedali, filtrato per città o regione (città ha priorità se entrambe indicate) |
 | POST | `/api/ospedali` | sì | `{nome,via,citta,regione,lat,lng}` → crea un ospedale |
 | PUT | `/api/ospedali/:id` | sì | `{nome,via,citta,regione,lat,lng}` → sostituisce tutti i campi |
@@ -56,16 +58,19 @@ chiama sempre `$baseUrl/api/...`, quindi `curl http://localhost:3000/health`
 | DELETE | `/api/materiali/:id` | sì (admin) | elimina un materiale |
 | GET | `/api/repository-formazione` | sì (admin o utente) | `{url,updated_at}`, link condiviso ai materiali di formazione |
 | POST | `/api/repository-formazione` | sì (admin) | `{url}` → imposta/aggiorna il link |
-| GET | `/api/comunicati` | sì (admin o utente) | elenco metadati dei comunicati (nome file, dimensione, data — mai il PDF; nessun titolo/descrizione, il nome del file è ciò che viene mostrato in app) |
+| GET | `/api/comunicati` | sì (admin o utente) | elenco metadati dei comunicati (nome file, dimensione, data, titolo/descrizione opzionali — mai il PDF; se titolo/descrizione sono assenti l'app mostra il nome del file) |
 | GET | `/api/comunicati/:id/file` | sì (admin o utente) | scarica il PDF di un comunicato |
 | POST | `/api/comunicati` | sì (admin) | multipart, uno o più campi `file` (PDF, max 50 MB totali) → `{creati,scartati}`, upload multiplo |
+| PUT | `/api/comunicati/:id` | sì (admin) | `{titolo,descrizione}` (entrambi opzionali) → aggiorna solo titolo/descrizione, mai il file |
 | DELETE | `/api/comunicati/:id` | sì (admin) | elimina un comunicato |
 | POST | `/api/utenti/login` | no (rate-limited) | `{username,password}` → `{token, deveCambiarePassword}` — login di un account utente-app |
 | PUT | `/api/utenti/password` | sì (utente) | `{passwordAttuale,passwordNuova}` → cambia la propria password (azzera `deveCambiarePassword`) |
 | POST | `/api/utenti` | sì (admin) | `{username,password}` → crea un utente-app con password provvisoria |
 | GET | `/api/utenti` | sì (admin) | elenco utenti-app |
 | DELETE | `/api/utenti/:username` | sì (admin) | elimina un utente-app |
-| GET | `/admin/` | no (poi login nella pagina) | interfaccia web per gestire ospedali, fogli turni, materiali e utenti-app |
+| GET | `/api/admin/backup` | sì (admin) | scarica un backup completo (.zip: metadati in `data.json` + un PDF per comunicato) di tutte le tabelle del backend |
+| POST | `/api/admin/restore` | sì (admin) | ripristina da un file .zip come sopra — upsert per sezione, mai distruttivo (max 100 MB) |
+| GET | `/admin/` | no (poi login nella pagina) | interfaccia web per gestire ospedali, fogli turni, materiali, utenti-app, utenti admin, comunicati e backup/ripristino |
 
 Le rotte protette richiedono l'header `Authorization: Bearer <token>`. Il
 token porta un ruolo (`role`, nel JWT): **admin** (login `/api/auth/login`,

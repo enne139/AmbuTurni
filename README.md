@@ -2,26 +2,44 @@
 
 App Flutter per la gestione di turni e assistenze in ambulanza, pensata per
 associazioni di volontariato (tipo Croce Verde, Pubblica Assistenza).
-Offline-first, tema scuro, dati salvati in locale su SQLite.
+Offline-first, dati salvati in locale su SQLite (Android/desktop) o IndexedDB
+(web); tema chiaro/scuro, di default segue quello del sistema operativo.
+Disponibile per Android, Windows desktop e web (Chrome/Edge).
 
 Rewrite completo dell'app originale React Native/Expo, dismessa. Il backend
-in `backend/` (Go + PostgreSQL) espone un elenco condiviso di ospedali,
-scaricabile per città dal tool "Lista ospedali" — non sincronizza i dati
-dell'app, che restano locali sul device (vedi Backup qui sotto).
+in `backend/` (Go + PostgreSQL) espone alcune risorse condivise tra
+installazioni/associazioni diverse — elenco ospedali, link ai fogli turni
+mensili, catalogo materiali, link al repository di formazione, comunicati
+PDF e gli account che sbloccano i contenuti riservati — ma **non sincronizza
+i dati dell'app**: turni, persone, assistenze... restano locali sul device
+(vedi Backup qui sotto).
 
 ## Funzionalità
 
-- **Turni**: lista filtrabile per associazione con ricerca testuale, form
-  completo (data, ore, tipologia + tipologie extra, equipaggio 1ª/2ª parte),
-  servizi annidati (codici chiamata/uscita, ospedale, riordino).
+- **Turni**: lista filtrabile per associazione con ricerca testuale, vista
+  calendario, form completo (data, ore, tipologie multi-select, equipaggio
+  1ª/2ª parte), servizi annidati (codici chiamata/uscita, ospedale, note in
+  markdown, riordino).
 - **Assistenze**: come i turni ma senza tipologia né servizi.
 - **Statistiche**: turni, servizi, ore turni, assistenze, ore assistenze, ore
   totali — filtrabili per associazione.
-- **Impostazioni**: CRUD di associazioni, persone, ospedali e tipologie turno,
+- **Anagrafiche**: CRUD di associazioni, persone, ospedali e tipologie turno,
   con combobox di ricerca e creazione rapida ("Aggiungi...") direttamente dai
-  form di turni/assistenze.
-- **Backup**: export/import JSON completo, più un export leggibile (solo
-  turni, con nomi al posto degli UUID).
+  form di turni/assistenze; badge con quante volte ogni voce compare.
+- **Tools**: Piano turni (calendario equipaggi/buchi dal foglio Google
+  mensile, con sincronizzazione automatica dal backend condiviso), Lista
+  ospedali (ricerca, mappa, navigatore esterno, geocoding automatico),
+  Materiali usati (catalogo + utilizzi con quantità/posizione), Repository
+  formazione e Archivio comunicati PDF (questi ultimi due riservati, sbloccati
+  con un account "utente-app" creato dalla pagina admin del backend
+  condiviso) — ciascuno disattivabile singolarmente da Impostazioni.
+- **Impostazioni**: backup/ripristino JSON, indirizzo del backend condiviso,
+  scelta della pagina principale e delle tab visibili, tema
+  chiaro/scuro/sistema, login/cambio password dell'account utente-app.
+  Tutorial di navigazione a schermo intero al primo avvio, rivedibile in
+  qualsiasi momento.
+- **Backup**: export/import JSON completo, più un export leggibile (turni e
+  assistenze, con nomi al posto degli UUID).
 - Vista turni/assistenze filtrata per persona o ospedale.
 
 ## Stack
@@ -29,22 +47,38 @@ dell'app, che restano locali sul device (vedi Backup qui sotto).
 | Ruolo | Libreria |
 |---|---|
 | Framework | Flutter stable (>= 3.27) |
-| DB | `sqflite` (Android) / `sqflite_common_ffi` (Windows/desktop) |
+| DB | `sqflite` (Android) / `sqflite_common_ffi` (Windows/desktop) / `sqflite_common_ffi_web` (web, SQLite in WASM) |
 | State management | `provider` |
 | Backup | `share_plus` + `file_picker` |
+| Markdown (note) | `flutter_markdown_plus` |
+| Piano turni | `excel` (lettura XLSX), `add_2_calendar` (solo Android) |
+| Mappa e navigatore | `flutter_map` (tile OpenStreetMap) + `url_launcher` |
+| HTTP (backend condiviso) | `http` |
 | Icona app | `flutter_launcher_icons` |
+
+Elenco completo e motivazioni di ogni dipendenza in [`CLAUDE.md`](CLAUDE.md#stack-flutter).
 
 ## Avvio
 
 ```bash
 flutter pub get
 flutter analyze          # deve passare senza errori
-flutter run               # Android (device o emulatore)
-flutter run -d windows    # Windows desktop (richiede Visual Studio)
-flutter build apk         # APK release
+flutter test              # test unitari (DB in-memory, parser, client HTTP)
+flutter run                # Android (device o emulatore)
+flutter run -d windows     # Windows desktop (richiede Visual Studio)
+flutter run -d chrome      # web (richiede prima il setup sotto)
+flutter build apk          # APK release
+flutter build web          # build web (output in build/web)
 ```
 
-## Backend (elenco condiviso ospedali)
+Prima del primo `flutter run -d chrome`/`flutter build web` dopo un clone
+pulito va generato il worker SQLite per il web (non versionato):
+
+```bash
+dart run sqflite_common_ffi_web:setup
+```
+
+## Backend (risorse condivise)
 
 Il codice sta in `backend/` (Go + PostgreSQL); i dettagli degli endpoint
 sono in [`backend/README.md`](backend/README.md). In produzione **non gira
@@ -189,9 +223,13 @@ base64 -w0 ambuturni-release.jks   # da incollare in KEYSTORE_B64
 lib/            codice dell'app (db/, providers/, screens/, widgets/, utils/)
 android/        progetto Android nativo
 windows/        progetto Windows desktop (CMake)
-backend/        API Go+PostgreSQL dell'elenco condiviso ospedali
+web/            entry point/manifest della build web (Chrome/Edge)
+backend/        API Go+PostgreSQL del backend condiviso (vedi sopra)
 assets/icon/    sorgenti dell'icona app
-test/           test unitari (DB in-memory)
+test/           test unitari (DB in-memory, parser, client HTTP)
+Dockerfile, nginx.conf, docker-entrypoint.sh
+                 immagine Docker unica (web Flutter + backend Go + nginx)
+                 pubblicata su ghcr.io a ogni tag vX.Y.Z, vedi sopra
 ```
 
 Per i dettagli implementativi, le decisioni tecniche e le convenzioni del
