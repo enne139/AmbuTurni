@@ -64,7 +64,7 @@ class TurnoCard extends StatelessWidget {
                           if (turno.associazioneNome != null) turno.associazioneNome!,
                           if (tipStr.isNotEmpty) tipStr,
                         ].join(' · '),
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       );
                     }),
@@ -80,12 +80,12 @@ class TurnoCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white12,
+                        color: coloreTesto(context, 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         '${turno.numServizi} serv.',
-                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 11),
                       ),
                     ),
                 ],

@@ -130,10 +130,10 @@ class _ArchivioComunicatiContenutoState extends State<_ArchivioComunicatiContenu
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.wifi_off, size: 48, color: Colors.white38),
+              Icon(Icons.wifi_off, size: 48, color: coloreTesto(context, 0.38)),
               const SizedBox(height: 16),
               Text('Impossibile contattare il server condiviso.\n$_errore',
-                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                  textAlign: TextAlign.center, style: TextStyle(color: coloreTesto(context, 0.7))),
               const SizedBox(height: 20),
               OutlinedButton(onPressed: _carica, child: const Text('Riprova')),
             ],
@@ -148,14 +148,14 @@ class _ArchivioComunicatiContenutoState extends State<_ArchivioComunicatiContenu
       onRefresh: _carica,
       child: _comunicati.isEmpty
           ? ListView(
-              children: const [
+              children: [
                 Padding(
-                  padding: EdgeInsets.only(top: 80),
+                  padding: const EdgeInsets.only(top: 80),
                   child: Center(
                     child: Text(
                       'Nessun comunicato disponibile al momento.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: coloreTesto(context, 0.54)),
                     ),
                   ),
                 ),
@@ -250,11 +250,11 @@ class _ComunicatoCard extends StatelessWidget {
                   children: [
                     Text(titolo ?? fileName),
                     if (titolo != null)
-                      Text(fileName, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                    Text(dettagli, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(fileName, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
+                    Text(dettagli, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
                     if (descrizione != null) ...[
                       const SizedBox(height: 4),
-                      Text(descrizione, style: const TextStyle(color: Colors.white70)),
+                      Text(descrizione, style: TextStyle(color: coloreTesto(context, 0.7))),
                     ],
                   ],
                 ),

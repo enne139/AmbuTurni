@@ -86,7 +86,9 @@ vedi "Piattaforma web" in Decisioni tecniche per i dettagli e i limiti.
 lib/
 ├── main.dart                      entry: init DB + MultiProvider + MaterialApp
 ├── utils/
-│   ├── theme.dart                 buildDarkTheme(), getCodiceColor(), costanti colori
+│   ├── theme.dart                 buildDarkTheme()/buildLightTheme(), coloreTesto() (colore
+│   │                               testo/icone che segue il tema attivo), getCodiceColor(),
+│   │                               costanti colori
 │   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
 │   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
 │   ├── piano_cache.dart           cache dei piani decodificati: solo export condizionale
@@ -120,7 +122,8 @@ lib/
 │   └── app_provider.dart          AnagraficheProvider, TurniProvider, AssistenzeProvider,
 │                                   StatisticheProvider, ToolsProvider, NavigazioneProvider,
 │                                   TutorialProvider, AccountProvider (sessione utente-app:
-│                                   login/cambio password/logout, sblocca i contenuti riservati)
+│                                   login/cambio password/logout, sblocca i contenuti riservati),
+│                                   TemaProvider (tema sistema/chiaro/scuro, Impostazioni → Aspetto)
 ├── navigation/
 │   └── app_navigator.dart         Scaffold con NavigationBar (2-5 tab, IndexedStack, tab
 │                                   selezionata per identità con l'enum _TabId); la tab Attività
@@ -199,8 +202,9 @@ lib/
         └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
                                       fogli turni) + Navigazione (pagina principale, disattiva
-                                      Attività+Statistiche, Piano turni in navbar) + Account
-                                      (login/cambio password/logout utente-app). Le anagrafiche (associazioni/
+                                      Attività+Statistiche, Piano turni in navbar) + Aspetto
+                                      (tema sistema/chiaro/scuro) + Account (login/cambio
+                                      password/logout utente-app). Le anagrafiche (associazioni/
                                       persone/ospedali/tipologie) sono in screens/anagrafiche/
 
 backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome, via,
@@ -2058,6 +2062,71 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     dell'utente), va controllato ANCHE lì: un `client_max_body_size` assente
     o troppo basso in quella config applicherebbe lo stesso limite un
     livello più all'esterno, prima ancora di raggiungere il container.
+- **Modalità chiara ("tema bianco"), Impostazioni → Aspetto (2026-09-07)**:
+  fin qui l'app aveva un solo tema scuro fisso (`buildDarkTheme()` in
+  `utils/theme.dart`, mai scelto dall'utente) — richiesta esplicita di poter
+  passare a un tema chiaro.
+  - **`TemaProvider`** (`providers/app_provider.dart`, stesso motivo di
+    ToolsProvider/NavigazioneProvider), tre stati (`ModalitaTema.sistema`/
+    `chiaro`/`scuro`), esposti come `ThemeMode` già pronto per `MaterialApp`
+    (`ThemeMode.system`/`light`/`dark`). **Default `sistema`** (richiesta
+    esplicita, rivista rispetto a una prima versione con default fisso
+    `scuro`): a differenza di `locale` (fissato a `it` a prescindere dal
+    device — l'app non ha mai seguito le impostazioni di sistema per la
+    lingua), qui il tema segue il sistema operativo finché l'utente non
+    forza esplicitamente chiaro o scuro da Impostazioni → Aspetto
+    (`SegmentedButton` a tre voci, stesso pattern del selettore "Pagina
+    principale" nella stessa schermata). **Riusa `kPrefModalitaChiara` come
+    bool *nullable*** invece di una nuova chiave stringa a tre valori:
+    assente = sistema, `true`/`false` = scelta esplicita chiara/scura —
+    `setModalita(ModalitaTema.sistema)` fa `prefs.remove(...)` apposta,
+    per tornare "assente" invece di scrivere un terzo valore sentinella.
+    `carica()` è invocata da `AppNavigator.initState` come gli altri
+    provider, ma essendo letta da un `Consumer<TemaProvider>` che avvolge
+    l'intero `MaterialApp` in `main.dart` (non da un discendente), il tema
+    si applica a tutta l'app non appena la preferenza è nota — nessun caso
+    speciale nonostante `TemaProvider` sia "montato" più in basso
+    nell'albero di `AppNavigator`: Provider notifica gli ascoltatori
+    indipendentemente dalla posizione nel widget tree.
+  - **`buildLightTheme()` in `utils/theme.dart`**, stessa struttura di
+    `buildDarkTheme()` con una palette parallela (`kBackgroundLight`,
+    `kSurfaceLight`, `kOnBackgroundLight`, `kCardBorderLight`) — `kPrimary`
+    e i pulsanti restano identici sui due temi (identità del brand).
+    `MaterialApp` dichiara sia `theme` (chiaro) sia `darkTheme` (scuro) e
+    lascia che `themeMode` (da `TemaProvider`) scelga tra i due (incluso
+    `ThemeMode.system`, che delega la scelta a Flutter/al sistema operativo),
+    invece di un unico `ThemeData` ricostruito a mano — idiomatico Flutter.
+  - **Refactor obbligato, non opzionale, di ~200 riferimenti a
+    `Colors.white`/`white70`/`white54`/... sparsi in 27 file**: scritti
+    quando l'app aveva un solo tema scuro fisso, sarebbero rimasti bianchi
+    anche col tema chiaro attivo (testo bianco su sfondo bianco,
+    illeggibile) — non introdurre la modalità chiara sarebbe stato peggio
+    che non farlo. Introdotto `coloreTesto(BuildContext, [alpha])` in
+    `utils/theme.dart` (`Theme.of(context).colorScheme.onSurface.
+    withValues(alpha: ...)`): mappa 1:1 le vecchie sfumature
+    `Colors.white`/`white70`/`54`/`38`/`24`/`12` restando coerente col tema
+    attivo, invece di una nuova palette di colori "attenuati" scollegata
+    dal resto del tema. Stessa sorte per i pochi riferimenti diretti a
+    `kSurface`/`kCardBorder` fuori da `theme.dart` (dropdown, bordi):
+    sostituiti con `Theme.of(context).colorScheme.surface`/`dividerColor`.
+    Due default di widget non potevano restare `Colors.white` (i parametri
+    default devono essere costanti di compilazione, un colore dipendente
+    dal tema no): `NotaMarkdown.color` e `_Messaggio.iconaColore` (in
+    `repository_formazione_screen.dart`) sono diventati `Color?` risolti a
+    `coloreTesto(context)` dentro `build()`. In un paio di widget privi di
+    un `context` ambientale (metodi di classi `StatelessWidget` senza
+    `BuildContext` in scope, es. `_EquipaggioCard._righeAffiancate` in
+    `turno_detail.dart`/`assistenza_detail.dart`) il `context` è stato
+    aggiunto come parametro esplicito invece di rendere l'intera classe
+    stateful solo per questo.
+  - **Nella sezione preferenze del backup** (`kPrefModalitaChiara` in
+    `db/backup.dart`, come le altre preferenze di Impostazioni): è una
+    scelta di visualizzazione al pari di Navigazione/Tools attivi, non
+    stato di sessione locale come account/tutorial.
+  - **Test**: `test/providers/tema_provider_test.dart` (stesso pattern di
+    `tutorial_provider_test.dart` — primo provider "semplice" senza test
+    dedicato prima di questo). `flutter analyze` pulito, `flutter test`
+    verde (175/175).
 
 ---
 
@@ -2128,6 +2197,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   nascondere insieme le tab Attività (turni + assistenze) e Statistiche, e
   interruttore per spostare il tool Piano turni dalla tab Tools a una voce
   propria nella barra di navigazione.
+- ✅ **Impostazioni → Aspetto**: selettore Sistema/Chiaro/Scuro per il tema
+  dell'app (default: Sistema, segue il tema del device).
 - ✅ **Backend condiviso** (`backend/`, Go+PostgreSQL): API pubblica di sola
   lettura per ospedali (per città/regione), fogli turni e catalogo
   materiali + pagina admin (login) per gestirli uno alla volta o in blocco

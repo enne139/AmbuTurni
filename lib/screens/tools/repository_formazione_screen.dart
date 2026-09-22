@@ -148,13 +148,15 @@ class _RepositoryFormazioneContenutoState extends State<_RepositoryFormazioneCon
 
 class _Messaggio extends StatelessWidget {
   final IconData icona;
-  final Color iconaColore;
+  // Nullable (non un default costante) perché il colore "attenuato" di
+  // default dipende dal tema attivo, noto solo a runtime tramite BuildContext.
+  final Color? iconaColore;
   final String testo;
   final Widget? pulsante;
 
   const _Messaggio({
     required this.icona,
-    this.iconaColore = Colors.white38,
+    this.iconaColore,
     required this.testo,
     this.pulsante,
   });
@@ -164,9 +166,9 @@ class _Messaggio extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icona, size: 48, color: iconaColore),
+        Icon(icona, size: 48, color: iconaColore ?? coloreTesto(context, 0.38)),
         const SizedBox(height: 16),
-        Text(testo, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+        Text(testo, textAlign: TextAlign.center, style: TextStyle(color: coloreTesto(context, 0.7))),
         if (pulsante != null) ...[
           const SizedBox(height: 20),
           pulsante!,

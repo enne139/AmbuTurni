@@ -80,6 +80,14 @@ const kPrefAccountUsername = 'account_username';
 // di lasciar entrare nei contenuti riservati.
 const kPrefAccountDeveCambiarePassword = 'account_deve_cambiare_password';
 
+// Modalità di tema dell'app (Impostazioni → Aspetto, TemaProvider,
+// ModalitaTema): bool nullable, non un bool semplice — assente = "sistema"
+// (segue il tema del device), true/false = scelta esplicita chiara/scura.
+// Preferenza di visualizzazione come quelle di Navigazione/Tools attivi
+// (non locale al device come account/tutorial): inclusa nel backup, così il
+// tema scelto segue il resto delle preferenze su un ripristino.
+const kPrefModalitaChiara = 'modalita_chiara';
+
 // Tutorial di navigazione a schermo intero (widgets/tutorial_overlay.dart,
 // TutorialProvider): mostrato una sola volta al primo avvio, poi rivedibile
 // dal pulsante in Impostazioni → Navigazione. Stato puramente locale al

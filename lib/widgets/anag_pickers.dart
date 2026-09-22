@@ -130,11 +130,11 @@ class _PersonaPickerState extends State<PersonaPicker> {
       fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
         controller: ctrl,
         focusNode: focus,
-        style: const TextStyle(color: Colors.white, fontSize: 13),
+        style: TextStyle(color: coloreTesto(context), fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: '—',
-          hintStyle: const TextStyle(color: Colors.white38),
+          hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           // × deseleziona; + apre il dialog di creazione (sempre visibile, anche lista vuota)
@@ -145,7 +145,7 @@ class _PersonaPickerState extends State<PersonaPicker> {
                     focus.unfocus();
                     widget.onChanged(null);
                   },
-                  child: const Icon(Icons.clear, size: 14, color: Colors.white38),
+                  child: Icon(Icons.clear, size: 14, color: coloreTesto(context, 0.38)),
                 )
               : InkWell(
                   onTap: _creaPersona,
@@ -156,7 +156,7 @@ class _PersonaPickerState extends State<PersonaPicker> {
       optionsViewBuilder: (ctx, onSelected, options) => Align(
         alignment: Alignment.topLeft,
         child: Material(
-          color: kSurface,
+          color: Theme.of(context).colorScheme.surface,
           elevation: 8,
           borderRadius: BorderRadius.circular(8),
           child: ConstrainedBox(
@@ -301,11 +301,11 @@ class _OspedalePickerState extends State<OspedalePicker> {
       fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
         controller: ctrl,
         focusNode: focus,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: TextStyle(color: coloreTesto(context), fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Cerca ospedale...',
-          hintStyle: const TextStyle(color: Colors.white38),
-          prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white38),
+          hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
+          prefixIcon: Icon(Icons.search, size: 18, color: coloreTesto(context, 0.38)),
           suffixIcon: widget.selectedId != null
               ? InkWell(
                   onTap: () {
@@ -313,7 +313,7 @@ class _OspedalePickerState extends State<OspedalePicker> {
                     focus.unfocus();
                     widget.onChanged(null);
                   },
-                  child: const Icon(Icons.clear, size: 16, color: Colors.white38),
+                  child: Icon(Icons.clear, size: 16, color: coloreTesto(context, 0.38)),
                 )
               : InkWell(
                   onTap: _creaOspedale,
@@ -324,7 +324,7 @@ class _OspedalePickerState extends State<OspedalePicker> {
       optionsViewBuilder: (ctx, onSelected, options) => Align(
         alignment: Alignment.topLeft,
         child: Material(
-          color: kSurface,
+          color: Theme.of(context).colorScheme.surface,
           elevation: 8,
           borderRadius: BorderRadius.circular(8),
           child: ConstrainedBox(
@@ -342,7 +342,7 @@ class _OspedalePickerState extends State<OspedalePicker> {
                       children: [
                         Text(o.nome, style: const TextStyle(fontSize: 14)),
                         if (o.citta != null)
-                          Text(o.citta!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          Text(o.citta!, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
                       ],
                     ),
                   ),
@@ -460,11 +460,11 @@ class _MaterialePickerState extends State<MaterialePicker> {
       fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
         controller: ctrl,
         focusNode: focus,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: TextStyle(color: coloreTesto(context), fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Cerca materiale...',
-          hintStyle: const TextStyle(color: Colors.white38),
-          prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white38),
+          hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
+          prefixIcon: Icon(Icons.search, size: 18, color: coloreTesto(context, 0.38)),
           suffixIcon: widget.selectedId != null
               ? InkWell(
                   onTap: () {
@@ -472,7 +472,7 @@ class _MaterialePickerState extends State<MaterialePicker> {
                     focus.unfocus();
                     widget.onChanged(null);
                   },
-                  child: const Icon(Icons.clear, size: 16, color: Colors.white38),
+                  child: Icon(Icons.clear, size: 16, color: coloreTesto(context, 0.38)),
                 )
               : InkWell(
                   onTap: _creaMateriale,
@@ -483,7 +483,7 @@ class _MaterialePickerState extends State<MaterialePicker> {
       optionsViewBuilder: (ctx, onSelected, options) => Align(
         alignment: Alignment.topLeft,
         child: Material(
-          color: kSurface,
+          color: Theme.of(context).colorScheme.surface,
           elevation: 8,
           borderRadius: BorderRadius.circular(8),
           child: ConstrainedBox(

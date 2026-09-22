@@ -180,7 +180,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
             DropdownButtonFormField<String>(
               value: _associazioneId,
               hint: const Text('Seleziona associazione'),
-              dropdownColor: kSurface,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(),
               items: anag.associazioni.map((a) => DropdownMenuItem(value: a.id, child: Text(a.nome))).toList(),
               onChanged: (v) => setState(() => _associazioneId = v),
@@ -248,7 +248,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
     ];
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: kCardBorder),
+        border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -259,11 +259,11 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(children: [
-                Icon(r.icona, size: 16, color: Colors.white38),
+                Icon(r.icona, size: 16, color: coloreTesto(context, 0.38)),
                 const SizedBox(width: 8),
                 SizedBox(
                   width: 110,
-                  child: Text(r.label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  child: Text(r.label, style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 13)),
                 ),
                 Expanded(
                   child: PersonaPicker(

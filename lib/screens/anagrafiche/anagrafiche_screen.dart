@@ -268,13 +268,13 @@ class _SezioneOspedali extends StatelessWidget {
                 ),
               ),
             ]),
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Lascia vuoti per calcolarli automaticamente dall\'indirizzo.',
-                  style: TextStyle(fontSize: 12, color: Colors.white54),
+                  style: TextStyle(fontSize: 12, color: coloreTesto(context, 0.54)),
                 ),
               ),
             ),
@@ -628,14 +628,14 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                   else ...[
                     if (widget.onExport != null)
                       IconButton(
-                        icon: const Icon(Icons.upload_file, size: 18, color: Colors.white70),
+                        icon: Icon(Icons.upload_file, size: 18, color: coloreTesto(context, 0.7)),
                         onPressed: _handleExport,
                         visualDensity: VisualDensity.compact,
                         tooltip: 'Esporta',
                       ),
                     if (widget.onImport != null)
                       IconButton(
-                        icon: const Icon(Icons.download, size: 18, color: Colors.white70),
+                        icon: Icon(Icons.download, size: 18, color: coloreTesto(context, 0.7)),
                         onPressed: _handleImport,
                         visualDensity: VisualDensity.compact,
                         tooltip: 'Importa',
@@ -643,14 +643,14 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                   ],
                 // Pulsante aggiunta sempre visibile (non richiede di espandere prima)
                 IconButton(
-                  icon: const Icon(Icons.add, size: 20, color: Colors.white70),
+                  icon: Icon(Icons.add, size: 20, color: coloreTesto(context, 0.7)),
                   onPressed: widget.onAdd,
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Aggiungi',
                 ),
                 Icon(
                   _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.white38,
+                  color: coloreTesto(context, 0.38),
                   size: 20,
                 ),
               ],
@@ -684,7 +684,7 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(children: [
-              const Text('Ordina per', style: TextStyle(fontSize: 12, color: Colors.white38)),
+              Text('Ordina per', style: TextStyle(fontSize: 12, color: coloreTesto(context, 0.38))),
               const SizedBox(width: 8),
               _ChipOrdinamento(
                 label: 'Nome',
@@ -708,7 +708,7 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Text(
                 _query.isEmpty ? 'Nessun elemento' : 'Nessun risultato per "$_query"',
-                style: const TextStyle(color: Colors.white38, fontSize: 13),
+                style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13),
               ),
             )
           else
@@ -733,7 +733,7 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                     : (widget.colorOf != null ? const SizedBox(width: 14, height: 14) : null),
                 title: Text(widget.labelOf(item)),
                 subtitle: widget.sublabelOf(item) != null
-                    ? Text(widget.sublabelOf(item)!, style: const TextStyle(color: Colors.white54))
+                    ? Text(widget.sublabelOf(item)!, style: TextStyle(color: coloreTesto(context, 0.54)))
                     : null,
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   if (widget.countOf != null)
@@ -743,36 +743,36 @@ class _SezioneAnagState<T> extends State<_SezioneAnag<T>> {
                         margin: const EdgeInsets.only(right: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: coloreTesto(context).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           '${widget.countOf!(item)}',
-                          style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 11, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
                   if (widget.onMoveUp != null && _query.isEmpty && _ordinamento == null) ...[
                     IconButton(
-                      icon: Icon(Icons.arrow_upward, size: 16, color: canUp ? Colors.white54 : Colors.white12),
+                      icon: Icon(Icons.arrow_upward, size: 16, color: canUp ? coloreTesto(context, 0.54) : coloreTesto(context, 0.12)),
                       onPressed: canUp ? () => widget.onMoveUp!(item) : null,
                       visualDensity: VisualDensity.compact,
                     ),
                     IconButton(
-                      icon: Icon(Icons.arrow_downward, size: 16, color: canDown ? Colors.white54 : Colors.white12),
+                      icon: Icon(Icons.arrow_downward, size: 16, color: canDown ? coloreTesto(context, 0.54) : coloreTesto(context, 0.12)),
                       onPressed: canDown ? () => widget.onMoveDown!(item) : null,
                       visualDensity: VisualDensity.compact,
                     ),
                   ],
                   if (widget.onView != null)
                     IconButton(
-                      icon: const Icon(Icons.event_note, size: 18, color: Colors.white54),
+                      icon: Icon(Icons.event_note, size: 18, color: coloreTesto(context, 0.54)),
                       onPressed: () => widget.onView!(item),
                       visualDensity: VisualDensity.compact,
                       tooltip: 'Vedi turni',
                     ),
                   IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: Colors.white54),
+                    icon: Icon(Icons.edit, size: 18, color: coloreTesto(context, 0.54)),
                     onPressed: () => widget.onEdit(item),
                     visualDensity: VisualDensity.compact,
                   ),
@@ -815,16 +815,16 @@ class _ChipOrdinamento extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: attivo ? kPrimary.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
+          color: attivo ? kPrimary.withValues(alpha: 0.15) : coloreTesto(context).withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: attivo ? kPrimary.withValues(alpha: 0.5) : Colors.white24),
+          border: Border.all(color: attivo ? kPrimary.withValues(alpha: 0.5) : coloreTesto(context, 0.24)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: attivo ? kPrimary : Colors.white54,
+              color: attivo ? kPrimary : coloreTesto(context, 0.54),
               fontWeight: attivo ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
@@ -864,7 +864,7 @@ Future<void> _dialogNomeEColore(
               autofocus: true,
             ),
             const SizedBox(height: 16),
-            const Text('Colore', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Text('Colore', style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -880,9 +880,9 @@ Future<void> _dialogNomeEColore(
                     decoration: BoxDecoration(
                       color: c,
                       shape: BoxShape.circle,
-                      border: sel ? Border.all(color: Colors.white, width: 3) : null,
+                      border: sel ? Border.all(color: coloreTesto(context), width: 3) : null,
                     ),
-                    child: sel ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                    child: sel ? Icon(Icons.check, color: coloreTesto(context), size: 16) : null,
                   ),
                 );
               }).toList(),

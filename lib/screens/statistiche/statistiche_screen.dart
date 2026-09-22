@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
-import '../../utils/theme.dart' show kPrimary, colorFromHex;
+import '../../utils/theme.dart' show kPrimary, coloreTesto, colorFromHex;
 
 /// Schermata statistiche con filtro per associazione (chip).
 /// I dati vivono in StatisticheProvider (non più in uno stato locale): con
@@ -98,7 +98,7 @@ class _FiltroChip extends StatelessWidget {
         onSelected: (_) => onTap(),
         selectedColor: accent.withValues(alpha: 0.25),
         checkmarkColor: accent,
-        labelStyle: TextStyle(color: sel ? accent : Colors.white70),
+        labelStyle: TextStyle(color: sel ? accent : coloreTesto(context, 0.7)),
       ),
     );
   }
@@ -119,16 +119,16 @@ class _StatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: highlight ? kPrimary : Colors.white38, size: 22),
+            Icon(icon, color: highlight ? kPrimary : coloreTesto(context, 0.38), size: 22),
             const SizedBox(height: 8),
             Text(valore,
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: highlight ? kPrimary : Colors.white,
+                  color: highlight ? kPrimary : coloreTesto(context),
                 )),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            Text(label, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
           ],
         ),
       ),

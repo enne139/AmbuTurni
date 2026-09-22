@@ -279,7 +279,7 @@ class _Row extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 110, child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13))),
+            SizedBox(width: 110, child: Text(label, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13))),
             Expanded(child: Text(val, style: const TextStyle(fontSize: 13))),
           ],
         ),
@@ -309,7 +309,7 @@ class _NoteCard extends StatelessWidget {
               children: [
                 const Text('Note', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
                 IconButton(
-                  icon: const Icon(Icons.edit, size: 18, color: Colors.white60),
+                  icon: Icon(Icons.edit, size: 18, color: coloreTesto(context, 0.6)),
                   onPressed: onModifica,
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Modifica note',
@@ -319,7 +319,7 @@ class _NoteCard extends StatelessWidget {
             const Divider(height: 8),
             const SizedBox(height: 8),
             vuote
-                ? const Text('Nessuna nota', style: TextStyle(fontSize: 13, color: Colors.white38, fontStyle: FontStyle.italic))
+                ? Text('Nessuna nota', style: TextStyle(fontSize: 13, color: coloreTesto(context, 0.38), fontStyle: FontStyle.italic))
                 : NotaMarkdown(data: note!),
           ],
         ),
@@ -367,22 +367,26 @@ class _EquipaggioCard extends StatelessWidget {
           children: [
             const Text('Equipaggio', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
             const Divider(height: 16),
-            if (_ha2aParte) ..._righeAffiancate() else ..._righeSingole(),
+            if (_ha2aParte) ..._righeAffiancate(context) else ..._righeSingole(context),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _righeAffiancate() {
+  // context passato esplicitamente (non ambientale come in una State):
+  // queste sono classi StatelessWidget prive di un campo `context` proprio,
+  // a differenza dei metodi di _NoteCard/_Row sopra che vivono dentro
+  // build(BuildContext context) e lo hanno già in scope.
+  List<Widget> _righeAffiancate(BuildContext context) {
     return [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 6),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 6),
         child: Row(children: [
-          SizedBox(width: 72),
-          Expanded(child: Text('1ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
-          SizedBox(width: 12),
-          Expanded(child: Text('2ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
+          const SizedBox(width: 72),
+          Expanded(child: Text('1ª parte', style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12))),
+          const SizedBox(width: 12),
+          Expanded(child: Text('2ª parte', style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12))),
         ]),
       ),
       ..._ruoliCompilati.map((r) => Padding(
@@ -390,21 +394,21 @@ class _EquipaggioCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-                Expanded(child: _valorePersona(r.v1)),
+                SizedBox(width: 72, child: Text(r.label, style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 12))),
+                Expanded(child: _valorePersona(r.v1, context)),
                 const SizedBox(width: 12),
-                Expanded(child: _valorePersona(r.v2)),
+                Expanded(child: _valorePersona(r.v2, context)),
               ],
             ),
           )),
     ];
   }
 
-  List<Widget> _righeSingole() => _ruoliCompilati
+  List<Widget> _righeSingole(BuildContext context) => _ruoliCompilati
       .map((r) => Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(children: [
-              SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+              SizedBox(width: 72, child: Text(r.label, style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 12))),
               Text(_n(r.v1), style: const TextStyle(fontSize: 13)),
             ]),
           ))
@@ -412,8 +416,8 @@ class _EquipaggioCard extends StatelessWidget {
 
   /// Nome della persona, oppure un trattino attenuato se il ruolo non è
   /// coperto in questa parte del turno.
-  Widget _valorePersona(String? id) => id == null
-      ? const Text('—', style: TextStyle(fontSize: 13, color: Colors.white24))
+  Widget _valorePersona(String? id, BuildContext context) => id == null
+      ? Text('—', style: TextStyle(fontSize: 13, color: coloreTesto(context, 0.24)))
       : Text(_n(id), style: const TextStyle(fontSize: 13));
 }
 
@@ -454,7 +458,7 @@ class _ServizioCard extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: Colors.white12,
+                color: coloreTesto(context, 0.12),
                 borderRadius: BorderRadius.circular(6),
               ),
               alignment: Alignment.center,
@@ -472,11 +476,11 @@ class _ServizioCard extends StatelessWidget {
                   ]),
                   if (osp != null) ...[
                     const SizedBox(height: 4),
-                    Text(osp.label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text(osp.label, style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 12)),
                   ],
                   if (s.descrizione != null && s.descrizione!.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    NotaMarkdown(data: s.descrizione!, fontSize: 12, color: Colors.white54),
+                    NotaMarkdown(data: s.descrizione!, fontSize: 12, color: coloreTesto(context, 0.54)),
                   ],
                 ],
               ),
@@ -485,13 +489,13 @@ class _ServizioCard extends StatelessWidget {
             Column(
               children: [
                 IconButton(
-                  icon: Icon(Icons.arrow_upward, size: 18, color: onSu != null ? Colors.white60 : Colors.white24),
+                  icon: Icon(Icons.arrow_upward, size: 18, color: onSu != null ? coloreTesto(context, 0.6) : coloreTesto(context, 0.24)),
                   onPressed: onSu,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                 ),
                 IconButton(
-                  icon: Icon(Icons.arrow_downward, size: 18, color: onGiu != null ? Colors.white60 : Colors.white24),
+                  icon: Icon(Icons.arrow_downward, size: 18, color: onGiu != null ? coloreTesto(context, 0.6) : coloreTesto(context, 0.24)),
                   onPressed: onGiu,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
@@ -499,7 +503,7 @@ class _ServizioCard extends StatelessWidget {
               ],
             ),
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 18, color: Colors.white54),
+              icon: Icon(Icons.more_vert, size: 18, color: coloreTesto(context, 0.54)),
               onSelected: (v) {
                 if (v == 'edit') onEdit();
                 if (v == 'del') onDelete();

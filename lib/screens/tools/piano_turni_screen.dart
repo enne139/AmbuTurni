@@ -439,27 +439,27 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: coloreTesto(context).withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline, size: 16, color: Colors.white54),
+                Icon(Icons.info_outline, size: 16, color: coloreTesto(context, 0.54)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(_messaggioPrimoAvvio!,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 13)),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
         ],
-        const Text(
+        Text(
           'Incolla il link del foglio Google dei turni del mese '
           '(condiviso con "chiunque abbia il link").',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
+          style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 13),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -521,7 +521,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       child: ListTile(
         dense: true,
         leading: Icon(Icons.table_chart_outlined,
-            color: caricato ? kPrimary : Colors.white54, size: 20),
+            color: caricato ? kPrimary : coloreTesto(context, 0.54), size: 20),
         title: Text(_etichettaMese(chiave)),
         subtitle: caricato
             ? const Text('Caricato', style: TextStyle(color: kPrimary, fontSize: 11))
@@ -530,12 +530,12 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(Icons.copy_outlined, color: Colors.white38, size: 20),
+              icon: Icon(Icons.copy_outlined, color: coloreTesto(context, 0.38), size: 20),
               tooltip: 'Copia link',
               onPressed: () => _copiaLink(_fogliSalvati[chiave]!),
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 20),
+              icon: Icon(Icons.delete_outline, color: coloreTesto(context, 0.38), size: 20),
               tooltip: 'Rimuovi dai salvati',
               onPressed: () => _eliminaFoglio(chiave),
             ),
@@ -594,7 +594,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 leading: Icon(Icons.table_chart_outlined,
                     color: _piano != null && chiave == _chiaveMese(_piano!)
                         ? kPrimary
-                        : Colors.white54,
+                        : coloreTesto(context, 0.54),
                     size: 20),
                 title: Text(_etichettaMese(chiave)),
                 onTap: () {
@@ -669,7 +669,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                     ? 'nessun buco'
                     : (buchiGiorno.length == 1 ? '1 buco' : '${buchiGiorno.length} buchi'),
                 style: TextStyle(
-                  color: buchiGiorno.isEmpty ? Colors.white54 : kPrimary,
+                  color: buchiGiorno.isEmpty ? coloreTesto(context, 0.54) : kPrimary,
                   fontSize: 13,
                   fontWeight: buchiGiorno.isEmpty ? FontWeight.normal : FontWeight.w600,
                 ),
@@ -679,10 +679,10 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
         ),
         Expanded(
           child: slotsGiorno.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     'Nessun dato per questo giorno',
-                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13),
                   ),
                 )
               : _dettaglioGiorno(slotsGiorno),
@@ -701,7 +701,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     final chiave = _chiaveMeseOffset(piano, delta);
     final disponibile = _fogliSalvati.containsKey(chiave);
     return IconButton(
-      icon: Icon(icon, color: disponibile ? Colors.white70 : Colors.white24),
+      icon: Icon(icon, color: disponibile ? coloreTesto(context, 0.7) : coloreTesto(context, 0.24)),
       tooltip: disponibile
           ? '$etichetta (${_etichettaMese(chiave)})'
           : '$etichetta — nessun foglio salvato',
@@ -742,7 +742,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               decoration: BoxDecoration(shape: BoxShape.circle, color: colore),
             ),
             const SizedBox(width: 3),
-            Text(testo, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+            Text(testo, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 10)),
           ],
         );
     return Padding(
@@ -782,8 +782,8 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               child: Center(
                 child: Text(
                   g,
-                  style: const TextStyle(
-                      color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      color: coloreTesto(context, 0.38), fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -839,7 +839,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             borderRadius: BorderRadius.circular(8),
             border: selezionato
                 ? Border.all(color: kPrimary)
-                : (isOggi ? Border.all(color: Colors.white24) : null),
+                : (isOggi ? Border.all(color: coloreTesto(context, 0.24)) : null),
           ),
           child: Stack(
             children: [
@@ -854,8 +854,8 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                         // Giorno senza scheda nel foglio: numero attenuato, così i
                         // giorni "senza dati" non sembrano giorni senza buchi.
                         color: slots.isEmpty
-                            ? Colors.white24
-                            : (isOggi ? kPrimary : Colors.white),
+                            ? coloreTesto(context, 0.24)
+                            : (isOggi ? kPrimary : coloreTesto(context)),
                         fontWeight:
                             selezionato || isOggi ? FontWeight.bold : FontWeight.normal,
                       ),
@@ -1105,11 +1105,11 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 if (orario != null) ...[
                   Text(
                     primo.orario,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.edit_calendar_outlined,
-                        size: 20, color: Colors.white70),
+                    icon: Icon(Icons.edit_calendar_outlined,
+                        size: 20, color: coloreTesto(context, 0.7)),
                     tooltip: 'Aggiungi al calendario',
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -1122,18 +1122,18 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             // Intestazione delle due colonne del foglio (C = chi è di turno,
             // D = possibili sostituti): senza, i nomi della seconda colonna
             // sembrerebbero un secondo membro dell'equipaggio.
-            const Padding(
-              padding: EdgeInsets.only(bottom: 2),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
               child: Row(
                 children: [
-                  SizedBox(width: 90),
+                  const SizedBox(width: 90),
                   Expanded(
                     child: Text('DI TURNO',
-                        style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 10, fontWeight: FontWeight.w600)),
                   ),
                   Expanded(
                     child: Text('SOSTITUTI',
-                        style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 10, fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
@@ -1184,7 +1184,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
           SizedBox(
             width: 90,
             child: Text(etichetta,
-                style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13)),
           ),
           if (slot.buco)
             Expanded(
@@ -1194,7 +1194,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               child: Text(
                 escluso ? '—' : 'MANCANTE',
                 style: TextStyle(
-                  color: escluso ? Colors.white30 : kPrimary,
+                  color: escluso ? coloreTesto(context, 0.3) : kPrimary,
                   fontSize: 13,
                   fontWeight: escluso ? FontWeight.normal : FontWeight.bold,
                 ),
@@ -1208,7 +1208,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               child: _nomeConSegnalino(
                 slot.titolare.isEmpty ? '—' : slot.titolare,
                 TextStyle(
-                  color: slot.titolare.isEmpty ? Colors.white30 : Colors.white,
+                  color: slot.titolare.isEmpty ? coloreTesto(context, 0.3) : coloreTesto(context),
                   fontSize: 13,
                 ),
                 _matchNomeCercato(slot.titolare) && slot.sostituti.isEmpty,
@@ -1218,7 +1218,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               child: _nomeConSegnalino(
                 slot.sostituti.isEmpty ? '—' : slot.sostituti,
                 TextStyle(
-                  color: slot.sostituti.isEmpty ? Colors.white30 : Colors.white70,
+                  color: slot.sostituti.isEmpty ? coloreTesto(context, 0.3) : coloreTesto(context, 0.7),
                   fontSize: 13,
                   fontStyle: slot.sostituti.isEmpty ? FontStyle.normal : FontStyle.italic,
                 ),
@@ -1233,8 +1233,8 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               width: 26,
               height: 20,
               child: IconButton(
-                icon: const Icon(Icons.edit_calendar_outlined,
-                    size: 16, color: Colors.white70),
+                icon: Icon(Icons.edit_calendar_outlined,
+                    size: 16, color: coloreTesto(context, 0.7)),
                 tooltip: 'Aggiungi al calendario (${slot.orario})',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -1306,10 +1306,10 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
         title: TextField(
           controller: _ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: coloreTesto(context)),
+          decoration: InputDecoration(
             hintText: 'Cerca nome o cognome...',
-            hintStyle: TextStyle(color: Colors.white38),
+            hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
             border: InputBorder.none,
           ),
           // Niente debounce: la ricerca è su una lista già in memoria.
@@ -1320,17 +1320,17 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
         ),
       ),
       body: _query.trim().isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
                 'Scrivi parte del nome per cercarlo nei turni del mese',
-                style: TextStyle(color: Colors.white38, fontSize: 13),
+                style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13),
               ),
             )
           : risultati.isEmpty
               ? Center(
                   child: Text(
                     'Nessun turno trovato per "${_query.trim()}"',
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                    style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13),
                   ),
                 )
               : ListView.builder(
@@ -1344,7 +1344,7 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
                           risultati.length == 1
                               ? '1 turno trovato'
                               : '${risultati.length} turni trovati',
-                          style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12),
                         ),
                       );
                     }
@@ -1393,7 +1393,7 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
             if (slot.titolare.isNotEmpty) 'Di turno: ${slot.titolare}',
             if (slot.sostituti.isNotEmpty) 'Sost.: ${slot.sostituti}',
           ].join(' · '),
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 12),
         ),
         onTap: () => Navigator.pop(context, slot.giorno),
       ),

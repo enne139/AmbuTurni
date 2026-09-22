@@ -30,6 +30,8 @@ class ImpostazioniScreen extends StatelessWidget {
           Divider(height: 24),
           _SezioneNavigazione(),
           Divider(height: 24),
+          _SezioneAspetto(),
+          Divider(height: 24),
           _SezioneToolsAttivi(),
           Divider(height: 24),
           _SezioneBackendCondiviso(),
@@ -178,8 +180,8 @@ class _SezioneBackupState extends State<_SezioneBackup> {
                     icon: const Icon(Icons.download, size: 18),
                     label: const Text('Importa JSON'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: const BorderSide(color: Colors.white24),
+                      foregroundColor: coloreTesto(context, 0.7),
+                      side: BorderSide(color: coloreTesto(context, 0.24)),
                     ),
                     onPressed: _import,
                   ),
@@ -192,8 +194,8 @@ class _SezioneBackupState extends State<_SezioneBackup> {
                   icon: const Icon(Icons.table_rows_outlined, size: 18),
                   label: const Text('Esporta JSON leggibile (turni e assistenze)'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white54,
-                    side: const BorderSide(color: Colors.white12),
+                    foregroundColor: coloreTesto(context, 0.54),
+                    side: BorderSide(color: coloreTesto(context, 0.12)),
                   ),
                   onPressed: _exportSemplificato,
                 ),
@@ -249,7 +251,7 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
                 ),
                 Icon(
                   _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.white38,
+                  color: coloreTesto(context, 0.38),
                   size: 20,
                 ),
               ],
@@ -268,7 +270,7 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pagina principale', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text('Pagina principale', style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 13)),
                   const SizedBox(height: 8),
                   SegmentedButton<PaginaPrincipale>(
                     segments: [
@@ -294,10 +296,10 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     title: const Text('Attività e Statistiche'),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Disattiva se non usi la gestione turni/assistenze di questa app: '
                       'nasconde anche le Statistiche, che le riguardano.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: coloreTesto(context, 0.54)),
                     ),
                     value: nav.attivitaStatisticheAttive,
                     activeTrackColor: kPrimary,
@@ -307,10 +309,10 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     title: const Text('Piano turni nella barra di navigazione'),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Sposta il tool Piano turni dalla tab Tools a una voce propria in basso, '
                       'e lo imposta come pagina principale.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: coloreTesto(context, 0.54)),
                     ),
                     value: nav.pianoTurniInNavbar,
                     activeTrackColor: kPrimary,
@@ -319,10 +321,92 @@ class _SezioneNavigazioneState extends State<_SezioneNavigazione> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    leading: const Icon(Icons.school_outlined, color: Colors.white70),
+                    leading: Icon(Icons.school_outlined, color: coloreTesto(context, 0.7)),
                     title: const Text('Rivedi il tutorial di navigazione'),
-                    trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+                    trailing: Icon(Icons.chevron_right, color: coloreTesto(context, 0.38)),
                     onTap: () => context.read<TutorialProvider>().richiediReplay(),
+                  ),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Aspetto (tema chiaro/scuro)
+// ---------------------------------------------------------------------------
+
+/// Selettore Sistema/Chiaro/Scuro (TemaProvider): l'app nasce con un solo
+/// tema scuro fisso, questa sezione aggiunge tema chiaro e la possibilità di
+/// seguire il tema del sistema operativo (default). Collassata di default
+/// come le altre sezioni di configurazione (Tools attivi, Backend
+/// condiviso): non è qualcosa che si tocca spesso.
+class _SezioneAspetto extends StatefulWidget {
+  const _SezioneAspetto();
+
+  @override
+  State<_SezioneAspetto> createState() => _SezioneAspettoState();
+}
+
+class _SezioneAspettoState extends State<_SezioneAspetto> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = context.watch<TemaProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.palette_outlined, size: 18, color: kPrimary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Aspetto',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: coloreTesto(context, 0.38),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          if (!tema.caricato)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: LinearProgressIndicator(),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '"Sistema" segue il tema chiaro/scuro del device.',
+                    style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ModalitaTema>(
+                    segments: const [
+                      ButtonSegment(value: ModalitaTema.sistema, label: Text('Sistema')),
+                      ButtonSegment(value: ModalitaTema.chiaro, label: Text('Chiaro')),
+                      ButtonSegment(value: ModalitaTema.scuro, label: Text('Scuro')),
+                    ],
+                    selected: {tema.modalita},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (s) =>
+                        context.read<TemaProvider>().setModalita(s.first),
                   ),
                 ],
               ),
@@ -383,7 +467,7 @@ class _SezioneToolsAttiviState extends State<_SezioneToolsAttivi> {
                 const SizedBox(width: 4),
                 Icon(
                   _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.white38,
+                  color: coloreTesto(context, 0.38),
                   size: 20,
                 ),
               ],
@@ -399,9 +483,9 @@ class _SezioneToolsAttiviState extends State<_SezioneToolsAttivi> {
           else
             ...kToolsDisponibili.map((t) => SwitchListTile(
                   dense: true,
-                  secondary: Icon(t.icon, color: Colors.white70),
+                  secondary: Icon(t.icon, color: coloreTesto(context, 0.7)),
                   title: Text(t.titolo),
-                  subtitle: Text(t.sottotitolo, style: const TextStyle(color: Colors.white54)),
+                  subtitle: Text(t.sottotitolo, style: TextStyle(color: coloreTesto(context, 0.54))),
                   value: tools.attivo(t.id),
                   activeTrackColor: kPrimary,
                   onChanged: (v) => context.read<ToolsProvider>().setAttivo(t.id, v),
@@ -488,7 +572,7 @@ class _SezioneBackendCondivisoState extends State<_SezioneBackendCondiviso> {
                 ),
                 Icon(
                   _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.white38,
+                  color: coloreTesto(context, 0.38),
                   size: 20,
                 ),
               ],
@@ -510,7 +594,7 @@ class _SezioneBackendCondivisoState extends State<_SezioneBackendCondiviso> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Indirizzo del server'),
-                    subtitle: Text(_url, style: const TextStyle(color: Colors.white54)),
+                    subtitle: Text(_url, style: TextStyle(color: coloreTesto(context, 0.54))),
                     trailing: OutlinedButton(
                       onPressed: _configuraServer,
                       child: const Text('Cambia'),
@@ -520,9 +604,9 @@ class _SezioneBackendCondivisoState extends State<_SezioneBackendCondiviso> {
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     title: const Text('Sincronizza fogli turni'),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Scarica automaticamente i nuovi mesi salvati sul backend nel tool Piano turni.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: coloreTesto(context, 0.54)),
                     ),
                     value: _syncFogli,
                     activeTrackColor: kPrimary,
@@ -678,7 +762,7 @@ class _SezioneAccountState extends State<_SezioneAccount> {
                 ),
                 Icon(
                   _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.white38,
+                  color: coloreTesto(context, 0.38),
                   size: 20,
                 ),
               ],
@@ -708,9 +792,9 @@ class _SezioneAccountState extends State<_SezioneAccount> {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.check_circle_outline, color: kPrimary),
           title: Text('Accesso effettuato come ${account.username}'),
-          subtitle: const Text(
+          subtitle: Text(
             'Sblocca Repository formazione e Archivio comunicati.',
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(color: coloreTesto(context, 0.54)),
           ),
         ),
         Row(
@@ -752,7 +836,7 @@ class _VersioneApp extends StatelessWidget {
           child: Center(
             child: Text(
               info == null ? '' : 'AmbuTurni v${info.version}+${info.buildNumber}',
-              style: const TextStyle(color: Colors.white24, fontSize: 12),
+              style: TextStyle(color: coloreTesto(context, 0.24), fontSize: 12),
             ),
           ),
         );

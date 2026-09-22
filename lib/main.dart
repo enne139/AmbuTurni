@@ -32,25 +32,34 @@ class AmbuTurniApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NavigazioneProvider()),
         ChangeNotifierProvider(create: (_) => TutorialProvider()),
         ChangeNotifierProvider(create: (_) => AccountProvider()),
+        ChangeNotifierProvider(create: (_) => TemaProvider()),
       ],
-      child: MaterialApp(
-        title: 'AmbuTurni',
-        debugShowCheckedModeBanner: false,
-        theme: buildDarkTheme(),
-        // Solo per i widget Material nativi (es. showDatePicker in
-        // turno_form.dart/assistenza_form.dart): il resto dell'app non usa
-        // flutter_localizations, tutte le stringhe sono già fisse in
-        // italiano (vedi CLAUDE.md). locale fissato a 'it' invece di seguire
-        // quella del sistema, coerente col resto dell'app che non segue mai
-        // la lingua del device.
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [Locale('it')],
-        locale: const Locale('it'),
-        home: const AppNavigator(),
+      child: Consumer<TemaProvider>(
+        builder: (context, tema, _) => MaterialApp(
+          title: 'AmbuTurni',
+          debugShowCheckedModeBanner: false,
+          theme: buildLightTheme(),
+          darkTheme: buildDarkTheme(),
+          // Prima del caricamento di TemaProvider (SharedPreferences è
+          // asincrono) il default è `sistema`, identico al valore che
+          // carica() risolve in assenza di una preferenza salvata: nessun
+          // flash per chi non ha mai forzato chiaro/scuro esplicitamente.
+          themeMode: tema.themeMode,
+          // Solo per i widget Material nativi (es. showDatePicker in
+          // turno_form.dart/assistenza_form.dart): il resto dell'app non usa
+          // flutter_localizations, tutte le stringhe sono già fisse in
+          // italiano (vedi CLAUDE.md). locale fissato a 'it' invece di seguire
+          // quella del sistema, coerente col resto dell'app che non segue mai
+          // la lingua del device.
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('it')],
+          locale: const Locale('it'),
+          home: const AppNavigator(),
+        ),
       ),
     );
   }

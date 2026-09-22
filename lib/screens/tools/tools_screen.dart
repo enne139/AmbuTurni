@@ -44,13 +44,13 @@ class ToolsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Tools')),
       body: attivi.isEmpty
-          ? const Center(
+          ? Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Text(
                   'Nessun tool attivo: abilitali da Impostazioni → Tools attivi.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(color: coloreTesto(context, 0.54)),
                 ),
               ),
             )

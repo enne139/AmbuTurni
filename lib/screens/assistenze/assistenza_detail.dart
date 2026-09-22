@@ -152,7 +152,7 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 110, child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13))),
+          SizedBox(width: 110, child: Text(label, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13))),
           Expanded(child: Text(val, style: const TextStyle(fontSize: 13))),
         ]),
       );
@@ -195,22 +195,25 @@ class _EquipaggioCard extends StatelessWidget {
           children: [
             const Text('Equipaggio', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
             const Divider(height: 16),
-            if (_ha2aParte) ..._righeAffiancate() else ..._righeSingole(),
+            if (_ha2aParte) ..._righeAffiancate(context) else ..._righeSingole(context),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _righeAffiancate() {
+  // context passato esplicitamente: queste classi StatelessWidget non hanno
+  // un campo `context` proprio come una State, a differenza dei metodi di
+  // _NoteCard/_Row sopra che vivono già dentro build(BuildContext context).
+  List<Widget> _righeAffiancate(BuildContext context) {
     return [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 6),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 6),
         child: Row(children: [
-          SizedBox(width: 72),
-          Expanded(child: Text('1ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
-          SizedBox(width: 12),
-          Expanded(child: Text('2ª parte', style: TextStyle(color: Colors.white54, fontSize: 12))),
+          const SizedBox(width: 72),
+          Expanded(child: Text('1ª parte', style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12))),
+          const SizedBox(width: 12),
+          Expanded(child: Text('2ª parte', style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12))),
         ]),
       ),
       ..._ruoliCompilati.map((r) => Padding(
@@ -218,28 +221,28 @@ class _EquipaggioCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-                Expanded(child: _valorePersona(r.v1)),
+                SizedBox(width: 72, child: Text(r.label, style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 12))),
+                Expanded(child: _valorePersona(r.v1, context)),
                 const SizedBox(width: 12),
-                Expanded(child: _valorePersona(r.v2)),
+                Expanded(child: _valorePersona(r.v2, context)),
               ],
             ),
           )),
     ];
   }
 
-  List<Widget> _righeSingole() => _ruoliCompilati
+  List<Widget> _righeSingole(BuildContext context) => _ruoliCompilati
       .map((r) => Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(children: [
-              SizedBox(width: 72, child: Text(r.label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+              SizedBox(width: 72, child: Text(r.label, style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 12))),
               Text(_n(r.v1), style: const TextStyle(fontSize: 13)),
             ]),
           ))
       .toList();
 
-  Widget _valorePersona(String? id) => id == null
-      ? const Text('—', style: TextStyle(fontSize: 13, color: Colors.white24))
+  Widget _valorePersona(String? id, BuildContext context) => id == null
+      ? Text('—', style: TextStyle(fontSize: 13, color: coloreTesto(context, 0.24)))
       : Text(_n(id), style: const TextStyle(fontSize: 13));
 }
 
@@ -265,7 +268,7 @@ class _NoteCard extends StatelessWidget {
               children: [
                 const Text('Note', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
                 IconButton(
-                  icon: const Icon(Icons.edit, size: 18, color: Colors.white60),
+                  icon: Icon(Icons.edit, size: 18, color: coloreTesto(context, 0.6)),
                   onPressed: onModifica,
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Modifica note',
@@ -275,7 +278,7 @@ class _NoteCard extends StatelessWidget {
             const Divider(height: 8),
             const SizedBox(height: 8),
             vuote
-                ? const Text('Nessuna nota', style: TextStyle(fontSize: 13, color: Colors.white38, fontStyle: FontStyle.italic))
+                ? Text('Nessuna nota', style: TextStyle(fontSize: 13, color: coloreTesto(context, 0.38), fontStyle: FontStyle.italic))
                 : NotaMarkdown(data: note!),
           ],
         ),

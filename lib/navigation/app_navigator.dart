@@ -57,6 +57,7 @@ class _AppNavigatorState extends State<AppNavigator> {
       context.read<AnagraficheProvider>().carica();
       context.read<ToolsProvider>().carica();
       context.read<AccountProvider>().carica();
+      context.read<TemaProvider>().carica();
       final nav = context.read<NavigazioneProvider>();
       await nav.carica();
       // Pagina principale scelta in Impostazioni → Navigazione: applicata
@@ -269,10 +270,10 @@ class _AttivitaTabState extends State<_AttivitaTab> {
           // galleggiare al centro con la dimensione minima.
           expandedInsets: EdgeInsets.zero,
           style: SegmentedButton.styleFrom(
-            foregroundColor: Colors.white70,
-            selectedForegroundColor: Colors.white,
+            foregroundColor: coloreTesto(context, 0.7),
+            selectedForegroundColor: coloreTesto(context),
             selectedBackgroundColor: kPrimary.withValues(alpha: 0.25),
-            side: const BorderSide(color: kCardBorder),
+            side: BorderSide(color: Theme.of(context).dividerColor),
             visualDensity: VisualDensity.compact,
             textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),

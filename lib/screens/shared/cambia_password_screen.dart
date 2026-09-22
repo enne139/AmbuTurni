@@ -92,13 +92,13 @@ class _CambiaPasswordFormState extends State<CambiaPasswordForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (widget.forzato) ...[
-              const Icon(Icons.password_outlined, size: 40, color: Colors.white38),
+              Icon(Icons.password_outlined, size: 40, color: coloreTesto(context, 0.38)),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 "La password è ancora quella provvisoria assegnata "
                 "dall'amministratore: impostane una nuova per continuare.",
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: coloreTesto(context, 0.7)),
               ),
               const SizedBox(height: 20),
             ],

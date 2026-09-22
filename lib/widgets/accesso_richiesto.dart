@@ -94,12 +94,12 @@ class _LoginFormState extends State<LoginForm> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.lock_outline, size: 40, color: Colors.white38),
+          Icon(Icons.lock_outline, size: 40, color: coloreTesto(context, 0.38)),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             "Contenuto riservato: accedi con le credenziali fornite dall'associazione.",
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(color: coloreTesto(context, 0.7)),
           ),
           const SizedBox(height: 20),
           TextFormField(

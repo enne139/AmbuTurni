@@ -125,13 +125,13 @@ class _PassoTutorial extends StatelessWidget {
                     children: [
                       Text(passo.titolo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
-                      Text(passo.descrizione, style: const TextStyle(color: Colors.white70)),
+                      Text(passo.descrizione, style: TextStyle(color: coloreTesto(context, 0.7))),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           TextButton(onPressed: onSalta, child: const Text('Salta')),
-                          Text('${indice + 1}/$totale', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                          Text('${indice + 1}/$totale', style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 12)),
                           FilledButton(
                             onPressed: onAvanti,
                             child: Text(indice + 1 == totale ? 'Fine' : 'Avanti'),

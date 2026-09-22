@@ -230,7 +230,7 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
                 ? 'Nessun ospedale in anagrafica.\nSi aggiungono da Impostazioni → Ospedali.'
                 : 'Nessun ospedale trovato.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54),
+            style: TextStyle(color: coloreTesto(context, 0.54)),
           ),
         ),
       );
@@ -275,15 +275,15 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
   Widget _buildMappa(List<Ospedale> ospedali) {
     final conCoordinate = ospedali.where((o) => o.haCoordinate).toList();
     if (conCoordinate.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Text(
             'Nessun ospedale ha ancora una posizione sulla mappa.\n'
             'Le coordinate si calcolano da sole quando salvi un indirizzo '
             'in Impostazioni → Ospedali.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(color: coloreTesto(context, 0.54)),
           ),
         ),
       );
@@ -335,7 +335,7 @@ class _ListaOspedaliScreenState extends State<ListaOspedaliScreen> {
                 const SizedBox(height: 4),
                 Text(
                   [o.via, o.citta].whereType<String>().where((s) => s.isNotEmpty).join(', '),
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(color: coloreTesto(context, 0.7)),
                 ),
               ],
               const SizedBox(height: 16),
@@ -392,8 +392,8 @@ class _OspedaleCard extends StatelessWidget {
       child: ListTile(
         title: Text(o.nome, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: haIndirizzo
-            ? Text(indirizzo, style: const TextStyle(color: Colors.white54))
-            : const Text('Nessun indirizzo salvato', style: TextStyle(color: Colors.white38)),
+            ? Text(indirizzo, style: TextStyle(color: coloreTesto(context, 0.54)))
+            : Text('Nessun indirizzo salvato', style: TextStyle(color: coloreTesto(context, 0.38))),
         trailing: PopupMenuButton<_AppNavigazione>(
           icon: const Icon(Icons.directions, color: kPrimary),
           tooltip: 'Naviga',
@@ -546,7 +546,7 @@ class _SceltaLuogoDialogState extends State<_SceltaLuogoDialog> {
           Text(
             'Elenco non disponibile (${_errore ?? 'errore sconosciuto'}). '
             'Puoi comunque digitare una $_etichetta.',
-            style: const TextStyle(color: Colors.white54, fontSize: 13),
+            style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -560,9 +560,9 @@ class _SceltaLuogoDialogState extends State<_SceltaLuogoDialog> {
       );
     }
     if (_luoghi!.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Text('Il server non ha ancora nessun ospedale.', style: TextStyle(color: Colors.white54)),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text('Il server non ha ancora nessun ospedale.', style: TextStyle(color: coloreTesto(context, 0.54))),
       );
     }
     final filtrati = _filtrati;
@@ -579,7 +579,7 @@ class _SceltaLuogoDialogState extends State<_SceltaLuogoDialog> {
         SizedBox(
           height: 280,
           child: filtrati.isEmpty
-              ? const Center(child: Text('Nessun risultato.', style: TextStyle(color: Colors.white38)))
+              ? Center(child: Text('Nessun risultato.', style: TextStyle(color: coloreTesto(context, 0.38))))
               : ListView.builder(
                   shrinkWrap: true,
                   itemCount: filtrati.length,

@@ -115,6 +115,10 @@ Future<String?> exportBackup() async {
     kPrefPaginaPrincipale: prefs.getString(kPrefPaginaPrincipale),
     kPrefAttivitaStatisticheAttive: prefs.getBool(kPrefAttivitaStatisticheAttive),
     kPrefPianoTurniInNavbar: prefs.getBool(kPrefPianoTurniInNavbar),
+    // Modalità di tema (Impostazioni → Aspetto): null se mai toccata (segue
+    // il sistema, il default), true/false se l'utente ha forzato
+    // esplicitamente chiaro/scuro.
+    kPrefModalitaChiara: prefs.getBool(kPrefModalitaChiara),
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(payload);
@@ -434,6 +438,14 @@ Future<String> importBackup() async {
     final pianoTurniInNavbar = preferenze[kPrefPianoTurniInNavbar];
     if (pianoTurniInNavbar is bool) {
       await prefs.setBool(kPrefPianoTurniInNavbar, pianoTurniInNavbar);
+    }
+    // Booleano: stessa eccezione di sopra, `false` è un valore esplicito
+    // valido (tema scuro forzato prima del backup, non "sistema"). Il campo
+    // assente nel backup lascia la preferenza del device (sistema di
+    // default) invece di forzarla a "sistema" esplicitamente.
+    final modalitaChiara = preferenze[kPrefModalitaChiara];
+    if (modalitaChiara is bool) {
+      await prefs.setBool(kPrefModalitaChiara, modalitaChiara);
     }
   }
 

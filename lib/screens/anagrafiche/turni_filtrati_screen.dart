@@ -49,8 +49,8 @@ class _TurniPersonaScreenState extends State<TurniPersonaScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : (_turni.isEmpty && _assistenze.isEmpty)
-              ? const Center(
-                  child: Text('Nessun turno o assistenza trovati', style: TextStyle(color: Colors.white54)),
+              ? Center(
+                  child: Text('Nessun turno o assistenza trovati', style: TextStyle(color: coloreTesto(context, 0.54))),
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -120,7 +120,7 @@ class _TurniOspedaleScreenState extends State<TurniOspedaleScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _turni.isEmpty
-              ? const Center(child: Text('Nessun turno trovato', style: TextStyle(color: Colors.white54)))
+              ? Center(child: Text('Nessun turno trovato', style: TextStyle(color: coloreTesto(context, 0.54))))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   itemCount: _turni.length,
@@ -186,7 +186,7 @@ class _AssistenzaCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(formatDate(assistenza.data), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 if (assistenza.associazioneNome != null)
-                  Text(assistenza.associazioneNome!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(assistenza.associazioneNome!, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
               ]),
             ),
             Text(formatOre(assistenza.ore), style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),

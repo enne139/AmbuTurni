@@ -35,6 +35,27 @@ const Color kPrimary = Color(0xFFe94560);
 const Color kOnBackground = Colors.white;
 const Color kCardBorder = Color(0xFF2a2a4e);
 
+// Palette del tema chiaro ("modalità bianca", Impostazioni → Aspetto):
+// kPrimary resta lo stesso su entrambi i temi (identità del brand), cambiano
+// solo sfondo/superficie/testo. kOnBackgroundLight riusa il blu navy di
+// kBackground come "colore d'inchiostro" del tema chiaro — stessa identità
+// cromatica dell'app, invertita.
+const Color kBackgroundLight = Color(0xFFF2F2F7);
+const Color kSurfaceLight = Colors.white;
+const Color kOnBackgroundLight = Color(0xFF1A1A2E);
+const Color kCardBorderLight = Color(0xFFE0E0E8);
+
+/// Colore del testo/icone "principale" sul colore di sfondo/superficie
+/// corrente del tema attivo (bianco nello scuro, blu navy nel chiaro).
+/// Sostituisce i vecchi riferimenti diretti a Colors.white/white70/white54/...
+/// sparsi nei widget, scritti quando l'app aveva un solo tema scuro fisso:
+/// senza questo indiretto sarebbero rimasti bianchi anche col tema chiaro
+/// attivo (testo bianco su sfondo bianco, illeggibile). [alpha] riproduce le
+/// vecchie sfumature Colors.white70/54/38/24/12 (testo secondario,
+/// disabilitato, bordo sottile...) restando coerente col tema attivo.
+Color coloreTesto(BuildContext context, [double alpha = 1]) =>
+    Theme.of(context).colorScheme.onSurface.withValues(alpha: alpha);
+
 // Colori dei codici chiamata / uscita (case-insensitive via getCodiceColor).
 const Map<String, Color> _codiceColors = {
   'verde': Color(0xFF4CAF50),
@@ -131,6 +152,101 @@ ThemeData buildDarkTheme() {
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: kSurface,
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(foregroundColor: kPrimary),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: kPrimary,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    ),
+  );
+}
+
+/// Tema chiaro Material 3 ("modalità bianca"), stessa struttura di
+/// buildDarkTheme() con la palette kXxxLight al posto di kXxx — kPrimary e i
+/// pulsanti restano invariati (identità del brand, contrasto già verificato
+/// su sfondo chiaro). Attivabile da Impostazioni → Aspetto (TemaProvider).
+ThemeData buildLightTheme() {
+  final colorScheme = ColorScheme.light(
+    primary: kPrimary,
+    onPrimary: Colors.white,
+    secondary: kPrimary.withValues(alpha: 0.7),
+    surface: kSurfaceLight,
+    onSurface: kOnBackgroundLight,
+    error: const Color(0xFFB00020),
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: colorScheme,
+    scaffoldBackgroundColor: kBackgroundLight,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: kSurfaceLight,
+      foregroundColor: kOnBackgroundLight,
+      elevation: 0,
+    ),
+    cardTheme: CardThemeData(
+      color: kSurfaceLight,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: kCardBorderLight, width: 1),
+      ),
+      elevation: 1,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: kSurfaceLight,
+      indicatorColor: kPrimary.withValues(alpha: 0.15),
+      iconTheme: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return const IconThemeData(color: kPrimary);
+        }
+        return IconThemeData(color: kOnBackgroundLight.withValues(alpha: 0.54));
+      }),
+      labelTextStyle: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600);
+        }
+        return TextStyle(color: kOnBackgroundLight.withValues(alpha: 0.54), fontSize: 12);
+      }),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: kPrimary,
+      foregroundColor: Colors.white,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: kSurfaceLight,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: kCardBorderLight),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: kCardBorderLight),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: kPrimary),
+      ),
+      labelStyle: TextStyle(color: kOnBackgroundLight.withValues(alpha: 0.7)),
+      hintStyle: TextStyle(color: kOnBackgroundLight.withValues(alpha: 0.38)),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: kCardBorderLight,
+      labelStyle: const TextStyle(color: kOnBackgroundLight),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    dividerColor: kCardBorderLight,
+    dialogTheme: DialogThemeData(
+      backgroundColor: kSurfaceLight,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: kSurfaceLight,
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(foregroundColor: kPrimary),

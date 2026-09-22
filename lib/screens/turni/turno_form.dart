@@ -4,7 +4,7 @@ import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
-import '../../utils/theme.dart' show kPrimary, kSurface, kCardBorder, colorFromHex;
+import '../../utils/theme.dart' show kPrimary, coloreTesto, colorFromHex;
 import '../../widgets/anag_pickers.dart';
 
 /// Form per creare o modificare un turno.
@@ -233,7 +233,7 @@ class _TurnoFormState extends State<TurnoForm> {
                     selected: sel,
                     selectedColor: accent.withValues(alpha: 0.25),
                     checkmarkColor: accent,
-                    labelStyle: TextStyle(color: sel ? accent : Colors.white70),
+                    labelStyle: TextStyle(color: sel ? accent : coloreTesto(context, 0.7)),
                     onSelected: (v) => setState(() {
                       if (v) {
                         _tipologieSel.add(t.id);
@@ -245,8 +245,8 @@ class _TurnoFormState extends State<TurnoForm> {
                 }).toList(),
               )
             else
-              const Text('Nessuna tipologia configurata',
-                  style: TextStyle(color: Colors.white38, fontSize: 13)),
+              Text('Nessuna tipologia configurata',
+                  style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13)),
             const SizedBox(height: 20),
 
             // --- Equipaggio 1ª parte ---
@@ -390,7 +390,7 @@ class _DropdownAnag<T> extends StatelessWidget {
       value: valore,
       hint: Text(hint),
       decoration: const InputDecoration(),
-      dropdownColor: kSurface,
+      dropdownColor: Theme.of(context).colorScheme.surface,
       items: [
         if (nullable) const DropdownMenuItem(value: null, child: Text('—')),
         ...items.map((e) => DropdownMenuItem(value: id(e), child: Text(label(e)))),
@@ -433,7 +433,7 @@ class _EquipaggioGrid extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: kCardBorder),
+        border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -446,13 +446,13 @@ class _EquipaggioGrid extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: Row(
                   children: [
-                    Icon(r.icona, size: 16, color: Colors.white38),
+                    Icon(r.icona, size: 16, color: coloreTesto(context, 0.38)),
                     const SizedBox(width: 8),
                     SizedBox(
                       width: 110,
                       child: Text(
                         r.label,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 13),
                       ),
                     ),
                     Expanded(

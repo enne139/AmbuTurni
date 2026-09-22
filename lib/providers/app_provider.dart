@@ -394,6 +394,65 @@ class TutorialProvider extends ChangeNotifier {
   }
 }
 
+/// Le tre modalità di tema scelte da Impostazioni → Aspetto. `sistema`
+/// (default) segue il tema chiaro/scuro del sistema operativo; `chiaro`/
+/// `scuro` forzano una scelta indipendente dal device.
+enum ModalitaTema { sistema, chiaro, scuro }
+
+/// Provider per la modalità di tema dell'app (Impostazioni → Aspetto).
+/// Stesso motivo di ToolsProvider/NavigazioneProvider: il MaterialApp (in
+/// main.dart, che deve applicare subito il tema) e ImpostazioniScreen sono
+/// parti diverse dell'albero widget, serve stato condiviso perché la scelta
+/// cambiata in un punto si rifletta subito sul tema in uso nell'altro.
+/// Default `sistema` (richiesta esplicita): a differenza di `locale`
+/// (fissato a `it` a prescindere dal device, vedi CLAUDE.md), qui l'app
+/// segue il tema del sistema operativo finché l'utente non forza
+/// esplicitamente chiaro o scuro. Riusa `kPrefModalitaChiara` (bool
+/// nullable) invece di una nuova chiave stringa: `null` (mai toccata) =
+/// sistema, `true`/`false` = scelta esplicita chiara/scura — lo stesso
+/// significato di "assente" già usato da altre preferenze del progetto
+/// (assente = comportamento di default), qui applicato a un tri-stato invece
+/// che a un booleano.
+class TemaProvider extends ChangeNotifier {
+  ModalitaTema _modalita = ModalitaTema.sistema;
+  bool _caricato = false;
+
+  bool get caricato => _caricato;
+  ModalitaTema get modalita => _modalita;
+  ThemeMode get themeMode => switch (_modalita) {
+        ModalitaTema.sistema => ThemeMode.system,
+        ModalitaTema.chiaro => ThemeMode.light,
+        ModalitaTema.scuro => ThemeMode.dark,
+      };
+
+  Future<void> carica() async {
+    final prefs = await SharedPreferences.getInstance();
+    final chiara = prefs.getBool(kPrefModalitaChiara);
+    _modalita = chiara == null
+        ? ModalitaTema.sistema
+        : (chiara ? ModalitaTema.chiaro : ModalitaTema.scuro);
+    _caricato = true;
+    notifyListeners();
+  }
+
+  Future<void> setModalita(ModalitaTema valore) async {
+    _modalita = valore;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    switch (valore) {
+      case ModalitaTema.sistema:
+        // Torna al default: nessuna preferenza esplicita salvata, coerente
+        // con "assente = sistema" invece di scrivere un valore che poi
+        // andrebbe interpretato come "sistema" a parte.
+        await prefs.remove(kPrefModalitaChiara);
+      case ModalitaTema.chiaro:
+        await prefs.setBool(kPrefModalitaChiara, true);
+      case ModalitaTema.scuro:
+        await prefs.setBool(kPrefModalitaChiara, false);
+    }
+  }
+}
+
 /// Provider per l'account "utente-app" che sblocca i contenuti riservati
 /// dell'app (Repository formazione, Archivio comunicati). Le credenziali
 /// sono create SOLO dalla pagina admin del backend condiviso, mai da questa

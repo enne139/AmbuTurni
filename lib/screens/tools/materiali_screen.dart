@@ -167,8 +167,8 @@ class _MaterialiScreenState extends State<MaterialiScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _materiali.isEmpty
-              ? const Center(
-                  child: Text('Nessun materiale nel catalogo', style: TextStyle(color: Colors.white54)),
+              ? Center(
+                  child: Text('Nessun materiale nel catalogo', style: TextStyle(color: coloreTesto(context, 0.54))),
                 )
               : ListView.builder(
                   // Padding in fondo per non lasciare l'ultima card coperta dal FAB.

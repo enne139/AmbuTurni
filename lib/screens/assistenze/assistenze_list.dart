@@ -137,10 +137,10 @@ class _AssistenzeListState extends State<AssistenzeList> {
             ? TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                style: TextStyle(color: coloreTesto(context)),
+                decoration: InputDecoration(
                   hintText: 'Cerca in descrizione e note...',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
                   border: InputBorder.none,
                 ),
                 onChanged: _onSearchChanged,
@@ -170,7 +170,7 @@ class _AssistenzeListState extends State<AssistenzeList> {
                 icon: Icon(
                   Icons.filter_list,
                   color: _filtroAssocId == null
-                      ? Colors.white70
+                      ? coloreTesto(context, 0.7)
                       : colorFromHex(anag.byIdAssociazione(_filtroAssocId)?.colore) ?? kPrimary,
                 ),
                 tooltip: 'Filtra per associazione',
@@ -210,18 +210,18 @@ class _AssistenzeListState extends State<AssistenzeList> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.local_hospital_outlined, size: 64, color: Colors.white24),
+                      Icon(Icons.local_hospital_outlined, size: 64, color: coloreTesto(context, 0.24)),
                       const SizedBox(height: 16),
                       Text(
                         (provider.ricerca?.isNotEmpty ?? false) ? 'Nessun risultato' : 'Nessuna assistenza',
-                        style: const TextStyle(color: Colors.white54),
+                        style: TextStyle(color: coloreTesto(context, 0.54)),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         (provider.ricerca?.isNotEmpty ?? false)
                             ? 'Prova con un altro termine di ricerca'
                             : 'Tocca + per aggiungerne una',
-                        style: const TextStyle(color: Colors.white38, fontSize: 13),
+                        style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13),
                       ),
                     ],
                   ),
@@ -280,7 +280,7 @@ class _AssistenzaCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(formatDate(a.data), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 if (a.associazioneNome != null)
-                  Text(a.associazioneNome!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(a.associazioneNome!, style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12)),
               ]),
             ),
             Text(formatOre(a.ore), style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),

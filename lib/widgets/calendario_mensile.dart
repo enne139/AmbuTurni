@@ -129,7 +129,7 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
               const SizedBox(width: 8),
               Text(
                 widget.etichettaConteggio(delGiorno.length),
-                style: const TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13),
               ),
             ],
           ),
@@ -139,7 +139,7 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
               ? Center(
                   child: Text(
                     widget.testoVuoto,
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                    style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13),
                   ),
                 )
               : ListView.builder(
@@ -169,12 +169,12 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
             child: const Text('Oggi'),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_left, color: Colors.white70),
+            icon: Icon(Icons.chevron_left, color: coloreTesto(context, 0.7)),
             tooltip: 'Mese precedente',
             onPressed: () => _cambiaMese(-1),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_right, color: Colors.white70),
+            icon: Icon(Icons.chevron_right, color: coloreTesto(context, 0.7)),
             tooltip: 'Mese successivo',
             onPressed: () => _cambiaMese(1),
           ),
@@ -193,7 +193,7 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
               child: Center(
                 child: Text(
                   g,
-                  style: const TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -250,7 +250,7 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
                 ? Border.all(color: kPrimary)
                 // Bordo tenue su "oggi" per ritrovarlo a colpo d'occhio
                 // anche quando è selezionato un altro giorno.
-                : (oggi ? Border.all(color: Colors.white24) : null),
+                : (oggi ? Border.all(color: coloreTesto(context, 0.24)) : null),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -260,8 +260,8 @@ class _CalendarioMensileState<T> extends State<CalendarioMensile<T>> {
                 style: TextStyle(
                   fontSize: 13,
                   color: !nelMese
-                      ? Colors.white24
-                      : (oggi ? kPrimary : Colors.white),
+                      ? coloreTesto(context, 0.24)
+                      : (oggi ? kPrimary : coloreTesto(context)),
                   fontWeight: selezionato || oggi ? FontWeight.bold : FontWeight.normal,
                 ),
               ),

@@ -161,15 +161,15 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _lista.isEmpty
-              ? const Center(
+              ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.inventory_2_outlined, size: 64, color: Colors.white24),
-                      SizedBox(height: 16),
-                      Text('Nessun materiale da ripristinare', style: TextStyle(color: Colors.white54)),
-                      SizedBox(height: 8),
-                      Text('Tocca + per segnarne uno usato', style: TextStyle(color: Colors.white38, fontSize: 13)),
+                      Icon(Icons.inventory_2_outlined, size: 64, color: coloreTesto(context, 0.24)),
+                      const SizedBox(height: 16),
+                      Text('Nessun materiale da ripristinare', style: TextStyle(color: coloreTesto(context, 0.54))),
+                      const SizedBox(height: 8),
+                      Text('Tocca + per segnarne uno usato', style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13)),
                     ],
                   ),
                 )
@@ -207,7 +207,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                           color: kPrimary.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.delete, color: Colors.white),
+                        child: Icon(Icons.delete, color: coloreTesto(context)),
                       ),
                       child: Card(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -219,7 +219,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                             // ma qui interattivo per un ritocco rapido durante il turno.
                             IconButton(
                               icon: const Icon(Icons.remove_circle_outline, size: 20),
-                              color: Colors.white38,
+                              color: coloreTesto(context, 0.38),
                               visualDensity: VisualDensity.compact,
                               onPressed: mu.quantita > 1 ? () => _variaQuantita(mu, -1) : null,
                             ),
@@ -238,7 +238,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.add_circle_outline, size: 20),
-                              color: Colors.white38,
+                              color: coloreTesto(context, 0.38),
                               visualDensity: VisualDensity.compact,
                               onPressed: () => _variaQuantita(mu, 1),
                             ),
@@ -249,13 +249,13 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                                 if (mu.posizione != null || mu.note != null)
                                   Text(
                                     [if (mu.posizione != null) mu.posizione!, if (mu.note != null) mu.note!].join(' · '),
-                                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                    style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 12),
                                   ),
                               ]),
                             ),
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, size: 20),
-                              color: Colors.white38,
+                              color: coloreTesto(context, 0.38),
                               visualDensity: VisualDensity.compact,
                               tooltip: 'Modifica',
                               onPressed: () async {
@@ -265,7 +265,7 @@ class _MaterialiUsatiScreenState extends State<MaterialiUsatiScreen> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.check_circle_outline),
-                              color: Colors.white38,
+                              color: coloreTesto(context, 0.38),
                               tooltip: 'Segna come ripristinato',
                               onPressed: () => _ripristina(mu),
                             ),

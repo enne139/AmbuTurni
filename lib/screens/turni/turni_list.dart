@@ -141,10 +141,10 @@ class _TurniListState extends State<TurniList> {
             ? TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                style: TextStyle(color: coloreTesto(context)),
+                decoration: InputDecoration(
                   hintText: 'Cerca in descrizione, note, servizi...',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
                   border: InputBorder.none,
                 ),
                 onChanged: _onSearchChanged,
@@ -177,7 +177,7 @@ class _TurniListState extends State<TurniList> {
                 icon: Icon(
                   Icons.filter_list,
                   color: _filtroAssocId == null
-                      ? Colors.white70
+                      ? coloreTesto(context, 0.7)
                       : colorFromHex(anag.byIdAssociazione(_filtroAssocId)?.colore) ?? kPrimary,
                 ),
                 tooltip: 'Filtra per associazione',
@@ -217,18 +217,18 @@ class _TurniListState extends State<TurniList> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.calendar_today_outlined, size: 64, color: Colors.white24),
+                      Icon(Icons.calendar_today_outlined, size: 64, color: coloreTesto(context, 0.24)),
                       const SizedBox(height: 16),
                       Text(
                         (turniProvider.ricerca?.isNotEmpty ?? false) ? 'Nessun risultato' : 'Nessun turno',
-                        style: const TextStyle(color: Colors.white54),
+                        style: TextStyle(color: coloreTesto(context, 0.54)),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         (turniProvider.ricerca?.isNotEmpty ?? false)
                             ? 'Prova con un altro termine di ricerca'
                             : 'Tocca + per aggiungerne uno',
-                        style: const TextStyle(color: Colors.white38, fontSize: 13),
+                        style: TextStyle(color: coloreTesto(context, 0.38), fontSize: 13),
                       ),
                     ],
                   ),
