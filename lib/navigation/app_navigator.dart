@@ -91,7 +91,23 @@ class _AppNavigatorState extends State<AppNavigator> {
     if (barBox == null || !barBox.hasSize) return;
     final origine = barBox.localToGlobal(Offset.zero);
     final larghezza = barBox.size.width / tabs.length;
-    final passi = <TutorialStep>[];
+    final passi = <TutorialStep>[
+      // Primo passo: nessun elemento reale da evidenziare ancora (si chiede
+      // il cognome prima di sapere quale voce della NavigationBar mostrare
+      // nei passi successivi) — area nulla, vedi tutorial_overlay.dart.
+      // Il testo va a TutorialProvider.impostaNomeCercato, che scrive la
+      // stessa preferenza già usata dalla ricerca volontario del Piano
+      // turni: da qui in avanti i giorni di turno hanno subito il
+      // segnalino, senza dover passare dalla lente di ricerca.
+      TutorialStep(
+        titolo: 'Benvenuto in AmbuTurni!',
+        descrizione: "Scrivi il tuo cognome (o nome): comparirà un'icona a "
+            'forma di persona sui giorni in cui sei di turno, nel calendario '
+            'del Piano turni. Puoi lasciarlo vuoto e impostarlo più avanti '
+            'con la lente di ricerca.',
+        onConfermaTesto: (testo) => context.read<TutorialProvider>().impostaNomeCercato(testo),
+      ),
+    ];
     for (var i = 0; i < tabs.length; i++) {
       final area = Rect.fromLTWH(origine.dx + i * larghezza, origine.dy, larghezza, barBox.size.height);
       final titolo = _destinazione(tabs[i]).label;
@@ -111,25 +127,33 @@ class _AppNavigatorState extends State<AppNavigator> {
         _TabId.statistiche => [
             'Il riepilogo delle tue ore e dei tuoi servizi, filtrabile per associazione.',
           ],
-        // Il tool più complesso dell'app (vedi CLAUDE.md): tre passi invece
+        // Il tool più complesso dell'app (vedi CLAUDE.md): più passi invece
         // di uno per coprire davvero il funzionamento, non solo l'esistenza
-        // del tool.
+        // del tool. Ordine deciso dall'utente: aggiornamento automatico,
+        // pallini scoperti, icona persona (legata al cognome appena
+        // inserito nel primo passo), poi il tasto per aprire il link.
         _TabId.pianoTurni => [
             'Il calendario mensile della tua associazione: si scarica dal foglio Google condiviso e '
-                'si aggiorna da solo se il link è già salvato sul backend condiviso.',
+                'si aggiorna da solo, senza bisogno di ricaricarlo a mano.',
             'Un pallino per fascia (mattina/pomeriggio/sera/notte) segnala i giorni con equipaggi '
                 'scoperti: tocca un giorno per il dettaglio di ogni blocco (H24, H12, centralino, '
                 'assistenze, gettoni), con titolare e sostituti affiancati.',
-            'Cerca il tuo nome con la lente: i giorni in cui sei in servizio vengono segnalati sul '
-                'calendario. Dal dettaglio di un blocco puoi anche aggiungere il turno al calendario '
-                'del telefono.',
+            "L'icona a forma di persona su un giorno indica che sei di turno quel giorno, in base al "
+                'nome inserito prima: puoi cambiarlo in qualsiasi momento con la lente di ricerca in alto.',
+            'In alto trovi anche il tasto per aprire il link del foglio turni originale nel browser, se '
+                'preferisci consultarlo direttamente su Google Sheets.',
           ],
         _TabId.tools => [
             'Altri strumenti: materiali usati, lista ospedali con mappa e navigatore.',
+            'Trovi anche Archivio comunicati e Repository formazione: contenuti riservati che '
+                "richiedono le credenziali fornite dall'associazione. Se non le hai ancora, "
+                'richiedile ai referenti.',
           ],
         _TabId.impostazioni => [
             'Backup dei dati, tool da mostrare in Tools e scelte di navigazione — anche per '
                 'riattivare Turni/Assistenze se li hai disattivati.',
+            'Da qui accedi anche con le credenziali (sezione Account) quando le hai, e puoi rivedere '
+                'questo tutorial in qualsiasi momento.',
           ],
       };
 

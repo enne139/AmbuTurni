@@ -369,9 +369,19 @@ class NavigazioneProvider extends ChangeNotifier {
 class TutorialProvider extends ChangeNotifier {
   bool _completato = false;
   int _richiesta = 0;
+  // Cognome inserito nel primo passo del tutorial (vedi app_navigator.dart):
+  // scritto nella stessa preferenza già usata dalla ricerca volontario del
+  // Piano turni (kPrefPianoTurniUltimaRicerca, impostaNomeCercato sotto), il
+  // campo qui serve solo a notificare PianoTurniScreen se è già montata con
+  // uno stato ormai vecchio — stesso motivo di richiesta/AppNavigator: con
+  // IndexedStack la schermata non si ricostruisce da sola. Sempre non-null
+  // dopo il primo utilizzo (mai azzerato): PianoTurniScreen confronta il
+  // valore con l'ultimo già applicato, non con la sua presenza.
+  String? _nomeDalTutorial;
 
   bool get completato => _completato;
   int get richiesta => _richiesta;
+  String? get nomeDalTutorial => _nomeDalTutorial;
 
   Future<void> carica() async {
     final prefs = await SharedPreferences.getInstance();
@@ -391,6 +401,21 @@ class TutorialProvider extends ChangeNotifier {
     _completato = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(kPrefTutorialCompletato, true);
+  }
+
+  /// Chiamato dal primo passo del tutorial (chiedi cognome): persiste il
+  /// nome nella stessa preferenza della ricerca volontario del Piano turni,
+  /// così i segnalini "sei di turno" compaiono da subito sul calendario
+  /// senza dover passare dalla sua lente di ricerca. Un cognome vuoto non fa
+  /// nulla (l'utente ha saltato il campo): stessa semantica "vuoto = non
+  /// impostare" già in uso per quella preferenza.
+  Future<void> impostaNomeCercato(String nome) async {
+    final valore = nome.trim();
+    if (valore.isEmpty) return;
+    _nomeDalTutorial = valore;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kPrefPianoTurniUltimaRicerca, valore);
   }
 }
 

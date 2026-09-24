@@ -74,4 +74,39 @@ void main() {
       expect(provider.completato, isTrue);
     });
   });
+
+  group('TutorialProvider.impostaNomeCercato', () {
+    test('persiste il cognome nella preferenza della ricerca del Piano turni', () async {
+      SharedPreferences.setMockInitialValues({});
+      final provider = TutorialProvider();
+
+      await provider.impostaNomeCercato('Rossi');
+
+      expect(provider.nomeDalTutorial, 'Rossi');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(kPrefPianoTurniUltimaRicerca), 'Rossi');
+    });
+
+    test('taglia gli spazi prima di salvare', () async {
+      SharedPreferences.setMockInitialValues({});
+      final provider = TutorialProvider();
+
+      await provider.impostaNomeCercato('  Bianchi  ');
+
+      expect(provider.nomeDalTutorial, 'Bianchi');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(kPrefPianoTurniUltimaRicerca), 'Bianchi');
+    });
+
+    test('un cognome vuoto (campo saltato) non scrive nulla', () async {
+      SharedPreferences.setMockInitialValues({});
+      final provider = TutorialProvider();
+
+      await provider.impostaNomeCercato('   ');
+
+      expect(provider.nomeDalTutorial, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(kPrefPianoTurniUltimaRicerca), isNull);
+    });
+  });
 }

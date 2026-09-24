@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../db/backup_file.dart';
+import '../../providers/app_provider.dart';
 import '../../utils/backend_api.dart';
 import '../../utils/format.dart';
 import '../../utils/piano_cache.dart';
@@ -82,6 +84,12 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   // sempre il proprio nome: i segnalini mostrano i propri turni a colpo
   // d'occhio senza rifare la ricerca).
   String _nomeCercato = '';
+  // Ultimo valore di TutorialProvider.nomeDalTutorial già applicato: la
+  // schermata è quasi sempre già montata (IndexedStack) quando il passo
+  // "cognome" del tutorial viene confermato, con _nomeCercato ancora vuoto
+  // da initState — senza questo confronto in build() il segnalino non
+  // comparirebbe finché non si ricarica il piano o si rifà una ricerca.
+  String? _ultimoNomeTutorialApplicato;
   // Valorizzato solo dal tentativo automatico al primo avvio (vedi
   // _ripristinaPreferenze) quando non trova un foglio per il mese corrente:
   // spiega nel form perché compare vuoto invece di aprirsi da solo, così
@@ -374,6 +382,20 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Cognome inserito nel primo passo del tutorial: questa schermata è
+    // quasi certamente già montata (IndexedStack) con _nomeCercato ancora
+    // vuoto da initState, il tutorial avanza indipendentemente da lei — si
+    // applica qui il valore nuovo (confrontato con l'ultimo già gestito,
+    // non con la sua sola presenza: nomeDalTutorial resta non-null per il
+    // resto della sessione). setState va in un postFrameCallback perché
+    // build() non può richiamarlo su se stesso.
+    final nomeTutorial = context.watch<TutorialProvider>().nomeDalTutorial;
+    if (nomeTutorial != null && nomeTutorial != _ultimoNomeTutorialApplicato) {
+      _ultimoNomeTutorialApplicato = nomeTutorial;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _nomeCercato = nomeTutorial);
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Piano turni'),

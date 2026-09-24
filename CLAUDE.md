@@ -2320,6 +2320,80 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     dall'interfaccia reale. Dati di prova poi ripuliti (tag rimessi a
     "formazione, sicurezza"), processi di test (Chromium, http.server,
     `flutter run` rimasto appeso in debug) terminati a fine verifica.
+- **Tutorial di navigazione riscritto come guida sequenziale al primo avvio
+  (2026-09-24)**: richiesta esplicita dell'utente — il tutorial precedente
+  (bullet sopra) era "un passo per ogni tab visibile", generico; la nuova
+  versione segue un ordine di contenuti deciso dall'utente, non più legato
+  1:1 alle tab, con un passo interattivo in più.
+  - **Nuovo primo passo: chiede il cognome (o nome)** prima ancora di
+    mostrare qualunque tab, per segnalare da subito i propri turni nel
+    calendario del Piano turni — non introduce un concetto nuovo, è solo un
+    accesso più immediato alla ricerca volontario già esistente (stessa
+    preferenza `kPrefPianoTurniUltimaRicerca` scritta da
+    `_RicercaVolontarioScreen`, vedi bullet originale del tool): un cognome
+    vuoto (campo saltato) non scrive nulla, stessa semantica "vuoto = non
+    impostato" già in uso per quella preferenza.
+  - **`TutorialStep.area` ora nullable + nuovo campo `onConfermaTesto`**
+    (`widgets/tutorial_overlay.dart`): un'area nulla salta il ritaglio dello
+    scrim (nessun "buco", solo scrim intero) e centra la card a schermo
+    invece di posizionarla accanto a un buco — usato per questo primo
+    passo, che non ha ancora nulla di reale da evidenziare (non si sa
+    ancora quali tab della NavigationBar mostrare). `onConfermaTesto` non
+    nullo aggiunge un `TextField` alla card: il pulsante diventa
+    "Continua" (non c'è un contatore N/M per questo passo, non fa parte
+    della sequenza numerata) e il testo inserito viene passato al callback
+    solo se non vuoto. Riusato lo stesso meccanismo `avviaTutorial`
+    (`OverlayEntry`+`Completer`+guardia anti-concorrenza) invece di un
+    `showDialog` separato: un `TextEditingController` scoped all'intera
+    sequenza (non al singolo passo, che essendo uno `StatelessWidget`
+    ricreato a ogni `markNeedsBuild()` lo perderebbe) sopravvive al cambio
+    di passo. "Salta" mantiene lo stesso significato di sempre (esce
+    dall'intero tutorial, non solo dal passo corrente): un tap fuori dalla
+    card su questo passo non avanza (a differenza degli altri, dove tocca
+    ovunque avanza) — con un campo di testo a schermo un tap fuori è quasi
+    sempre accidentale (es. per chiudere la tastiera) e non deve far
+    perdere quanto digitato.
+  - **`TutorialProvider.impostaNomeCercato`** (nuovo metodo): scrive
+    `kPrefPianoTurniUltimaRicerca` (taglia gli spazi, no-op se vuoto) e
+    tiene il valore anche in un getter `nomeDalTutorial`, perché
+    `PianoTurniScreen` è quasi certamente già montata (pagina principale di
+    default, tenuta viva dall'`IndexedStack` di `AppNavigator` da prima
+    ancora che il tutorial compaia) con `_nomeCercato` ancora vuoto dalla
+    sua `initState`: senza una notifica esplicita il segnalino non
+    comparirebbe finché non si ricaricava il piano o si rifaceva una
+    ricerca a mano. `PianoTurniScreen.build()` confronta
+    `context.watch<TutorialProvider>().nomeDalTutorial` con l'ultimo valore
+    già applicato (stesso pattern `_tutorialGestito` di `AppNavigator`) e
+    aggiorna `_nomeCercato` in un `postFrameCallback` (build() non può
+    chiamare `setState` su se stesso). Stesso motivo condiviso di
+    ToolsProvider/NavigazioneProvider/AccountProvider/TemaProvider per il
+    provider: schermate diverse restano entrambe montate nell'IndexedStack,
+    serve stato condiviso perché un valore impostato in una si rifletta
+    nell'altra.
+  - **Niente spotlight sul vero tasto "Apri il foglio nel browser" né sulla
+    vera griglia del calendario dentro Piano turni**, scelta deliberata
+    contro l'apparente maggiore precisione: avrebbe richiesto passare
+    `GlobalKey` da `AppNavigator` dentro `PianoTurniScreen` (stesso
+    meccanismo di `_navBarKey`, ma per widget interni a una schermata che
+    non è quella che genera il tutorial), commutare a quella tab a metà
+    sequenza, e — soprattutto — gestire la corsa reale con l'auto-caricamento
+    del foglio del mese corrente al primo avvio (asincrono, rete): se non è
+    ancora arrivato (o fallisce) non esiste alcuna griglia/tasto reale da
+    evidenziare. Tenuto invece il meccanismo esistente (lo spotlight resta
+    sull'icona della tab nella NavigationBar, il testo spiega i dettagli):
+    Piano turni ha ora 4 passi (era 3) — aggiornamento automatico, pallini
+    scoperti col tap per il dettaglio, icona persona (agganciata
+    esplicitamente al nome appena inserito nel primo passo), e il tasto per
+    aprire il link del foglio nel browser — Tools ne ha 2 (era 1, la
+    seconda spiega che Archivio comunicati/Repository formazione sono
+    contenuti riservati e le credenziali mancanti vanno richieste ai
+    referenti dell'associazione) e Impostazioni ne ha 2 (era 1, la seconda
+    rimanda alla sezione Account per il login e ricorda che il tutorial è
+    rivedibile da lì).
+  - **Test**: `test/providers/tutorial_provider_test.dart` esteso con
+    `impostaNomeCercato` (persiste il valore tagliato, no-op su stringa
+    vuota/solo spazi). `flutter analyze` pulito, `flutter test` verde
+    (190/190).
 
 ---
 
@@ -2404,9 +2478,14 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   .zip con tutte le tabelle, PDF e account inclusi, upsert non distruttivo al
   ripristino.
 - ✅ **Tutorial di navigazione**: overlay spotlight a schermo intero mostrato
-  al primo avvio, un passo per ogni tab visibile in basso, rivedibile da
-  Impostazioni → Navigazione.
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 175 test unitari.
+  al primo avvio, rivedibile da Impostazioni → Navigazione. Primo passo:
+  chiede il cognome (o nome) per segnalare subito i propri turni nel
+  calendario del Piano turni; poi un passo per ogni tab visibile in basso
+  (Piano turni ne ha più di uno: aggiornamento automatico, pallini
+  scoperti, icona persona, tasto per aprire il link del foglio nel
+  browser; Tools spiega anche che Archivio comunicati/Repository
+  formazione richiedono credenziali da richiedere all'associazione).
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 190 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 
