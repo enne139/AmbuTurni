@@ -18,6 +18,10 @@ import (
 // sono già nominati con una convenzione propria, AAAAMMGG_NUMERO_...), ma
 // l'utente ha chiesto di poterli aggiungere quando servono, dopo il
 // caricamento — vedi updateComunicato.
+// Tags non è mai nil in risposta (json "[]", non "null"): la colonna è
+// NOT NULL DEFAULT '{}' (anche le righe esistenti l'hanno preso in
+// backfill quando la colonna è stata aggiunta), e normalizzaTags garantisce
+// lo stesso per ogni scrittura.
 type ComunicatoMeta struct {
 	ID          string    `json:"id"`
 	FileName    string    `json:"fileName"`
@@ -25,13 +29,35 @@ type ComunicatoMeta struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	Titolo      *string   `json:"titolo"`
 	Descrizione *string   `json:"descrizione"`
+	Tags        []string  `json:"tags"`
+}
+
+// normalizzaTags pulisce una lista di tag in arrivo dal client (pagina
+// admin, o un backup ripristinato): trim, scarta le stringhe vuote,
+// minuscolo (evita che "Formazione"/"formazione" contino come due tag
+// diversi ai fini del filtro in app) e dedupe preservando l'ordine di prima
+// comparsa. Mai nil in uscita: la colonna è NOT NULL DEFAULT '{}', un nil
+// scritto come parametro di un TEXT[] produrrebbe un NULL e violerebbe il
+// vincolo.
+func normalizzaTags(tags []string) []string {
+	viste := map[string]bool{}
+	pulite := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if t == "" || viste[t] {
+			continue
+		}
+		viste[t] = true
+		pulite = append(pulite, t)
+	}
+	return pulite
 }
 
 // listComunicati elenca i metadati di tutti i comunicati, dal più recente.
 // Chiamata sia dall'app (tool "Archivio comunicati") sia dalla pagina admin.
 func listComunicati(ctx context.Context, pool *pgxpool.Pool) ([]ComunicatoMeta, error) {
 	rows, err := pool.Query(ctx,
-		"SELECT id, file_name, file_size, created_at, titolo, descrizione FROM comunicati ORDER BY created_at DESC")
+		"SELECT id, file_name, file_size, created_at, titolo, descrizione, tags FROM comunicati ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +65,7 @@ func listComunicati(ctx context.Context, pool *pgxpool.Pool) ([]ComunicatoMeta, 
 	lista := []ComunicatoMeta{}
 	for rows.Next() {
 		var c ComunicatoMeta
-		if err := rows.Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione); err != nil {
+		if err := rows.Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione, &c.Tags); err != nil {
 			return nil, err
 		}
 		lista = append(lista, c)
@@ -67,27 +93,28 @@ func createComunicato(ctx context.Context, pool *pgxpool.Pool, fileName string, 
 	err := pool.QueryRow(ctx,
 		`INSERT INTO comunicati (id, file_name, file_data, file_size)
 		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, file_name, file_size, created_at, titolo, descrizione`,
+		 RETURNING id, file_name, file_size, created_at, titolo, descrizione, tags`,
 		uuid.NewString(), fileName, data, len(data),
-	).Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione)
+	).Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione, &c.Tags)
 	return c, err
 }
 
-// updateComunicato aggiorna SOLO titolo/descrizione — mai il file: per
+// updateComunicato aggiorna titolo/descrizione/tags — mai il file: per
 // sostituirlo si elimina il comunicato e se ne carica uno nuovo, niente
 // endpoint dedicato a un caso d'uso che non si è mai presentato. pgx.ErrNoRows
 // se l'id non esiste (RETURNING su un UPDATE che non tocca righe non produce
 // risultati), tradotto in 404 dal chiamante — stesso pattern di updateOspedale.
-// I puntatori arrivano già normalizzati a nil per "vuoto" da chi chiama
-// (pagina admin: `.value.trim() || null`), quindi qui non serve altra logica:
-// un campo svuotato torna NULL, l'app ricade sul nome file.
-func updateComunicato(ctx context.Context, pool *pgxpool.Pool, id string, titolo, descrizione *string) (ComunicatoMeta, error) {
+// I puntatori titolo/descrizione arrivano già normalizzati a nil per "vuoto"
+// da chi chiama (pagina admin: `.value.trim() || null`), quindi qui non
+// serve altra logica: un campo svuotato torna NULL, l'app ricade sul nome
+// file. tags passa invece da normalizzaTags (mai nil, la colonna è NOT NULL).
+func updateComunicato(ctx context.Context, pool *pgxpool.Pool, id string, titolo, descrizione *string, tags []string) (ComunicatoMeta, error) {
 	var c ComunicatoMeta
 	err := pool.QueryRow(ctx,
-		`UPDATE comunicati SET titolo=$1, descrizione=$2 WHERE id=$3
-		 RETURNING id, file_name, file_size, created_at, titolo, descrizione`,
-		titolo, descrizione, id,
-	).Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione)
+		`UPDATE comunicati SET titolo=$1, descrizione=$2, tags=$3 WHERE id=$4
+		 RETURNING id, file_name, file_size, created_at, titolo, descrizione, tags`,
+		titolo, descrizione, normalizzaTags(tags), id,
+	).Scan(&c.ID, &c.FileName, &c.FileSize, &c.CreatedAt, &c.Titolo, &c.Descrizione, &c.Tags)
 	return c, err
 }
 
@@ -103,6 +130,7 @@ type ComunicatoBackup struct {
 	FileName    string
 	Titolo      *string
 	Descrizione *string
+	Tags        []string
 	FileData    []byte
 }
 
@@ -111,7 +139,7 @@ type ComunicatoBackup struct {
 // inutilmente ogni GET /api/comunicati, vedi ComunicatoMeta).
 func listComunicatiConFile(ctx context.Context, pool *pgxpool.Pool) ([]ComunicatoBackup, error) {
 	rows, err := pool.Query(ctx,
-		"SELECT id, file_name, titolo, descrizione, file_data FROM comunicati ORDER BY created_at DESC")
+		"SELECT id, file_name, titolo, descrizione, tags, file_data FROM comunicati ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +147,7 @@ func listComunicatiConFile(ctx context.Context, pool *pgxpool.Pool) ([]Comunicat
 	lista := []ComunicatoBackup{}
 	for rows.Next() {
 		var c ComunicatoBackup
-		if err := rows.Scan(&c.ID, &c.FileName, &c.Titolo, &c.Descrizione, &c.FileData); err != nil {
+		if err := rows.Scan(&c.ID, &c.FileName, &c.Titolo, &c.Descrizione, &c.Tags, &c.FileData); err != nil {
 			return nil, err
 		}
 		lista = append(lista, c)
@@ -165,18 +193,19 @@ func upsertComunicatiConFile(ctx context.Context, pool *pgxpool.Pool, righe []Co
 			scartati++
 			continue
 		}
+		tags := normalizzaTags(r.Tags)
 		if esistenti[id] {
 			if _, err = tx.Exec(ctx,
-				"UPDATE comunicati SET file_name=$1, titolo=$2, descrizione=$3, file_data=$4, file_size=$5 WHERE id=$6",
-				fileName, r.Titolo, r.Descrizione, r.FileData, len(r.FileData), id,
+				"UPDATE comunicati SET file_name=$1, titolo=$2, descrizione=$3, tags=$4, file_data=$5, file_size=$6 WHERE id=$7",
+				fileName, r.Titolo, r.Descrizione, tags, r.FileData, len(r.FileData), id,
 			); err != nil {
 				return 0, 0, 0, err
 			}
 			aggiornati++
 		} else {
 			if _, err = tx.Exec(ctx,
-				"INSERT INTO comunicati (id, file_name, file_data, file_size, titolo, descrizione) VALUES ($1,$2,$3,$4,$5,$6)",
-				id, fileName, r.FileData, len(r.FileData), r.Titolo, r.Descrizione,
+				"INSERT INTO comunicati (id, file_name, file_data, file_size, titolo, descrizione, tags) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+				id, fileName, r.FileData, len(r.FileData), r.Titolo, r.Descrizione, tags,
 			); err != nil {
 				return 0, 0, 0, err
 			}

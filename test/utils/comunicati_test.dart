@@ -93,4 +93,76 @@ void main() {
       expect(totale, 2);
     });
   });
+
+  group('tagsDi', () {
+    test('estrae i tag quando presenti', () {
+      final c = {'id': 'a', 'tags': ['formazione', 'sicurezza']};
+      expect(tagsDi(c), ['formazione', 'sicurezza']);
+    });
+
+    test('campo assente restituisce lista vuota', () {
+      expect(tagsDi({'id': 'a'}), isEmpty);
+    });
+
+    test('campo di tipo inatteso (non una lista) restituisce lista vuota', () {
+      expect(tagsDi({'id': 'a', 'tags': 'formazione'}), isEmpty);
+    });
+
+    test('elementi non stringa nella lista vengono scartati', () {
+      final c = {'id': 'a', 'tags': ['formazione', 42, null]};
+      expect(tagsDi(c), ['formazione']);
+    });
+  });
+
+  group('tuttiTag', () {
+    test('raccoglie i tag distinti da più comunicati, alfabetici', () {
+      final comunicati = [
+        {'id': 'a', 'tags': ['sicurezza', 'formazione']},
+        {'id': 'b', 'tags': ['formazione', 'assemblea']},
+        {'id': 'c', 'tags': []},
+      ];
+      expect(tuttiTag(comunicati), ['assemblea', 'formazione', 'sicurezza']);
+    });
+
+    test('nessun comunicato taggato restituisce lista vuota', () {
+      expect(tuttiTag([{'id': 'a'}]), isEmpty);
+    });
+  });
+
+  group('filtraComunicati', () {
+    final comunicati = [
+      {'id': 'a', 'fileName': '20260115_001_verbale-assemblea.pdf', 'titolo': null, 'tags': ['assemblea']},
+      {'id': 'b', 'fileName': '20260210_002_corso-blsd.pdf', 'titolo': 'Corso BLSD', 'tags': ['formazione', 'sicurezza']},
+      {'id': 'c', 'fileName': '20260305_003_avviso.pdf', 'titolo': null, 'tags': <String>[]},
+    ];
+
+    test('senza filtri restituisce tutto', () {
+      expect(filtraComunicati(comunicati).length, 3);
+    });
+
+    test('ricerca per nome file (case-insensitive)', () {
+      final risultato = filtraComunicati(comunicati, ricerca: 'BLSD');
+      expect(risultato.map((c) => c['id']), ['b']);
+    });
+
+    test('ricerca per titolo quando il nome file non corrisponde', () {
+      final risultato = filtraComunicati(comunicati, ricerca: 'corso');
+      expect(risultato.map((c) => c['id']), ['b']);
+    });
+
+    test('filtro tag: un comunicato con ALMENO uno dei tag selezionati passa (OR)', () {
+      final risultato = filtraComunicati(comunicati, tag: {'assemblea', 'sicurezza'});
+      expect(risultato.map((c) => c['id']).toSet(), {'a', 'b'});
+    });
+
+    test('comunicati senza tag sono esclusi quando un tag è selezionato', () {
+      final risultato = filtraComunicati(comunicati, tag: {'formazione'});
+      expect(risultato.map((c) => c['id']), ['b']);
+    });
+
+    test('ricerca e tag insieme sono in AND', () {
+      final risultato = filtraComunicati(comunicati, ricerca: 'blsd', tag: {'assemblea'});
+      expect(risultato, isEmpty);
+    });
+  });
 }

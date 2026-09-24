@@ -128,6 +128,16 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		-- stesso giorno).
 		ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS titolo TEXT;
 		ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS descrizione TEXT;
+		-- tags: array di stringhe, stesso trattamento post-upload di
+		-- titolo/descrizione (assenti all'upload, compilabili dopo dal
+		-- pulsante "Modifica"). Nessuna tabella/catalogo separato: i tag
+		-- esistono solo come valori già in uso nei comunicati, raccolti lato
+		-- client per costruire i chip di filtro (vedi utils/comunicati.dart).
+		-- Normalizzati lowercase lato pagina admin prima dell'invio, per
+		-- evitare che "Formazione"/"formazione" contino come due tag diversi
+		-- ai fini del filtro — non un CHECK qui, stessa fiducia nel client
+		-- già in uso per gli altri campi opzionali di questa tabella.
+		ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 	`)
 	return err
 }

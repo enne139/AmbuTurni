@@ -764,18 +764,19 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]int{"creati": creati, "scartati": scartati})
 	}))
 
-	// Modifica: solo titolo/descrizione (opzionali), mai il file — usata dal
-	// pulsante "Modifica" della pagina admin per aggiungerli dopo il
+	// Modifica: titolo/descrizione (opzionali) e tags, mai il file — usata
+	// dal pulsante "Modifica" della pagina admin per aggiungerli dopo il
 	// caricamento, quando servono (l'upload multiplo sopra non li chiede).
 	mux.HandleFunc("PUT /api/comunicati/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Titolo      *string `json:"titolo"`
-			Descrizione *string `json:"descrizione"`
+			Titolo      *string  `json:"titolo"`
+			Descrizione *string  `json:"descrizione"`
+			Tags        []string `json:"tags"`
 		}
 		if !readJSON(w, r, &body) {
 			return
 		}
-		aggiornato, err := updateComunicato(r.Context(), pool, r.PathValue("id"), body.Titolo, body.Descrizione)
+		aggiornato, err := updateComunicato(r.Context(), pool, r.PathValue("id"), body.Titolo, body.Descrizione, body.Tags)
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "Comunicato non trovato")
 			return

@@ -52,3 +52,51 @@ Map<String, List<Map<String, dynamic>>> raggruppaPerMese(List<Map<String, dynami
   }
   return gruppi;
 }
+
+/// Tag di un comunicato: lista di stringhe, mai null — un campo assente o di
+/// tipo inatteso (backend vecchio, o valore corrotto) diventa lista vuota
+/// invece di far crashare la UI. Il backend li normalizza già (minuscolo,
+/// senza duplicati, vedi normalizzaTags lato Go) ma qui non ci si affida a
+/// quello: whereType scarta silenziosamente elementi non-stringa.
+List<String> tagsDi(Map<String, dynamic> c) {
+  final raw = c['tags'];
+  if (raw is! List) return const [];
+  return raw.whereType<String>().toList();
+}
+
+/// Tutti i tag distinti usati in [comunicati], ordinati alfabeticamente
+/// (case-insensitive, anche se il backend li salva già minuscoli) — per
+/// costruire i chip di filtro in Archivio comunicati. Nessun catalogo tag
+/// separato lato server: i tag esistono solo come valori già in uso nei
+/// comunicati caricati, stessa filosofia "niente struttura per pochi dati"
+/// già seguita altrove nel progetto (regioni di Lista ospedali).
+List<String> tuttiTag(List<Map<String, dynamic>> comunicati) {
+  final set = <String>{};
+  for (final c in comunicati) {
+    set.addAll(tagsDi(c));
+  }
+  final lista = set.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return lista;
+}
+
+/// Filtra [comunicati] per testo libero (su nome file o titolo, se presente
+/// — è quello che la card mostra come "nome" quando c'è) e per tag: un
+/// comunicato passa il filtro tag se ne ha ALMENO UNO tra quelli selezionati
+/// (OR), non tutti — con più tag scelti si vuole allargare i risultati, non
+/// restringerli a comunicati che li hanno tutti insieme. I due filtri tra
+/// loro sono invece in AND. Funzione pura (Dart puro, come raggruppaPerMese
+/// sopra), testabile senza montare un widget.
+List<Map<String, dynamic>> filtraComunicati(
+  List<Map<String, dynamic>> comunicati, {
+  String ricerca = '',
+  Set<String> tag = const {},
+}) {
+  final q = ricerca.trim().toLowerCase();
+  return comunicati.where((c) {
+    if (tag.isNotEmpty && !tagsDi(c).any(tag.contains)) return false;
+    if (q.isEmpty) return true;
+    final fileName = (c['fileName'] as String? ?? '').toLowerCase();
+    final titolo = (c['titolo'] as String? ?? '').toLowerCase();
+    return fileName.contains(q) || titolo.contains(q);
+  }).toList();
+}

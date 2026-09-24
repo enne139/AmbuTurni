@@ -43,10 +43,11 @@ type BackupCompleto struct {
 // restituito da percorsoZipComunicato(ID) (nessun campo url/path separato,
 // l'id è già univoco e si presta da solo come nome file).
 type ComunicatoBackupMeta struct {
-	ID          string  `json:"id"`
-	FileName    string  `json:"fileName"`
-	Titolo      *string `json:"titolo"`
-	Descrizione *string `json:"descrizione"`
+	ID          string   `json:"id"`
+	FileName    string   `json:"fileName"`
+	Titolo      *string  `json:"titolo"`
+	Descrizione *string  `json:"descrizione"`
+	Tags        []string `json:"tags"`
 }
 
 func percorsoZipComunicato(id string) string {
@@ -137,7 +138,7 @@ func costruisciBackup(ctx context.Context, pool *pgxpool.Pool) (BackupCompleto, 
 	b.Comunicati = make([]ComunicatoBackupMeta, 0, len(comunicati))
 	for _, c := range comunicati {
 		b.Comunicati = append(b.Comunicati, ComunicatoBackupMeta{
-			ID: c.ID, FileName: c.FileName, Titolo: c.Titolo, Descrizione: c.Descrizione,
+			ID: c.ID, FileName: c.FileName, Titolo: c.Titolo, Descrizione: c.Descrizione, Tags: c.Tags,
 		})
 	}
 
@@ -267,7 +268,7 @@ func ripristinaBackup(ctx context.Context, pool *pgxpool.Pool, raw []byte) (Riep
 	comunicati := make([]ComunicatoBackup, 0, len(meta.Comunicati))
 	for _, cm := range meta.Comunicati {
 		comunicati = append(comunicati, ComunicatoBackup{
-			ID: cm.ID, FileName: cm.FileName, Titolo: cm.Titolo, Descrizione: cm.Descrizione,
+			ID: cm.ID, FileName: cm.FileName, Titolo: cm.Titolo, Descrizione: cm.Descrizione, Tags: cm.Tags,
 			FileData: pdf[cm.ID], // nil (quindi scartato dalla validazione %PDF) se la voce manca nello zip
 		})
 	}

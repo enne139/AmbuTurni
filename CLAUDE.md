@@ -2186,6 +2186,140 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     modifiche alla pagina admin (nessun modo di interagire con una GUI da
     qui), solo un controllo statico di bilanciamento parentesi/graffe sullo
     `<script>` (node non disponibile in questo ambiente).
+- **Tag sui comunicati, filtro e ricerca per nome (2026-09-22)**: richiesta
+  esplicita — Archivio comunicati aveva già titolo/descrizione opzionali ma
+  nessun modo di categorizzare i PDF né di restringere l'elenco oltre allo
+  scroll cronologico per mese.
+  - **`comunicati.tags TEXT[] NOT NULL DEFAULT '{}'`** (`db.go`, stesso
+    idioma "niente sistema di migrazioni, `ALTER TABLE ADD COLUMN IF NOT
+    EXISTS`" già in uso per titolo/descrizione/regione): nessuna tabella/
+    catalogo tag separato — i tag esistono solo come valori già in uso nei
+    comunicati caricati, stessa filosofia "niente struttura per pochi dati"
+    di regione/Lista ospedali. Stesso trattamento post-upload di titolo/
+    descrizione: l'upload multiplo non li chiede (quale tag per quale file,
+    su N file insieme?), si aggiungono dopo dal pulsante "Modifica" —
+    `PUT /api/comunicati/{id}` ora accetta anche `tags` accanto a titolo/
+    descrizione, `updateComunicato` in `comunicati.go`.
+  - **`normalizzaTags` (Go, `comunicati.go`)**: trim, minuscolo, scarta
+    vuoti, dedupe preservando l'ordine — sia per evitare che "Formazione"/
+    "formazione" contino come due tag diversi ai fini del filtro (nessun
+    catalogo con autocomplete qui, un free text va normalizzato per non
+    accumulare varianti), sia perché la colonna è `NOT NULL`: un body senza
+    `tags` decodifica a `nil` in Go, che andrebbe scritto come `NULL` e
+    violerebbe il vincolo — `normalizzaTags(nil)` restituisce `[]string{}`.
+    Usata anche da `upsertComunicatiConFile` (ripristino backup): un backup
+    del formato precedente (senza il campo `tags`) si ripristina senza
+    errori, semplicemente senza tag — stessa semantica "SET non COALESCE"
+    già accettata per titolo/descrizione. `ComunicatoBackupMeta`/
+    `ComunicatoBackup` estesi con `Tags []string`, incluso nel giro
+    dati.json ↔ zip del backup completo.
+  - **Nessun filtro lato server**: né un `GET /api/comunicati?tag=` né
+    parametri di ricerca — l'elenco comunicati è già scaricato per intero
+    sia dall'app (nessuna cache locale, "sempre online" per scelta, vedi
+    bullet originale del tool) sia dalla pagina admin (`comunicatiCache`),
+    quindi filtro/ricerca vivono client-side su una lista già in memoria,
+    stessa scelta già fatta per la ricerca ospedali in Lista ospedali
+    ("niente nuove chiamate API a ogni carattere digitato, la lista è
+    piccola"). Aggiungere query params lato server per una lista di questa
+    scala sarebbe complessità senza beneficio reale.
+  - **`utils/comunicati.dart`**: tre funzioni pure nuove (Dart puro, come
+    il resto del file, testate senza montare un widget) — `tagsDi` (estrae
+    la lista tag di un comunicato, mai null anche con un campo assente o di
+    tipo inatteso: `whereType<String>` scarta silenziosamente elementi non
+    stringa), `tuttiTag` (tag distinti su tutta la lista, alfabetici, per
+    costruire i chip di filtro), `filtraComunicati` (ricerca su nome file O
+    titolo, filtro tag con semantica **OR** — un comunicato passa se ha
+    ALMENO UNO dei tag selezionati, non tutti: con più tag scelti si vuole
+    allargare i risultati, non restringerli a chi li ha tutti insieme —
+    ricerca e tag tra loro in AND).
+  - **`ArchivioComunicatiScreen`**: campo di ricerca sotto l'AppBar (stesso
+    pattern "TextField persistente con prefisso lente e suffisso 'x' per
+    pulire" già in uso in Lista ospedali, non il toggle icona-ricerca di
+    Turni/Assistenze: qui non c'è altro nell'AppBar da preservare) e, sotto,
+    una riga di `FilterChip` per tag — **calcolati sull'intero elenco
+    scaricato, non su quello già filtrato**: altrimenti selezionare un tag
+    farebbe sparire gli altri chip che non co-occorrono con quello scelto,
+    impedendo di allargare la selezione senza prima deselezionarla tutta. I
+    chip compaiono solo se esiste almeno un comunicato taggato (niente riga
+    vuota finché l'admin non ha ancora usato i tag). Stato di sola
+    visualizzazione della sessione (`TextEditingController` + `Set<String>`
+    nel widget), non persistito: la lista è già tutta in memoria e cambia
+    raramente, a differenza del Piano turni qui non serve ricordare l'ultimo
+    filtro tra i riavvii. `_ComunicatoCard` mostra i tag come piccoli `Chip`
+    sotto la descrizione, stesso accento `kPrimary` dei chip di filtro.
+    **Riga dei chip: una sola riga scorrevole in orizzontale**
+    (`SingleChildScrollView(scrollDirection: Axis.horizontal)` attorno a un
+    `Row`, nessun `Wrap`) — richiesta rivista due volte dall'utente durante
+    il test manuale: prima "massimo due righe, poi si scorre" (bocciata: si
+    comportava da una riga sola sul suo device reale), poi la semplificazione
+    finale "fai una riga sola". Il primo tentativo a due righe usava un
+    `SizedBox` di altezza fissa indovinata (`Wrap(direction: Axis.vertical)`
+    dentro un'altezza in pixel scritta a mano) — funzionava nel browser di
+    test ma non sul device dell'utente, perché lì un `FilterChip` senza
+    `materialTapTargetSize`/`visualDensity` espliciti prende l'altezza
+    minima del touch target Material (48dp, diversa dal rendering headless
+    usato per verificare), quindi nell'altezza scritta a mano ne entrava
+    solo uno per "colonna" invece di due. Un secondo tentativo (colonne di 2
+    chip con `Column`/dimensionamento naturale, niente altezza scritta a
+    mano) risolveva il problema alla radice ma non è stato verificato sul
+    device dell'utente prima della richiesta di semplificare: a quel punto
+    l'utente ha preferito la riga singola, più semplice e senza alcun
+    numero "indovinato" da nessuna parte — `Row` dentro
+    `SingleChildScrollView` si dimensiona sempre sull'altezza naturale del
+    suo contenuto, qualunque essa sia sulla piattaforma.
+  - **Pagina admin**: colonna "Tag" in tabella (tra Titolo e Dimensione,
+    colspan aggiornato da 5 a 6) e un campo "Tag (separati da virgola)"
+    nell'edit inline, accanto a titolo/descrizione — `tagsDaTesto` (JS)
+    applica la stessa normalizzazione lato client (minuscolo, trim, dedupe)
+    di `normalizzaTags` lato Go, solo per mostrare subito in tabella il
+    risultato pulito senza aspettare la risposta del server; il server
+    normalizza comunque anche lui, non ci si affida al client.
+  - **Test**: `test/utils/comunicati_test.dart` esteso con `tagsDi`/
+    `tuttiTag`/`filtraComunicati` (33 nuovi test in totale nel file, inclusi
+    i casi limite: campo tag assente o di tipo sbagliato, elementi non
+    stringa nella lista, filtro tag che esclude i comunicati senza tag,
+    ricerca+tag insieme in AND). `flutter analyze` pulito, `flutter test`
+    verde (187/187).
+  - **Verificato via `curl`** (`go build`/`go vet` puliti, stesso container
+    Postgres di test): upload → `tags: []` di default (mai `null`, la
+    colonna è `NOT NULL`); `PUT` con tag misti maiuscolo/spazi/duplicati →
+    normalizzati e deduplicati; `PUT` senza il campo `tags` nel body → azzera
+    a `[]` senza errore (conferma che `normalizzaTags(nil)` evita la
+    violazione `NOT NULL`); lettura con token utente-app (`contentAuthMiddleware`)
+    vede gli stessi tag; backup completo include `tags` in `data.json`;
+    ripristino dallo stesso zip è un no-op idempotente (0 creati, tutti
+    aggiornati, 0 scartati); ripristino da un backup PRIVO del campo `tags`
+    (formato pre-esistente simulato togliendolo dal JSON) non fallisce.
+  - **`flutter run -d web-server` (debug/DDC) non renderizza in headless
+    Chromium in questo ambiente**: schermata bianca oltre 10 minuti,
+    renderer quasi a riposo dopo il caricamento di tutti i moduli DDC
+    (1003 script) — compilazione/valutazione DDC lato client evidentemente
+    troppo pesante per questo container (non riprodotto da un utente che
+    lancia `flutter run -d chrome` su una macchina normale). Aggirato con
+    **`flutter build web --release`** (compila in ~35s, bundle dart2js
+    singolo invece di 1003 moduli DDC) servito da un `python3 -m
+    http.server` locale — questo sì renderizza. Nessun tool browser
+    disponibile nell'ambiente (niente `chromium-cli`, niente MCP browser):
+    verificato con Chromium headless pilotato via `puppeteer-core`
+    (installato al volo con `npm install puppeteer-core --no-save`,
+    nessuna nuova dipendenza del progetto), click per coordinate sui
+    widget Flutter (CanvasKit disegna su `<canvas>`, non espone un DOM
+    interrogabile) contro la pagina admin per selettori CSS reali (HTML
+    vanilla). **Verificato visivamente entrambi i lati**: nell'app,
+    Impostazioni → Backend condiviso puntato a `localhost:3099`, login
+    Tools → Archivio comunicati con un account utente-app di prova →
+    campo di ricerca e chip tag "formazione"/"sicurezza" presenti, ricerca
+    per "prova" filtra la lista da più mesi a una sola card, il chip
+    "sicurezza" si seleziona/deseleziona con lo stato visivo atteso
+    (checkmark + colore) e la card mostra gli stessi tag come pillole;
+    nella pagina admin, colonna "Tag" popolata in tabella, "Modifica" apre
+    l'edit inline con "formazione, sicurezza" precompilato, un salvataggio
+    con tag misti maiuscolo/spazi ("Formazione, Sicurezza, assemblea ")
+    torna in tabella già normalizzato ("formazione, sicurezza, assemblea")
+    — stesso comportamento già confermato via `curl`, qui confermato anche
+    dall'interfaccia reale. Dati di prova poi ripuliti (tag rimessi a
+    "formazione, sicurezza"), processi di test (Chromium, http.server,
+    `flutter run` rimasto appeso in debug) terminati a fine verifica.
 
 ---
 
@@ -2240,9 +2374,11 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Tools → Archivio comunicati**: elenco dei PDF caricati dall'admin sul
   backend condiviso, raggruppati per mese, tap per aprirli con un lettore
   PDF esterno (vero "Apri con" su Android via `open_filex`). Titolo/
-  descrizione opzionali, compilabili dopo il caricamento dalla pagina
-  admin — assenti, la card mostra il nome file. CONTENUTO RISERVATO:
-  richiede login (account utente-app).
+  descrizione/tag opzionali, compilabili dopo il caricamento dalla pagina
+  admin — assenti, la card mostra il nome file. Campo di ricerca (nome file
+  o titolo) e chip di filtro per tag (multi-selezione, OR), entrambi lato
+  client sulla lista già scaricata. CONTENUTO RISERVATO: richiede login
+  (account utente-app).
 - ✅ **Impostazioni → Account**: login/logout con le credenziali
   utente-app (create solo dalla pagina admin del backend condiviso, mai da
   questa app) che sbloccano i contenuti riservati (Repository formazione,

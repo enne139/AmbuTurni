@@ -47,6 +47,17 @@ class _ArchivioComunicatiContenutoState extends State<_ArchivioComunicatiContenu
   // id del comunicato in apertura: disabilita solo quella riga, non
   // l'intera lista.
   String? _aprendoId;
+  // Ricerca e filtro tag: puro stato di visualizzazione della sessione, non
+  // persistito (a differenza di Piano turni la lista è già tutta in memoria
+  // e cambia raramente, non serve ricordare l'ultimo filtro tra i riavvii).
+  final _ricercaCtrl = TextEditingController();
+  final Set<String> _tagSelezionati = {};
+
+  @override
+  void dispose() {
+    _ricercaCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -141,36 +152,94 @@ class _ArchivioComunicatiContenutoState extends State<_ArchivioComunicatiContenu
         ),
       );
     }
-    // RefreshIndicator su entrambi i rami (vuoto/pieno): serve comunque una
-    // ListView scrollabile perché il pull-to-refresh funzioni anche a lista
-    // vuota (un Center da solo non è "trascinabile").
-    return RefreshIndicator(
-      onRefresh: _carica,
-      child: _comunicati.isEmpty
-          ? ListView(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 80),
-                  child: Center(
-                    child: Text(
-                      'Nessun comunicato disponibile al momento.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: coloreTesto(context, 0.54)),
+    // Tag disponibili calcolati sull'intero elenco scaricato (non su quello
+    // già filtrato): altrimenti selezionare un tag farebbe sparire gli
+    // altri chip che non co-occorrono con quello scelto, impedendo di
+    // allargare di nuovo la selezione senza prima deselezionare tutto.
+    final tagDisponibili = tuttiTag(_comunicati);
+    final filtrati = filtraComunicati(_comunicati, ricerca: _ricercaCtrl.text, tag: _tagSelezionati);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: TextField(
+            controller: _ricercaCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Cerca per nome file o titolo...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _ricercaCtrl.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _ricercaCtrl.clear();
+                        setState(() {});
+                      },
                     ),
-                  ),
-                ),
-              ],
-            )
-          : _buildListaRaggruppata(),
+            ),
+          ),
+        ),
+        // I chip tag compaiono solo se esiste almeno un comunicato taggato:
+        // niente riga vuota finché l'admin non ne ha ancora usati. Una sola
+        // riga, scorrevole in orizzontale (richiesta esplicita, dopo che il
+        // tentativo a due righe non si comportava in modo affidabile sui
+        // device reali) — nessuna altezza da calcolare, la riga si
+        // dimensiona da sola sull'altezza naturale del chip.
+        if (tagDisponibili.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < tagDisponibili.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    _chipTag(tagDisponibili[i]),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
+        // RefreshIndicator su entrambi i rami (vuoto/pieno): serve comunque
+        // una ListView scrollabile perché il pull-to-refresh funzioni anche
+        // a lista vuota (un Center da solo non è "trascinabile").
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _carica,
+            child: filtrati.isEmpty
+                ? ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 80),
+                        child: Center(
+                          child: Text(
+                            _comunicati.isEmpty
+                                ? 'Nessun comunicato disponibile al momento.'
+                                : 'Nessun comunicato corrisponde alla ricerca.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: coloreTesto(context, 0.54)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : _buildListaRaggruppata(filtrati),
+          ),
+        ),
+      ],
     );
   }
 
   /// Un'unica archivio cronologico, raggruppato per mese (vedi
   /// _raggruppaPerMese sopra) invece di una lista piatta: i comunicati si
   /// accumulano nel tempo, senza intestazioni diventerebbe presto una lista
-  /// lunga senza punti di riferimento.
-  Widget _buildListaRaggruppata() {
-    final gruppi = raggruppaPerMese(_comunicati);
+  /// lunga senza punti di riferimento. [comunicati] è già il risultato di
+  /// filtraComunicati, non _comunicati direttamente.
+  Widget _buildListaRaggruppata(List<Map<String, dynamic>> comunicati) {
+    final gruppi = raggruppaPerMese(comunicati);
     final mesi = gruppi.keys.toList();
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -201,6 +270,26 @@ class _ArchivioComunicatiContenutoState extends State<_ArchivioComunicatiContenu
       },
     );
   }
+
+  /// Un chip di filtro tag, estratto per tenere separato il costruttore
+  /// dal resto della riga scorrevole sopra.
+  Widget _chipTag(String t) {
+    final sel = _tagSelezionati.contains(t);
+    return FilterChip(
+      label: Text(t),
+      selected: sel,
+      onSelected: (v) => setState(() {
+        if (v) {
+          _tagSelezionati.add(t);
+        } else {
+          _tagSelezionati.remove(t);
+        }
+      }),
+      selectedColor: kPrimary.withValues(alpha: 0.25),
+      checkmarkColor: kPrimary,
+      labelStyle: TextStyle(color: sel ? kPrimary : coloreTesto(context, 0.7)),
+    );
+  }
 }
 
 class _ComunicatoCard extends StatelessWidget {
@@ -222,6 +311,7 @@ class _ComunicatoCard extends StatelessWidget {
     final fileName = comunicato['fileName'] as String? ?? '';
     final titolo = _testoONull(comunicato['titolo']);
     final descrizione = _testoONull(comunicato['descrizione']);
+    final tags = tagsDi(comunicato);
     final dettagli = [
       formatDate(comunicato['createdAt'] as String?),
       _dimensioneLeggibile(comunicato['fileSize']),
@@ -255,6 +345,23 @@ class _ComunicatoCard extends StatelessWidget {
                     if (descrizione != null) ...[
                       const SizedBox(height: 4),
                       Text(descrizione, style: TextStyle(color: coloreTesto(context, 0.7))),
+                    ],
+                    if (tags.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: tags
+                            .map((t) => Chip(
+                                  label: Text(t, style: const TextStyle(fontSize: 11)),
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  backgroundColor: kPrimary.withValues(alpha: 0.15),
+                                  side: BorderSide.none,
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                ))
+                            .toList(),
+                      ),
                     ],
                   ],
                 ),
