@@ -77,6 +77,11 @@ class SlotPiano {
   /// Nota della riga (colonna I del foglio), vuota se assente. Non influisce
   /// su [buco]: una riga con solo una nota resta scoperta.
   final String note;
+  /// Testo grezzo della seconda riga del blocco in colonna A (sotto il
+  /// titolo): per le assistenze è il nome dell'evento, mostrato sotto
+  /// "Assistenza" nel dettaglio; per gli altri blocchi è la descrizione della
+  /// fascia. Vuoto per il centralino, che su quella riga ha l'orario.
+  final String descrizione;
 
   const SlotPiano({
     required this.giorno,
@@ -88,6 +93,7 @@ class SlotPiano {
     required this.sostituti,
     this.orario = '',
     this.note = '',
+    this.descrizione = '',
   });
 
   bool get buco => titolare.isEmpty && sostituti.isEmpty;
@@ -106,6 +112,7 @@ class SlotPiano {
         'sostituti': sostituti,
         'orario': orario,
         'note': note,
+        'descrizione': descrizione,
       };
 
   /// Inverso di [toMap]. Un valore inatteso (es. ruolo di una versione
@@ -123,6 +130,7 @@ class SlotPiano {
         // Assente nelle cache scritte prima delle note: vale come "nessuna
         // nota" invece di invalidare la cache (si aggiorna al refresh).
         note: map['note'] as String? ?? '',
+        descrizione: map['descrizione'] as String? ?? '',
       );
 
   /// Ore/minuti di inizio e fine estratti da [orario], null se il testo non
@@ -424,7 +432,10 @@ int _parseFoglio(
     // serve), colonna B col nome del ruolo di quella riga (Autista/Cs/Terzo/
     // Quarto, solo etichetta — non letta, il ruolo si ricava dalla
     // posizione), colonna C il titolare, D i sostituti e I la nota.
-    final descrizione = testo(r + 1, 0).toUpperCase();
+    // Testo originale (per mostrarlo, es. il nome dell'assistenza) e
+    // maiuscolo (per riconoscere la fascia).
+    final descrizioneTesto = testo(r + 1, 0);
+    final descrizione = descrizioneTesto.toUpperCase();
     final orario = testo(r + 2, 0);
 
     if (valA == 'ASSISTENZA' || valA == 'GETTONE') {
@@ -455,6 +466,7 @@ int _parseFoglio(
     for (var i = 0; i < ruoli.length; i++) {
       slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: valA,
           ruolo: ruoli[i], fascia: fascia, orario: orario,
+          descrizione: descrizioneTesto,
           titolare: titolare(r + i), sostituti: sostituti(r + i),
           note: note(r + i)));
     }

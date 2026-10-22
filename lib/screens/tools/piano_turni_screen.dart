@@ -1117,9 +1117,23 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    _titoloBlocco(gruppo),
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _titoloBlocco(gruppo),
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      // Nome dell'assistenza (seconda riga del blocco nel
+                      // foglio) come seconda riga dell'intestazione: con più
+                      // assistenze nello stesso giorno "Assistenza" da solo
+                      // non dice quale sia.
+                      if (primo.macro == 'ASSISTENZA' && primo.descrizione.isNotEmpty)
+                        Text(
+                          primo.descrizione,
+                          style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 12),
+                        ),
+                    ],
                   ),
                 ),
                 // Pulsante note solo se almeno una riga del blocco ne ha

@@ -216,6 +216,21 @@ void main() {
       expect(slots.where((s) => s.buco), hasLength(3));
     });
 
+    test('nome dell\'assistenza dalla seconda riga, testo originale', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'ASSISTENZA');
+      scrivi(excel, 'LUN 1', 'A7', 'Partita Calcio pomeriggio');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+
+      final slots = parsa(excel).delGiorno(1);
+      expect(slots.map((s) => s.descrizione).toSet(), {'Partita Calcio pomeriggio'});
+      // La stessa cella continua a dare la fascia.
+      expect(slots.first.fascia, FasciaPiano.pomeriggio);
+      // E sopravvive al roundtrip della cache.
+      expect(SlotPiano.fromMap(slots.first.toMap()).descrizione,
+          'Partita Calcio pomeriggio');
+    });
+
     test('blocco con soli nomi (senza descrizione fascia) non è un template', () {
       final excel = base('LUN 1');
       scrivi(excel, 'LUN 1', 'A6', 'ASSISTENZA');

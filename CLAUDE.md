@@ -2413,6 +2413,16 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   (senza il campo) si legge come "nessuna nota" invece di essere invalidata
   — si aggiorna da sola al refresh silenzioso. Test nel gruppo "Note
   (colonna I)" di `piano_mensile_test.dart`.
+- **Piano turni: nome dell'assistenza nell'intestazione della card
+  (2026-10-22)**: richiesta esplicita — con più assistenze nello stesso
+  giorno il solo titolo "Assistenza" non diceva quale fosse. Il nome è la
+  cella in colonna A sotto il titolo del blocco (la stessa da cui il parser
+  ricava già la fascia): nuovo campo `SlotPiano.descrizione` col testo
+  originale (non maiuscolo, quello serve solo per riconoscere la fascia),
+  incluso nella cache con lo stesso fallback "campo assente = vuoto" delle
+  note. Mostrato come seconda riga dell'intestazione in `_cardBlocco` solo
+  per i blocchi ASSISTENZA (per i GETTONE/H12/H24 quella cella contiene solo
+  la fascia, già nel titolo).
 
 ---
 
@@ -2452,7 +2462,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   (nessun link mai incollato) apre da solo il foglio del mese corrente se
   già pubblicato dall'associazione; frecce ← → per saltare al mese
   precedente/successivo tra i fogli salvati. Note della colonna I
-  consultabili a tabella da un pulsante sulla card del blocco.
+  consultabili a tabella da un pulsante sulla card del blocco. Nome
+  dell'assistenza sotto il titolo della card.
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
   vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
   Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente
@@ -2505,7 +2516,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 194 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 195 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 
