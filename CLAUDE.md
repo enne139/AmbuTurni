@@ -2394,6 +2394,25 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     `impostaNomeCercato` (persiste il valore tagliato, no-op su stringa
     vuota/solo spazi). `flutter analyze` pulito, `flutter test` verde
     (190/190).
+- **Piano turni: note della colonna I (2026-10-22)**: richiesta esplicita
+  dell'utente — nel foglio la colonna I contiene note libere, che possono
+  stare su una qualunque delle 4 righe dell'equipaggio (anche tutte). Il
+  parser le legge **per riga**, non per blocco: nuovo campo `SlotPiano.note`
+  (vuoto se assente), quindi ogni nota resta legata al ruolo della propria
+  riga (stessa logica posizionale di titolare/sostituti; letta anche sulle
+  righe del centralino). Una nota **non** cambia `buco` (una riga con solo
+  la nota resta scoperta) né il riconoscimento dei template ASSISTENZA/
+  GETTONE vuoti. In UI le note non stanno dentro la card del blocco (scelta
+  dell'utente, dopo una prima versione con la nota sotto ogni riga): un
+  pulsante note nell'intestazione, visibile solo se almeno una riga del
+  blocco ne ha una, apre un dialog con una tabella Ruolo / In servizio /
+  Nota (`_mostraNote`; "In servizio" = sostituto se c'è, altrimenti
+  titolare, stessa regola di `giorniInServizio`). La nota compare anche nei
+  risultati della ricerca volontario. Inclusa in
+  `toMap`/`fromMap` della cache: una cache scritta prima di questa modifica
+  (senza il campo) si legge come "nessuna nota" invece di essere invalidata
+  — si aggiorna da sola al refresh silenzioso. Test nel gruppo "Note
+  (colonna I)" di `piano_mensile_test.dart`.
 
 ---
 
@@ -2432,7 +2451,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   disattivabile in Impostazioni → Backend condiviso). Al primo utilizzo
   (nessun link mai incollato) apre da solo il foglio del mese corrente se
   già pubblicato dall'associazione; frecce ← → per saltare al mese
-  precedente/successivo tra i fogli salvati.
+  precedente/successivo tra i fogli salvati. Note della colonna I
+  consultabili a tabella da un pulsante sulla card del blocco.
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
   vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
   Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente
@@ -2485,7 +2505,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 190 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 194 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

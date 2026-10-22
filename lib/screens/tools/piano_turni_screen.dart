@@ -1122,6 +1122,18 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                 ),
+                // Pulsante note solo se almeno una riga del blocco ne ha
+                // una (colonna I): le note restano fuori dalla card per non
+                // allungarla, si consultano a richiesta.
+                if (gruppo.any((s) => s.note.isNotEmpty))
+                  IconButton(
+                    icon: Icon(Icons.sticky_note_2_outlined,
+                        size: 20, color: coloreTesto(context, 0.7)),
+                    tooltip: 'Note',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _mostraNote(gruppo),
+                  ),
                 // Orario e pulsante calendario solo se il foglio ha l'orario
                 // del blocco: senza, l'evento non avrebbe inizio/fine.
                 if (orario != null) ...[
@@ -1164,6 +1176,56 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
               _rigaSlot(slot, calendarioInRiga: orariDiversi),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Note del blocco in forma di tabella (una riga per ruolo con nota): il
+  /// ruolo e chi è in servizio accanto alla nota dicono subito a chi si
+  /// riferisce, senza dover tornare alla card. "In servizio" segue la regola
+  /// di giorniInServizio: il sostituto se c'è, altrimenti il titolare.
+  void _mostraNote(List<SlotPiano> gruppo) {
+    final conNota = gruppo.where((s) => s.note.isNotEmpty).toList();
+    final stileIntestazione = TextStyle(
+        color: coloreTesto(context, 0.54), fontSize: 11, fontWeight: FontWeight.w600);
+    Widget cella(Widget figlio) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: figlio);
+    String inServizio(SlotPiano s) =>
+        s.sostituti.isNotEmpty ? s.sostituti : (s.titolare.isNotEmpty ? s.titolare : '—');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Note · ${_titoloBlocco(gruppo)}', style: const TextStyle(fontSize: 16)),
+        content: SingleChildScrollView(
+          child: Table(
+            columnWidths: const {
+              0: IntrinsicColumnWidth(),
+              1: FlexColumnWidth(2),
+              2: FlexColumnWidth(3),
+            },
+            border: TableBorder(
+                horizontalInside: BorderSide(color: Theme.of(ctx).dividerColor)),
+            children: [
+              TableRow(children: [
+                cella(Text('RUOLO', style: stileIntestazione)),
+                cella(Text('IN SERVIZIO', style: stileIntestazione)),
+                cella(Text('NOTA', style: stileIntestazione)),
+              ]),
+              for (final s in conNota)
+                TableRow(children: [
+                  cella(Text(
+                      s.ruolo == RuoloPiano.centralino ? s.fascia.etichetta : s.ruolo.etichetta,
+                      style: TextStyle(color: coloreTesto(ctx, 0.7), fontSize: 13))),
+                  cella(Text(inServizio(s), style: const TextStyle(fontSize: 13))),
+                  cella(Text(s.note, style: const TextStyle(fontSize: 13))),
+                ]),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Chiudi')),
+        ],
       ),
     );
   }
@@ -1414,6 +1476,7 @@ class _RicercaVolontarioScreenState extends State<_RicercaVolontarioScreen> {
           [
             if (slot.titolare.isNotEmpty) 'Di turno: ${slot.titolare}',
             if (slot.sostituti.isNotEmpty) 'Sost.: ${slot.sostituti}',
+            if (slot.note.isNotEmpty) 'Nota: ${slot.note}',
           ].join(' · '),
           style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 12),
         ),

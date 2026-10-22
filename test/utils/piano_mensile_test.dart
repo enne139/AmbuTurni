@@ -461,6 +461,58 @@ void main() {
     });
   });
 
+  group('Note (colonna I)', () {
+    test('nota letta su ognuna delle 4 righe del blocco, legata al suo ruolo', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'A7', 'SERA');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      scrivi(excel, 'LUN 1', 'I6', 'Arriva alle 20');
+      scrivi(excel, 'LUN 1', 'I7', 'Nota Cs');
+      scrivi(excel, 'LUN 1', 'I8', 'Nota Terzo');
+      scrivi(excel, 'LUN 1', 'I9', 'Nota Quarto');
+
+      final slots = parsa(excel).delGiorno(1);
+      String nota(RuoloPiano r) => slots.firstWhere((s) => s.ruolo == r).note;
+      expect(nota(RuoloPiano.autista), 'Arriva alle 20');
+      expect(nota(RuoloPiano.cs), 'Nota Cs');
+      expect(nota(RuoloPiano.terzo), 'Nota Terzo');
+      expect(nota(RuoloPiano.quarto), 'Nota Quarto');
+    });
+
+    test('nota assente = stringa vuota; una nota non copre un buco', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      scrivi(excel, 'LUN 1', 'I8', 'Cercasi terzo');
+
+      final slots = parsa(excel).delGiorno(1);
+      expect(slots.firstWhere((s) => s.ruolo == RuoloPiano.autista).note, isEmpty);
+      final terzo = slots.firstWhere((s) => s.ruolo == RuoloPiano.terzo);
+      expect(terzo.note, 'Cercasi terzo');
+      expect(terzo.buco, isTrue);
+    });
+
+    test('centralino diurno: nota per ciascuno dei due slot', () {
+      final excel = base('LUN DIURNO 1');
+      scrivi(excel, 'LUN DIURNO 1', 'A6', 'CENTRALINO');
+      scrivi(excel, 'LUN DIURNO 1', 'I6', 'Nota mattina');
+      scrivi(excel, 'LUN DIURNO 1', 'I7', 'Nota pomeriggio');
+
+      final slots = parsa(excel).delGiorno(1);
+      expect(slots.map((s) => s.note).toList(), ['Nota mattina', 'Nota pomeriggio']);
+    });
+
+    test('cache senza campo note (formato precedente) letta come nota vuota', () {
+      final slot = SlotPiano.fromMap({
+        'giorno': 1, 'blocco': 1, 'macro': 'H24',
+        'ruolo': 'autista', 'fascia': 'sera',
+        'titolare': 'Rossi', 'sostituti': '', 'orario': '',
+      });
+      expect(slot.note, isEmpty);
+    });
+  });
+
   group('Serializzazione cache (toMap/fromMap)', () {
     test('roundtrip JSON preserva slot, orari, blocchi e metodi derivati', () {
       final excel = base('LUN 1');
@@ -469,6 +521,7 @@ void main() {
       scrivi(excel, 'LUN 1', 'A8', '23:30 - 7:00');
       scrivi(excel, 'LUN 1', 'C6', 'Rossi');
       scrivi(excel, 'LUN 1', 'D7', 'Verdi');
+      scrivi(excel, 'LUN 1', 'I7', 'Nota del Cs');
       scrivi(excel, 'LUN 1', 'A10', 'CENTRALINO');
       scrivi(excel, 'LUN 1', 'A11', '18:30 - 23:30');
       scrivi(excel, 'LUN 1', 'C10', 'Neri');

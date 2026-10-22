@@ -22,6 +22,8 @@
 //   Quarto), non letta — il ruolo si ricava dalla posizione della riga.
 // - Colonna C: chi è di turno (titolare); colonna D: possibili sostituti.
 //   Entrambe vuote = buco.
+// - Colonna I: note libere, su una qualunque delle righe del blocco (anche
+//   tutte e 4): ogni riga ha la propria, legata al ruolo di quella riga.
 //
 // Nessun import Flutter: il file resta Dart puro, così è unit-testabile e
 // parsePianoMensile può girare in un isolate via compute() (il decode di un
@@ -72,6 +74,9 @@ class SlotPiano {
   /// es. "18:30 - 23:30"); vuoto se assente. Testo grezzo, non interpretato:
   /// serve per la visualizzazione e per [orarioParsed].
   final String orario;
+  /// Nota della riga (colonna I del foglio), vuota se assente. Non influisce
+  /// su [buco]: una riga con solo una nota resta scoperta.
+  final String note;
 
   const SlotPiano({
     required this.giorno,
@@ -82,6 +87,7 @@ class SlotPiano {
     required this.titolare,
     required this.sostituti,
     this.orario = '',
+    this.note = '',
   });
 
   bool get buco => titolare.isEmpty && sostituti.isEmpty;
@@ -99,6 +105,7 @@ class SlotPiano {
         'titolare': titolare,
         'sostituti': sostituti,
         'orario': orario,
+        'note': note,
       };
 
   /// Inverso di [toMap]. Un valore inatteso (es. ruolo di una versione
@@ -113,6 +120,9 @@ class SlotPiano {
         titolare: map['titolare'] as String? ?? '',
         sostituti: map['sostituti'] as String? ?? '',
         orario: map['orario'] as String? ?? '',
+        // Assente nelle cache scritte prima delle note: vale come "nessuna
+        // nota" invece di invalidare la cache (si aggiorna al refresh).
+        note: map['note'] as String? ?? '',
       );
 
   /// Ore/minuti di inizio e fine estratti da [orario], null se il testo non
@@ -358,6 +368,8 @@ int _parseFoglio(
   // Colonne della riga ruolo: C = titolare di turno, D = possibili sostituti.
   String titolare(int riga) => testo(riga, 2);
   String sostituti(int riga) => testo(riga, 3);
+  // Colonna I: nota della riga.
+  String note(int riga) => testo(riga, 8);
   bool rigaVuota(int riga) => titolare(riga).isEmpty && sostituti(riga).isEmpty;
 
   var r = 6;
@@ -389,16 +401,17 @@ int _parseFoglio(
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.mattina,
             orario: orari.first.trim(),
-            titolare: titolare(r), sostituti: sostituti(r)));
+            titolare: titolare(r), sostituti: sostituti(r), note: note(r)));
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.pomeriggio,
             orario: orari.length > 1 ? orari[1].trim() : '',
-            titolare: titolare(r + 1), sostituti: sostituti(r + 1)));
+            titolare: titolare(r + 1), sostituti: sostituti(r + 1),
+            note: note(r + 1)));
       } else {
         slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: 'H24',
             ruolo: RuoloPiano.centralino, fascia: FasciaPiano.sera,
             orario: orari.first.trim(),
-            titolare: titolare(r), sostituti: sostituti(r)));
+            titolare: titolare(r), sostituti: sostituti(r), note: note(r)));
       }
       r += 3;
       continue;
@@ -410,7 +423,7 @@ int _parseFoglio(
     // sulla riga del Terzo r+2, monte ore sulla riga del Quarto r+3, che non
     // serve), colonna B col nome del ruolo di quella riga (Autista/Cs/Terzo/
     // Quarto, solo etichetta — non letta, il ruolo si ricava dalla
-    // posizione), colonna C il titolare e D i sostituti.
+    // posizione), colonna C il titolare, D i sostituti e I la nota.
     final descrizione = testo(r + 1, 0).toUpperCase();
     final orario = testo(r + 2, 0);
 
@@ -442,7 +455,8 @@ int _parseFoglio(
     for (var i = 0; i < ruoli.length; i++) {
       slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: valA,
           ruolo: ruoli[i], fascia: fascia, orario: orario,
-          titolare: titolare(r + i), sostituti: sostituti(r + i)));
+          titolare: titolare(r + i), sostituti: sostituti(r + i),
+          note: note(r + i)));
     }
     r += 4;
   }
