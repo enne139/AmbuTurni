@@ -260,22 +260,25 @@ class PianoMensile {
   /// sostituito e quel giorno non lavora — diverso da [cercaNome], che
   /// elenca ogni comparsa del nome (utile in ricerca, fuorviante come
   /// segnalino "sei di turno" sul calendario).
-  Set<int> giorniInServizio(String nome) {
+  Set<int> giorniInServizio(String nome) =>
+      {for (final s in slotInServizio(nome)) s.giorno};
+
+  /// Slot in cui [nome] è effettivamente in servizio (stessa regola di
+  /// [giorniInServizio]), in ordine cronologico: base dell'export di tutti i
+  /// propri turni del mese nel calendario.
+  List<SlotPiano> slotInServizio(String nome) {
     final q = nome.trim().toLowerCase();
-    if (q.isEmpty) return const {};
-    final giorni = <int>{};
-    _perGiorno.forEach((giorno, slots) {
-      for (final s in slots) {
-        final sostituisce = s.sostituti.toLowerCase().contains(q);
-        final titolareNonSostituito =
-            s.titolare.toLowerCase().contains(q) && s.sostituti.isEmpty;
-        if (sostituisce || titolareNonSostituito) {
-          giorni.add(giorno);
-          break;
-        }
-      }
-    });
-    return giorni;
+    if (q.isEmpty) return const [];
+    final giorni = _perGiorno.keys.toList()..sort();
+    return [
+      for (final g in giorni)
+        ..._perGiorno[g]!.where((s) {
+          final sostituisce = s.sostituti.toLowerCase().contains(q);
+          final titolareNonSostituito =
+              s.titolare.toLowerCase().contains(q) && s.sostituti.isEmpty;
+          return sostituisce || titolareNonSostituito;
+        }),
+    ];
   }
 }
 

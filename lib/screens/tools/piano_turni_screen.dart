@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
@@ -8,10 +9,10 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:uuid/uuid.dart';
 import '../../db/backup_file.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/backend_api.dart';
+import '../../utils/calendario_ics.dart';
 import '../../utils/format.dart';
 import '../../utils/piano_cache.dart';
 import '../../utils/piano_mensile.dart';
@@ -19,7 +20,6 @@ import '../../utils/platform_check.dart';
 import '../../utils/prefs_keys.dart';
 import '../../utils/theme.dart';
 
-const _uuid = Uuid();
 
 // Preferenze persistenti (chiavi in utils/prefs_keys.dart, condivise col
 // backup): link dell'ultimo foglio (ricaricato all'apertura), archivio dei
@@ -791,6 +791,22 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
                     style: const TextStyle(color: _coloreNomeCercato, fontSize: 10)),
               ],
             ),
+          // Accanto al nome cercato: i turni esportati sono proprio quelli
+          // dei segnalini persona di questa legenda.
+          if (_nomeCercato.trim().isNotEmpty)
+            // Solo icona (scelta dell'utente), la spiegazione è nel tooltip.
+            Tooltip(
+              message: 'Aggiungi i miei turni al calendario',
+              child: InkWell(
+                onTap: _aggiungiTuttiAlCalendario,
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 2),
+                  child: Icon(Icons.edit_calendar_outlined,
+                      size: 16, color: _coloreNomeCercato),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1045,7 +1061,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     // funzione è già generica (testo + nome file), riusata invece di
     // duplicare la logica io/web per un secondo tipo di file.
     try {
-      final ics = _eventoIcs(titolo, inizio, fine);
+      final ics = generaIcs([EventoCalendario(titolo, inizio, fine)]);
       final nomeFile = 'cvs_${dateToIso(inizio)}_${_etichettaEvento(gruppo.first)}.ics';
       final path = await salvaFilePiattaforma(ics, nomeFile, 'Evento calendario AmbuTurni');
       if (mounted) {
@@ -1060,38 +1076,107 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
     }
   }
 
-  /// Contenuto testuale di un file .ics (RFC 5545) con un singolo evento.
-  /// Orari "floating" (senza Z/TZID): stesso orario locale passato finora
-  /// all'intent Android, nessuna conversione fuso orario altrove nel codice.
-  static String _eventoIcs(String titolo, DateTime inizio, DateTime fine) {
-    String fmt(DateTime d) =>
-        '${d.year.toString().padLeft(4, '0')}'
-        '${d.month.toString().padLeft(2, '0')}'
-        '${d.day.toString().padLeft(2, '0')}T'
-        '${d.hour.toString().padLeft(2, '0')}'
-        '${d.minute.toString().padLeft(2, '0')}'
-        '${d.second.toString().padLeft(2, '0')}';
-    String esc(String s) => s
-        .replaceAll('\\', '\\\\')
-        .replaceAll(';', '\\;')
-        .replaceAll(',', '\\,')
-        .replaceAll('\n', '\\n');
-    final dtstamp = '${fmt(DateTime.now().toUtc())}Z';
-    final uid = '${_uuid.v4()}@ambuturni';
-    return [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//AmbuTurni//IT',
-      'BEGIN:VEVENT',
-      'UID:$uid',
-      'DTSTAMP:$dtstamp',
-      'DTSTART:${fmt(inizio)}',
-      'DTEND:${fmt(fine)}',
-      'SUMMARY:${esc(titolo)}',
-      'END:VEVENT',
-      'END:VCALENDAR',
-    ].join('\r\n');
+  /// Tutti i turni del mese del nome cercato in un solo file .ics: l'intent
+  /// Android crea un evento alla volta, il file si importa in blocco su ogni
+  /// piattaforma. Stessa regola del segnalino sul calendario
+  /// (slotInServizio: un titolare sostituito non lavora) e stesso titolo
+  /// "CVS (fascia)" del singolo evento. Prima del file un dialog riepiloga
+  /// cosa verrà esportato: i turni senza un orario leggibile nel foglio non
+  /// possono diventare eventi, e l'utente deve saperlo.
+  Future<void> _aggiungiTuttiAlCalendario() async {
+    final piano = _piano;
+    final nome = _nomeCercato.trim();
+    if (piano == null || nome.isEmpty) return;
+
+    final eventi = <EventoCalendario>[];
+    final visti = <String>{};
+    var senzaOrario = 0;
+    for (final slot in piano.slotInServizio(nome)) {
+      final intervallo = piano.intervalloEvento(slot);
+      if (intervallo == null) {
+        senzaOrario++;
+        continue;
+      }
+      final (inizio, fine) = intervallo;
+      final titolo = 'CVS (${_etichettaEvento(slot)})';
+      // Stesso turno su più righe dello stesso blocco: un evento solo.
+      if (visti.add('$inizio|$fine|$titolo')) {
+        eventi.add(EventoCalendario(titolo, inizio, fine));
+      }
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    if (eventi.isEmpty) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(senzaOrario > 0
+              ? 'I turni di $nome in questo mese non hanno un orario nel foglio.'
+              : 'Nessun turno di $nome in questo mese.')));
+      return;
+    }
+
+    final conferma = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aggiungi al calendario'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${eventi.length} turni di $nome '
+                  'in ${kMesiItaliani[piano.mese - 1]} ${piano.anno}:'),
+              const SizedBox(height: 8),
+              for (final e in eventi)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    '${formatDate(dateToIso(e.inizio))} '
+                    '${_ora(e.inizio)}-${_ora(e.fine)} · ${e.titolo}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              if (senzaOrario > 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '$senzaOrario turni esclusi: senza orario nel foglio.',
+                  style: TextStyle(color: coloreTesto(ctx, 0.54), fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Crea file')),
+        ],
+      ),
+    );
+    if (conferma != true) return;
+
+    final ics = generaIcs(eventi);
+    final nomeFile =
+        'cvs_turni_${piano.anno}_${piano.mese.toString().padLeft(2, '0')}.ics';
+    try {
+      if (isMobile) {
+        // Android: "Apri con" (ACTION_VIEW text/calendar) verso l'app
+        // calendario che sa importare il file, share sheet come ripiego —
+        // stesso percorso dei PDF dei comunicati.
+        await apriFileBinarioPiattaforma(
+            () async => Uint8List.fromList(utf8.encode(ics)), nomeFile, 'text/calendar');
+        return;
+      }
+      final path = await salvaFilePiattaforma(ics, nomeFile, 'Turni AmbuTurni');
+      messenger.showSnackBar(SnackBar(
+          content: Text(path != null
+              ? 'File calendario salvato: importalo nella tua app calendario.'
+              : 'Salvataggio annullato.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Errore: $e')));
+    }
   }
+
+  static String _ora(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
   Widget _cardBlocco(List<SlotPiano> gruppo) {
     final primo = gruppo.first;

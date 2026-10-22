@@ -95,6 +95,9 @@ lib/
 │   │                               costanti colori
 │   ├── format.dart                formatDate/Ore/parseOre/dateToIso + nomi mesi/giorni it
 │   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
+│   ├── calendario_ics.dart        generaIcs(): file .ics con uno o più eventi (Piano turni:
+│   │                               singolo turno su desktop/web, tutti i propri turni del
+│   │                               mese ovunque), Dart puro, testato
 │   ├── piano_cache.dart           cache dei piani decodificati: solo export condizionale
 │   │                               (vedi Piattaforma web), impl. in piano_cache_io.dart
 │   │                               (file JSON per mese) / piano_cache_web.dart
@@ -2445,6 +2448,35 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   aggiuntive partono sempre dalla 5ª.
   Gli aggiuntivi entrano in `cercaNome`/`giorniInServizio` e nel template
   check di ASSISTENZA/GETTONE come i ruoli base.
+- **Piano turni: tutti i propri turni del mese nel calendario in un colpo
+  (2026-10-22)**: richiesta esplicita. L'intent Android di `add_2_calendar`
+  crea **un evento alla volta** (si apre l'editor del calendario per
+  ognuno), quindi l'export in blocco passa da un unico file .ics su ogni
+  piattaforma: `utils/calendario_ics.dart` (`generaIcs`, Dart puro e
+  testato, estratto dal vecchio `_eventoIcs` a evento singolo della
+  schermata, che ora lo riusa). Turni esportati = `PianoMensile.
+  slotInServizio(nome)`, nuova funzione da cui ora deriva anche
+  `giorniInServizio` (stessa regola del segnalino: sostituto sì, titolare
+  sostituito no) — quindi esattamente i giorni con l'icona persona sul
+  calendario. Titolo "CVS (fascia)" come il singolo evento; duplicati
+  (stesso inizio/fine/titolo) fusi; i turni senza un orario leggibile nel
+  foglio non possono diventare eventi e il dialog di conferma, che elenca
+  gli eventi prima di creare il file, dice quanti ne restano fuori. **UID
+  deterministico** (inizio + titolo) invece del precedente uuid casuale:
+  reimportare lo stesso mese dopo un aggiornamento del foglio, in un'app
+  che rispetta l'UID, aggiorna gli eventi invece di duplicarli. Pulsante
+  a sola icona (scelta dell'utente; testo "Aggiungi i miei turni al
+  calendario" solo nel tooltip) nella legenda, accanto al nome
+  cercato (solo se ce n'è uno: i turni esportati sono quelli dei suoi
+  segnalini), non nell'AppBar, già piena su schermo di telefono. Su
+  Android il file si apre con `apriFileBinarioPiattaforma` ("Apri con"
+  `text/calendar`, share sheet come ripiego, stesso percorso dei PDF dei
+  comunicati); su desktop/web si salva con `salvaFilePiattaforma` come il
+  singolo evento. **Non verificato su Android reale**: se l'app calendario
+  predefinita accetti davvero un .ics multi-evento da "Apri con" dipende
+  dall'app installata — Google Calendar per Android storicamente non
+  importa file .ics (l'import in blocco lì si fa da calendar.google.com),
+  Samsung Calendar/Etar sì.
 
 ---
 
@@ -2486,7 +2518,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   precedente/successivo tra i fogli salvati. Note della colonna I
   consultabili a tabella da un pulsante sulla card del blocco. Nome
   dell'assistenza sotto il titolo della card. Persone aggiuntive oltre ai
-  4 ruoli (righe "SOC/ALL"), mai contate come buchi.
+  4 ruoli (righe "SOC/ALL"), mai contate come buchi. Pulsante per creare
+  un unico file calendario (.ics) con tutti i propri turni del mese.
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
   vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
   Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente
@@ -2539,7 +2572,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 200 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 205 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

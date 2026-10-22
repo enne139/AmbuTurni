@@ -559,6 +559,23 @@ void main() {
       expect(piano.giorniInServizio('bianchi'), isEmpty);
     });
 
+    test('slotInServizio: stessa regola, slot in ordine cronologico', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'H24');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi'); // titolare non sostituito: sì
+      scrivi(excel, 'LUN 1', 'C7', 'Rossi');
+      scrivi(excel, 'LUN 1', 'D7', 'Verdi'); // Rossi sostituito: no
+      scrivi(excel, 'MAR 2', 'A6', 'H12');
+      scrivi(excel, 'MAR 2', 'D8', 'Rossi'); // sostituto: sì
+
+      final slots = parsa(excel).slotInServizio('rossi');
+      expect(slots.map((s) => (s.giorno, s.ruolo)), [
+        (1, RuoloPiano.autista),
+        (2, RuoloPiano.terzo),
+      ]);
+      expect(parsa(excel).slotInServizio(' '), isEmpty);
+    });
+
     test('query vuota: nessun giorno', () {
       final excel = base('LUN 1');
       scrivi(excel, 'LUN 1', 'A6', 'H24');
