@@ -157,6 +157,99 @@ void main() {
     });
   });
 
+  group('Persone aggiuntive (righe SOC/ALL)', () {
+    /// Blocco con le etichette di colonna B come nel foglio reale.
+    void blocco(Excel excel, int r0, String macro, {int aggiuntive = 0}) {
+      scrivi(excel, 'LUN 1', 'A$r0', macro);
+      const etichette = ['AUT', 'CAP', 'SOC', 'ALL'];
+      for (var i = 0; i < etichette.length; i++) {
+        scrivi(excel, 'LUN 1', 'B${r0 + i}', etichette[i]);
+      }
+      for (var i = 0; i < aggiuntive; i++) {
+        scrivi(excel, 'LUN 1', 'B${r0 + 4 + i}', 'SOC/ALL');
+      }
+    }
+
+    test('righe SOC/ALL compilate diventano slot aggiuntivi, mai buchi', () {
+      final excel = base('LUN 1');
+      blocco(excel, 6, 'ASSISTENZA', aggiuntive: 3);
+      scrivi(excel, 'LUN 1', 'A7', 'Concerto');
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      scrivi(excel, 'LUN 1', 'C10', 'Extra1');
+      // Riga 11 SOC/ALL vuota: posto libero, non un buco.
+      scrivi(excel, 'LUN 1', 'D12', 'Extra2');
+
+      final piano = parsa(excel);
+      final slots = piano.delGiorno(1);
+      final aggiuntivi =
+          slots.where((s) => s.ruolo == RuoloPiano.aggiuntivo).toList();
+      expect(aggiuntivi.map((s) => s.titolare + s.sostituti), ['Extra1', '', 'Extra2']);
+      expect(aggiuntivi.map((s) => s.postoLibero), [false, true, false]);
+      expect(aggiuntivi.every((s) => !s.buco), isTrue);
+      // Stesso blocco dei 4 ruoli base, buchi contati solo su quelli.
+      expect(slots.map((s) => s.blocco).toSet(), hasLength(1));
+      expect(piano.buchiDelGiorno(1), hasLength(3));
+      expect(piano.giorniInServizio('extra2'), {1});
+    });
+
+    test('esempio reale: AUT, CAP, poi SOC/ALL anche su Terzo e Quarto', () {
+      final excel = base('LUN 1');
+      scrivi(excel, 'LUN 1', 'A6', 'ASSISTENZA');
+      scrivi(excel, 'LUN 1', 'A7', 'Fiera');
+      const etichette = ['AUT', 'CAP', 'SOC/ALL', 'SOC/ALL', 'SOC/ALL', 'SOC/ALL'];
+      for (var i = 0; i < etichette.length; i++) {
+        scrivi(excel, 'LUN 1', 'B${6 + i}', etichette[i]);
+      }
+      scrivi(excel, 'LUN 1', 'C6', 'Rossi');
+      scrivi(excel, 'LUN 1', 'C10', 'Verdi');
+
+      final piano = parsa(excel);
+      final slots = piano.delGiorno(1);
+      // Le prime 4 righe restano i ruoli base (per posizione), le altre 2
+      // sono aggiuntive: una occupata, una posto libero.
+      expect(slots.map((s) => s.ruolo), [
+        RuoloPiano.autista, RuoloPiano.cs, RuoloPiano.terzo, RuoloPiano.quarto,
+        RuoloPiano.aggiuntivo, RuoloPiano.aggiuntivo,
+      ]);
+      expect(slots[4].titolare, 'Verdi');
+      expect(slots[5].postoLibero, isTrue);
+      // Buchi: Cs, Terzo, Quarto — non il posto libero.
+      expect(piano.buchiDelGiorno(1), hasLength(3));
+    });
+
+    test('il blocco successivo dopo le righe SOC/ALL viene letto normalmente', () {
+      final excel = base('LUN 1');
+      blocco(excel, 6, 'H24', aggiuntive: 1); // righe 6-10
+      blocco(excel, 11, 'H12'); // attaccato, senza riga vuota
+      scrivi(excel, 'LUN 1', 'C10', 'Extra');
+      scrivi(excel, 'LUN 1', 'C11', 'Bianchi');
+
+      final slots = parsa(excel).delGiorno(1);
+      final h12 = slots.where((s) => s.macro == 'H12').toList();
+      expect(h12, hasLength(4));
+      expect(h12.first.ruolo, RuoloPiano.autista);
+      expect(h12.first.titolare, 'Bianchi');
+      expect(slots.where((s) => s.ruolo == RuoloPiano.aggiuntivo), hasLength(1));
+    });
+
+    test('blocco senza righe SOC/ALL: non assorbe il blocco AUT/CAP che segue', () {
+      final excel = base('LUN 1');
+      blocco(excel, 6, 'H24');
+      blocco(excel, 10, 'H12');
+      scrivi(excel, 'LUN 1', 'C10', 'Bianchi');
+
+      final slots = parsa(excel).delGiorno(1);
+      expect(slots.where((s) => s.ruolo == RuoloPiano.aggiuntivo), isEmpty);
+      expect(slots.firstWhere((s) => s.macro == 'H12').titolare, 'Bianchi');
+    });
+
+    test('assistenza template con righe SOC/ALL vuote resta ignorata', () {
+      final excel = base('LUN 1');
+      blocco(excel, 6, 'ASSISTENZA', aggiuntive: 2);
+      expect(parsa(excel).delGiorno(1), isEmpty);
+    });
+  });
+
   group('Centralino', () {
     test('scheda diurna: slot mattina e pomeriggio su due righe', () {
       final excel = base('LUN DIURNO 1');

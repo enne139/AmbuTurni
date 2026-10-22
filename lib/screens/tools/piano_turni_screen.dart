@@ -740,7 +740,9 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
       child: Wrap(
         spacing: 6,
         children: [
-          for (final ruolo in RuoloPiano.values)
+          // Niente chip per gli aggiuntivi: non sono mai un buco, il
+          // filtro non cambierebbe nulla.
+          for (final ruolo in RuoloPiano.values.where((r) => r != RuoloPiano.aggiuntivo))
             FilterChip(
               label: Text(ruolo.sigla, style: const TextStyle(fontSize: 11)),
               visualDensity: VisualDensity.compact,
@@ -1284,6 +1286,9 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             child: Text(etichetta,
                 style: TextStyle(color: coloreTesto(context, 0.54), fontSize: 13)),
           ),
+          // Un posto libero (riga "SOC/ALL" vuota) non è un buco: finisce nel
+          // ramo sotto, coi due trattini come ogni colonna vuota — l'etichetta
+          // "Aggiuntivo" basta a distinguerlo dai ruoli base.
           if (slot.buco)
             Expanded(
               flex: 2,

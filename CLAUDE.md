@@ -2423,6 +2423,28 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   note. Mostrato come seconda riga dell'intestazione in `_cardBlocco` solo
   per i blocchi ASSISTENZA (per i GETTONE/H12/H24 quella cella contiene solo
   la fascia, già nel titolo).
+- **Piano turni: persone aggiuntive oltre ai 4 ruoli (righe "SOC/ALL",
+  2026-10-22)**: richiesta esplicita — un blocco (assistenza o turno) può
+  avere più di 4 persone: dopo le righe AUT/CAP/SOC/ALL possono seguire una
+  o più righe con etichetta "SOC/ALL" in colonna B, ognuna una possibile
+  persona in più. È l'unico punto in cui il parser legge la colonna B, e
+  riconosce **solo** "SOC/ALL" (spazi tollerati), non le altre etichette:
+  un blocco successivo attaccato senza riga vuota inizia con "AUT" e non va
+  assorbito; anche una riga col titolo di un altro blocco in colonna A
+  chiude l'estensione. Nuovo ruolo `RuoloPiano.aggiuntivo`: **mai un buco**
+  (`SlotPiano.buco` lo esclude, i buchi si contano solo sui 4 ruoli base,
+  come chiesto), nessun chip nei filtri ruolo (non cambierebbe nulla). Una
+  riga SOC/ALL vuota genera comunque uno slot (`SlotPiano.postoLibero`),
+  mostrato nel dettaglio coi due trattini "—" come ogni colonna vuota (una
+  prima versione scriveva "posto libero": scartata dall'utente, l'etichetta
+  "Aggiuntivo" basta a distinguerlo) — non il rosso di MANCANTE: l'utente
+  vuole vedere che c'è un posto disponibile, senza che conti come buco. Le
+  etichette dei ruoli base non sono fisse (esempio reale dell'utente: AUT,
+  CAP, SOC/ALL, SOC/ALL, SOC/ALL, SOC/ALL — anche Terzo e Quarto possono
+  essere "SOC/ALL"): i primi 4 ruoli restano posizionali, le righe
+  aggiuntive partono sempre dalla 5ª.
+  Gli aggiuntivi entrano in `cercaNome`/`giorniInServizio` e nel template
+  check di ASSISTENZA/GETTONE come i ruoli base.
 
 ---
 
@@ -2463,7 +2485,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   già pubblicato dall'associazione; frecce ← → per saltare al mese
   precedente/successivo tra i fogli salvati. Note della colonna I
   consultabili a tabella da un pulsante sulla card del blocco. Nome
-  dell'assistenza sotto il titolo della card.
+  dell'assistenza sotto il titolo della card. Persone aggiuntive oltre ai
+  4 ruoli (righe "SOC/ALL"), mai contate come buchi.
 - ✅ **Tools → Lista ospedali**: ricerca ospedali per nome/via/città/regione,
   vista elenco raggruppata per regione, pulsante Naviga (Google Maps o
   Waze) e vista mappa con tutti gli ospedali geocodificati automaticamente
@@ -2516,7 +2539,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 195 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 200 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

@@ -10,7 +10,9 @@
 // - B2 della prima scheda: data di inizio mese (determina mese/anno).
 // - Dalla riga 6 in giù, blocchi riconosciuti dalla colonna A:
 //   * H12/H24/ASSISTENZA/GETTONE: 4 righe di ruoli (Autista, Cs, Terzo,
-//     Quarto, a partire dalla riga del titolo); la fascia oraria è nel testo
+//     Quarto, a partire dalla riga del titolo), seguite da zero o più righe
+//     "SOC/ALL" in colonna B = possibili persone in più, che non contano mai
+//     come buco (i buchi si contano solo sui 4 ruoli); la fascia oraria è nel testo
 //     in colonna A della seconda riga (MATT/POM/SER/NOT), default mattina se
 //     scheda diurna altrimenti sera. Un blocco ASSISTENZA/GETTONE senza
 //     descrizione né nomi è un template inutilizzato e viene ignorato.
@@ -18,8 +20,9 @@
 //     l'orario è nella riga sotto il titolo (diurno: i due intervalli
 //     mattina/pomeriggio separati da "/", es. "8:30 - 13:30/13:30 - 18:30").
 //   * USCITA MEZZI: blocco fisso da saltare (6 righe).
-// - Colonna B su ogni riga: solo l'etichetta del ruolo (Autista/Cs/Terzo/
-//   Quarto), non letta — il ruolo si ricava dalla posizione della riga.
+// - Colonna B su ogni riga: solo l'etichetta del ruolo (AUT/CAP/SOC/ALL),
+//   non letta per i 4 ruoli base — il ruolo si ricava dalla posizione della
+//   riga; serve solo a riconoscere le righe aggiuntive "SOC/ALL".
 // - Colonna C: chi è di turno (titolare); colonna D: possibili sostituti.
 //   Entrambe vuote = buco.
 // - Colonna I: note libere, su una qualunque delle righe del blocco (anche
@@ -36,7 +39,11 @@ enum RuoloPiano {
   cs('Cs', 'CS'),
   terzo('Terzo', 'TE'),
   quarto('Quarto', 'QU'),
-  centralino('Centralino', 'CE');
+  centralino('Centralino', 'CE'),
+  /// Persona in più oltre ai 4 ruoli (riga "SOC/ALL" nel foglio): mai un
+  /// buco, il blocco è completo anche con queste righe vuote — vuota è un
+  /// "posto libero", mostrato nel dettaglio ma non contato.
+  aggiuntivo('Aggiuntivo', 'AG');
 
   final String etichetta;
   final String sigla;
@@ -96,7 +103,11 @@ class SlotPiano {
     this.descrizione = '',
   });
 
-  bool get buco => titolare.isEmpty && sostituti.isEmpty;
+  bool get buco => !postoLibero && titolare.isEmpty && sostituti.isEmpty;
+
+  /// Riga aggiuntiva senza nessuno: posto disponibile, non un buco.
+  bool get postoLibero =>
+      ruolo == RuoloPiano.aggiuntivo && titolare.isEmpty && sostituti.isEmpty;
   bool get assistenza => macro == 'ASSISTENZA' || macro == 'GETTONE';
 
   /// Serializzazione per la cache locale del Piano turni (JSON su file):
@@ -378,6 +389,11 @@ int _parseFoglio(
   String sostituti(int riga) => testo(riga, 3);
   // Colonna I: nota della riga.
   String note(int riga) => testo(riga, 8);
+  // Riga aggiuntiva di un blocco: etichetta "SOC/ALL" in colonna B (spazi
+  // tollerati). Solo questa etichetta, non AUT/CAP/...: un blocco successivo
+  // attaccato senza riga vuota inizia con "AUT" e non va assorbito.
+  bool rigaAggiuntiva(int riga) =>
+      testo(riga, 1).toUpperCase().replaceAll(' ', '') == 'SOC/ALL';
   bool rigaVuota(int riga) => titolare(riga).isEmpty && sostituti(riga).isEmpty;
 
   var r = 6;
@@ -438,14 +454,25 @@ int _parseFoglio(
     final descrizione = descrizioneTesto.toUpperCase();
     final orario = testo(r + 2, 0);
 
+    // Righe "SOC/ALL" dopo i 4 ruoli base: possibili persone in più, anche
+    // più d'una. Una riga col titolo di un altro blocco chiude comunque.
+    var aggiuntive = 0;
+    while (r + 4 + aggiuntive <= maxRiga &&
+        rigaAggiuntiva(r + 4 + aggiuntive) &&
+        !_macroBlocchi.contains(testo(r + 4 + aggiuntive, 0).toUpperCase())) {
+      aggiuntive++;
+    }
+    final righeBlocco = 4 + aggiuntive;
+
     if (valA == 'ASSISTENZA' || valA == 'GETTONE') {
       // Blocco template mai compilato (né descrizione né nomi): non è un
       // buco da segnalare, è solo spazio predisposto nel foglio.
       final descrizioneVuota =
           descrizione.replaceAll(RegExp('[^A-Z0-9]'), '').isEmpty;
-      final nessunNome = [r, r + 1, r + 2, r + 3].every(rigaVuota);
+      final nessunNome =
+          [for (var i = 0; i < righeBlocco; i++) r + i].every(rigaVuota);
       if (descrizioneVuota && nessunNome) {
-        r += 4;
+        r += righeBlocco;
         continue;
       }
     }
@@ -470,7 +497,17 @@ int _parseFoglio(
           titolare: titolare(r + i), sostituti: sostituti(r + i),
           note: note(r + i)));
     }
-    r += 4;
+    // Righe aggiuntive: slot anche se vuote, così il dettaglio mostra il
+    // posto libero disponibile — ma non è un buco (v. SlotPiano.buco).
+    for (var i = 4; i < righeBlocco; i++) {
+      final riga = r + i;
+      slots.add(SlotPiano(giorno: giorno, blocco: blocco, macro: valA,
+          ruolo: RuoloPiano.aggiuntivo, fascia: fascia, orario: orario,
+          descrizione: descrizioneTesto,
+          titolare: titolare(riga), sostituti: sostituti(riga),
+          note: note(riga)));
+    }
+    r += righeBlocco;
   }
   return blocco;
 }
