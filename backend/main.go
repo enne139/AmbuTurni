@@ -59,6 +59,10 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// File .ics del Piano turni rimandato come text/calendar, per l'app web
+	// su iPhone/iPad (vedi calendario.go).
+	mux.HandleFunc("POST /api/calendario.ics", handleCalendarioEcho)
+
 	// --- AUTENTICAZIONE (solo per la pagina admin) ---
 
 	// Login: restituisce un token JWT da usare come Bearer per aggiungere/eliminare ospedali.

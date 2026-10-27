@@ -121,10 +121,11 @@ Future<void> apriFileBinarioPiattaforma(
 }
 
 /// File .ics del Piano turni. Esiste come funzione a sé per la variante web
-/// (vedi backup_file_web.dart: lì share_plus non va bene per un calendario);
-/// in nativo il "Salva come"/share di salvaFilePiattaforma è già corretto.
+/// (vedi backup_file_web.dart: lì share_plus non va bene per un calendario,
+/// e su iOS serve il backend); in nativo il "Salva come"/share di
+/// salvaFilePiattaforma è già corretto e [backendUrl] non serve.
 Future<String?> salvaCalendarioPiattaforma(
-        String ics, String nomeFile, String shareText) =>
+        String ics, String nomeFile, String shareText, {String? backendUrl}) =>
     salvaFilePiattaforma(ics, nomeFile, shareText);
 
 /// Apre il file picker e legge il contenuto testuale del backup scelto.

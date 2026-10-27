@@ -228,7 +228,9 @@ backend/                            API Go+PostgreSQL dell'elenco condiviso ospe
                                      colonna bytea) di ciascuna risorsa. auth.go: JWT con ruolo
                                      (`admin`/`utente`) e i tre middleware di autenticazione
                                      (authMiddleware, utenteAuthMiddleware, contentAuthMiddleware),
-                                     vedi Decisioni tecniche. Repository formazione e Comunicati
+                                     vedi Decisioni tecniche. calendario.go: rimanda come
+                                     text/calendar il .ics dell'app web (telefoni, vedi Decisioni
+                                     tecniche). Repository formazione e Comunicati
                                      sono "contenuti riservati": lettura protetta da
                                      contentAuthMiddleware, richiede login nell'app.
                                      backend/Dockerfile + docker-compose.yml sono solo per
@@ -2513,14 +2515,42 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   il foglio di condivisione di sistema, dove il Calendario non compare — in
   più il file era etichettato `application/json`, residuo del backup. Nuova
   `salvaCalendarioPiattaforma` in `backup_file_web.dart` (in
-  `backup_file_io.dart` delega a `salvaFilePiattaforma`, invariato in nativo):
-  niente share_plus; su iOS/iPadOS (riconosciuto da user agent, iPadOS dal
-  touch perché si presenta come Mac) naviga a una `data:text/calendar` URI,
-  che Safari intercetta con "Aggiungi al calendario" (la via più citata per
-  iOS — un download finirebbe in File → Download senza importazione); altrove
-  download diretto via Blob con tipo `text/calendar` (Mac: doppio clic apre
-  Calendario). **Verificato solo con analyze/test/`flutter build web`, non su
-  un dispositivo Apple reale**: va confermato su iPhone e Mac.
+  `backup_file_io.dart` delega a `salvaFilePiattaforma`, invariato in nativo),
+  niente share_plus:
+  - **iOS/iPadOS** (riconosciuto da user agent, iPadOS dal touch perché si
+    presenta come Mac): Safari propone "Aggiungi al calendario" solo per una
+    vera risposta HTTP `text/calendar`. Una prima versione (v1.17.8) navigava
+    a una `data:text/calendar` URI, la via più citata online: **su iPhone
+    reale Safari la ignora in silenzio** (e la snackbar diceva comunque
+    "salvato"). Ora il file va al backend condiviso con un form POST
+    nascosto (`POST /api/calendario.ics`, `backend/calendario.go`), che lo
+    rimanda indietro così com'è con `Content-Type: text/calendar`: una
+    navigazione vera, nessun limite di lunghezza come in una query string,
+    niente salvato sul server. Endpoint pubblico (il contenuto è quello del
+    chiamante, nessun dato del server) ma accetta solo testo che inizi con
+    `BEGIN:VCALENDAR` e finisca con `END:VCALENDAR`, nome file filtrato e
+    `nosniff`: non diventa un echo generico di HTML. Target `_self` in Safari
+    (un tipo non visualizzabile non sostituisce la pagina), `_blank` nella
+    web app aggiunta alla Home (`display-mode: standalone`).
+  - **Android (Chrome)**: anche lì un download via Blob funzionava solo la
+    prima volta, poi la snackbar compariva senza alcun file (segnalato
+    dall'utente) — Chrome blocca i download automatici dopo il primo nella
+    stessa scheda, e l'app web non cambia mai pagina, quindi la scheda non
+    si "sblocca" mai fino a un ricaricamento. Stesso endpoint del backend con
+    `scarica=1` (→ `Content-Disposition: attachment`) in una scheda nuova
+    (`_blank`, chiusa da Chrome a download partito): il limite è per scheda,
+    ogni volta riparte da zero. Il file poi si apre dalla notifica di
+    download; Google Calendar per Android non importa .ics (Samsung
+    Calendar/Etar sì): su Android l'APK, con l'intent nativo, resta la via
+    migliore.
+  - **Altrove** (computer, Mac compreso): download diretto via Blob con tipo
+    `text/calendar`; sul Mac un doppio clic apre Calendario.
+  - Sul web nessuna snackbar di esito: lo mostra il browser, e "salvato"
+    compariva anche quando non era successo nulla.
+  - Endpoint verificato con `httptest` (risposta, rifiuto di contenuti non
+    .ics, nome file malevolo), app con analyze/test/`flutter build web`. **Il
+    passaggio iOS/Android va confermato su telefoni reali dopo il deploy del
+    backend.**
 
 ---
 

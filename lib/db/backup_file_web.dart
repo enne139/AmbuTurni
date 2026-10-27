@@ -76,17 +76,44 @@ Future<void> apriFileBinarioPiattaforma(
 /// su Messaggi/Mail/File ma mai nel calendario. Su Chrome/Edge funzionava
 /// solo perché lì .ics non è tra i tipi condivisibili e share_plus ripiegava
 /// sul download.
-/// - iOS/iPadOS: navigazione a una data: URI text/calendar, che Safari
-///   intercetta mostrando "Aggiungi al calendario" (un tipo non visualizzabile
-///   non sostituisce la pagina dell'app). Un download finirebbe invece in
-///   File → Download, senza proposta di importazione.
-/// - Altrove: download diretto con il tipo giusto; sul Mac un doppio clic
-///   apre Calendario, su Windows/Android l'app calendario predefinita.
+///
+/// Sui telefoni il file passa dal backend condiviso ([backendUrl], già
+/// normalizzato) con un form POST, e torna indietro come text/calendar (vedi
+/// backend/calendario.go):
+/// - iOS/iPadOS: Safari propone "Aggiungi al calendario" solo per una vera
+///   risposta HTTP text/calendar. Un download via Blob finisce in File →
+///   Download senza importazione, e una navigazione a una data: URI (prima
+///   versione di questo fix) viene ignorata in silenzio su device reale.
+///   Stessa scheda in Safari (un tipo non visualizzabile non sostituisce la
+///   pagina dell'app), scheda nuova nella web app aggiunta alla Home.
+/// - Android: un download via Blob funzionava solo la prima volta — Chrome
+///   blocca i download automatici successivi della stessa scheda, e l'app
+///   web non cambia mai pagina. In una scheda nuova (chiusa da Chrome a
+///   download partito) ogni volta riparte da zero.
+/// Altrove (computer, Mac compreso) download diretto con il tipo giusto:
+/// sul Mac un doppio clic apre Calendario.
 Future<String?> salvaCalendarioPiattaforma(
-    String ics, String nomeFile, String shareText) async {
-  if (_isIOS()) {
-    html.window.location.href =
-        'data:text/calendar;charset=utf-8,${Uri.encodeComponent(ics)}';
+    String ics, String nomeFile, String shareText, {String? backendUrl}) async {
+  final ua = html.window.navigator.userAgent;
+  final ios = _isIOS();
+  final android = ua.contains('Android');
+  if ((ios || android) && backendUrl != null && backendUrl.isNotEmpty) {
+    final standalone = html.window.matchMedia('(display-mode: standalone)').matches;
+    final form = html.FormElement()
+      ..method = 'post'
+      ..action = '$backendUrl/api/calendario.ics'
+      ..target = (ios && !standalone) ? '_self' : '_blank'
+      ..style.display = 'none';
+    void campo(String nome, String valore) => form.append(
+        html.InputElement(type: 'hidden')
+          ..name = nome
+          ..value = valore);
+    campo('ics', ics);
+    campo('nome', nomeFile);
+    if (android) campo('scarica', '1');
+    html.document.body!.append(form);
+    form.submit();
+    form.remove();
     return nomeFile;
   }
   final blob = html.Blob([utf8.encode(ics)], 'text/calendar;charset=utf-8');

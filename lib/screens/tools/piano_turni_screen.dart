@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:add_2_calendar/add_2_calendar.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:http/http.dart' as http;
@@ -1102,13 +1102,17 @@ class _PianoTurniScreenState extends State<PianoTurniScreen>
     }
 
     // Desktop/web: file .ics — "Salva come" su desktop; sul web download, o
-    // su iOS apertura diretta in Safari per "Aggiungi al calendario" (vedi
-    // salvaCalendarioPiattaforma).
+    // su iOS passaggio dal backend per "Aggiungi al calendario" (vedi
+    // salvaCalendarioPiattaforma). Sul web nessuna snackbar: l'esito lo
+    // mostra il browser (download o foglio del calendario), e "salvato"
+    // comparirebbe anche quando il browser non ha fatto nulla.
     try {
       final ics = generaIcs([EventoCalendario(titolo, inizio, fine)]);
       final nomeFile = 'cvs_${dateToIso(inizio)}_${_etichettaEvento(gruppo.first)}.ics';
-      final path = await salvaCalendarioPiattaforma(ics, nomeFile, 'Evento calendario AmbuTurni');
-      if (mounted) {
+      final path = await salvaCalendarioPiattaforma(
+          ics, nomeFile, 'Evento calendario AmbuTurni',
+          backendUrl: await _backendUrl());
+      if (mounted && !kIsWeb) {
         final msg = path != null ? 'File calendario salvato.' : 'Salvataggio annullato.';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
@@ -1209,7 +1213,9 @@ class _PianoTurniScreenState extends State<PianoTurniScreen>
             () async => Uint8List.fromList(utf8.encode(ics)), nomeFile, 'text/calendar');
         return;
       }
-      final path = await salvaCalendarioPiattaforma(ics, nomeFile, 'Turni AmbuTurni');
+      final path = await salvaCalendarioPiattaforma(ics, nomeFile, 'Turni AmbuTurni',
+          backendUrl: await _backendUrl());
+      if (kIsWeb) return;
       messenger.showSnackBar(SnackBar(
           content: Text(path != null
               ? 'File calendario salvato: importalo nella tua app calendario.'
@@ -1217,6 +1223,13 @@ class _PianoTurniScreenState extends State<PianoTurniScreen>
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Errore: $e')));
     }
+  }
+
+  /// Indirizzo del backend condiviso, già normalizzato: sul web per iOS il
+  /// file .ics passa da lì (vedi salvaCalendarioPiattaforma).
+  Future<String> _backendUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return BackendApi.normalizzaUrl(prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault);
   }
 
   static String _ora(DateTime d) =>
