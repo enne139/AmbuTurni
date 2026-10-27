@@ -2477,6 +2477,33 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   dall'app installata — Google Calendar per Android storicamente non
   importa file .ics (l'import in blocco lì si fa da calendar.google.com),
   Samsung Calendar/Etar sì.
+- **Piano turni: un foglio aggiunto sul backend non arrivava nell'app
+  (2026-10-23, segnalato dall'utente)**: due cause indipendenti, trovate
+  interrogando `GET /api/fogli` di produzione (il foglio nuovo c'era).
+  - **Certificato HTTPS del server senza intermedio**: dopo il rinnovo del
+    13/10/2026 (wildcard `*.maratuck.com`, Sectigo DV R36) il reverse proxy
+    sull'host — non versionato in questo repo, vedi `client_max_body_size`
+    più sopra — serve solo il certificato foglia, senza
+    `Sectigo Public Server Authentication CA DV R36`. Chrome desktop lo
+    recupera da sé (AIA), quindi la versione web nel browser funziona;
+    `curl`/`openssl` falliscono con "unable to verify the first
+    certificate", e così il client HTTP di Dart (app Android e desktop), che
+    non fa AIA: ogni chiamata al backend fallisce, e la sincronizzazione
+    fogli, silenziosa di proposito, lo nascondeva del tutto. **Fix lato
+    server, non nel codice**: il proxy deve servire la catena completa
+    (foglia + intermedio, il "fullchain"). Verifica:
+    `openssl s_client -connect ambuturni.maratuck.com:443 -servername
+    ambuturni.maratuck.com` deve dare `Verify return code: 0`.
+  - **Sincronizzazione solo all'avvio**: `_sincronizzaFogliDalBackend` girava
+    solo da `_ripristinaPreferenze` (initState), ma `PianoTurniScreen` resta
+    montata nell'`IndexedStack` (Piano turni in navbar è il default) — un
+    foglio pubblicato con l'app già aperta non arrivava fino a un riavvio
+    completo. Ora riparte anche al ritorno sull'app
+    (`WidgetsBindingObserver`, `AppLifecycleState.resumed`, sempre
+    silenziosa) e dal pulsante Ricarica dell'AppBar (`_ricaricaTutto`:
+    elenco fogli + piano aperto). Solo lì, essendo un'azione esplicita,
+    l'errore di rete non viene più ingoiato (`manuale: true` lo rilancia) e
+    finisce in una snackbar, insieme al numero di fogli nuovi arrivati.
 
 ---
 

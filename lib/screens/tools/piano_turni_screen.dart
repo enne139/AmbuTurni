@@ -66,7 +66,8 @@ class PianoTurniScreen extends StatefulWidget {
   State<PianoTurniScreen> createState() => _PianoTurniScreenState();
 }
 
-class _PianoTurniScreenState extends State<PianoTurniScreen> {
+class _PianoTurniScreenState extends State<PianoTurniScreen>
+    with WidgetsBindingObserver {
   final _urlCtrl = TextEditingController();
   PianoMensile? _piano;
   bool _loading = false;
@@ -101,13 +102,25 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ripristinaPreferenze();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _urlCtrl.dispose();
     super.dispose();
+  }
+
+  /// Ritorno sull'app: la schermata resta montata nell'IndexedStack (Piano
+  /// turni in navbar è il default) e initState non riparte, quindi senza
+  /// questo un foglio pubblicato sul backend mentre l'app era aperta in
+  /// sottofondo non arriverebbe mai, fino a un riavvio completo.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    SharedPreferences.getInstance().then(_sincronizzaFogliDalBackend);
   }
 
   /// Ricarica URL e filtri salvati; se c'è un URL memorizzato parte subito
@@ -192,24 +205,56 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
   /// non ancora presenti localmente, senza toccare un link che l'utente ha
   /// già incollato/verificato per quel mese — evita che il backend sovrascriva
   /// silenziosamente un URL già in uso.
-  Future<void> _sincronizzaFogliDalBackend(SharedPreferences prefs) async {
-    if (!(prefs.getBool(kPrefSyncFogliAttivo) ?? true)) return;
+  /// Restituisce quanti fogli nuovi sono arrivati. Con [manuale] (pulsante
+  /// Ricarica) un errore viene rilanciato invece che ingoiato: lì l'utente
+  /// ha chiesto un aggiornamento e deve sapere se il server non risponde —
+  /// un fallimento sempre silenzioso aveva nascosto un certificato HTTPS
+  /// incompleto sul server, vedi CLAUDE.md.
+  Future<int> _sincronizzaFogliDalBackend(SharedPreferences prefs,
+      {bool manuale = false}) async {
+    if (!(prefs.getBool(kPrefSyncFogliAttivo) ?? true)) return 0;
     final baseUrl = prefs.getString(kPrefBackendUrl) ?? kBackendUrlDefault;
     try {
       final remoti = await BackendApi(baseUrl: baseUrl).getFogli();
-      if (!mounted || remoti.isEmpty) return;
+      if (!mounted || remoti.isEmpty) return 0;
       final nuovi = {
         for (final entry in remoti.entries)
           if (!_fogliSalvati.containsKey(entry.key) && !_fogliRimossi.contains(entry.key))
             entry.key: entry.value
       };
-      if (nuovi.isEmpty) return;
+      if (nuovi.isEmpty) return 0;
       setState(() => _fogliSalvati = {..._fogliSalvati, ...nuovi});
       await _salvaFogli();
+      return nuovi.length;
     } catch (_) {
-      // Silenzioso: sincronizzazione best-effort, non un'azione richiesta
+      // Automatica: silenziosa, best-effort, non un'azione richiesta
       // esplicitamente dall'utente in questo momento.
+      if (manuale) rethrow;
+      return 0;
     }
+  }
+
+  /// Pulsante Ricarica: oltre al piano aperto riscarica anche l'elenco dei
+  /// fogli dal backend, così un mese appena pubblicato compare senza
+  /// riavviare l'app. Esito della sincronizzazione in snackbar solo se dice
+  /// qualcosa (fogli nuovi o errore); il caricamento del piano procede in
+  /// ogni caso, il foglio Google non dipende dal backend.
+  Future<void> _ricaricaTutto() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final nuovi = await _sincronizzaFogliDalBackend(prefs, manuale: true);
+      if (nuovi > 0) {
+        messenger.showSnackBar(SnackBar(
+            content: Text(nuovi == 1
+                ? '1 nuovo foglio dal server.'
+                : '$nuovi nuovi fogli dal server.')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text("Impossibile aggiornare l'elenco dei fogli dal server: $e")));
+    }
+    await _carica();
   }
 
   /// Giorno selezionato all'apertura di un piano: oggi se è il mese
@@ -430,8 +475,8 @@ class _PianoTurniScreenState extends State<PianoTurniScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
-              tooltip: 'Ricarica dal foglio',
-              onPressed: _carica,
+              tooltip: 'Ricarica',
+              onPressed: _ricaricaTutto,
             ),
           ],
         ],
