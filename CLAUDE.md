@@ -2504,6 +2504,23 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     elenco fogli + piano aperto). Solo lì, essendo un'azione esplicita,
     l'errore di rete non viene più ingoiato (`manuale: true` lo rilancia) e
     finisce in una snackbar, insieme al numero di fogli nuovi arrivati.
+- **Piano turni: il file .ics non arrivava mai al calendario sui dispositivi
+  Apple (2026-10-27, segnalato dall'utente)**: su Apple c'è solo la versione
+  web (nessun target iOS/macOS), e lì il .ics passava da
+  `salvaFilePiattaforma` → `share_plus` → Web Share API. Chrome/Edge non
+  condividono file .ics (tipo non ammesso), quindi share_plus ripiegava sul
+  download e "funzionava"; Safari (iOS e macOS) accetta qualunque file e apre
+  il foglio di condivisione di sistema, dove il Calendario non compare — in
+  più il file era etichettato `application/json`, residuo del backup. Nuova
+  `salvaCalendarioPiattaforma` in `backup_file_web.dart` (in
+  `backup_file_io.dart` delega a `salvaFilePiattaforma`, invariato in nativo):
+  niente share_plus; su iOS/iPadOS (riconosciuto da user agent, iPadOS dal
+  touch perché si presenta come Mac) naviga a una `data:text/calendar` URI,
+  che Safari intercetta con "Aggiungi al calendario" (la via più citata per
+  iOS — un download finirebbe in File → Download senza importazione); altrove
+  download diretto via Blob con tipo `text/calendar` (Mac: doppio clic apre
+  Calendario). **Verificato solo con analyze/test/`flutter build web`, non su
+  un dispositivo Apple reale**: va confermato su iPhone e Mac.
 
 ---
 

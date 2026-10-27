@@ -1101,14 +1101,13 @@ class _PianoTurniScreenState extends State<PianoTurniScreen>
       return;
     }
 
-    // Desktop/web: si salva un file .ics con lo stesso percorso usato per il
-    // backup (dialog "Salva come" su desktop, download/share sul web) — la
-    // funzione è già generica (testo + nome file), riusata invece di
-    // duplicare la logica io/web per un secondo tipo di file.
+    // Desktop/web: file .ics — "Salva come" su desktop; sul web download, o
+    // su iOS apertura diretta in Safari per "Aggiungi al calendario" (vedi
+    // salvaCalendarioPiattaforma).
     try {
       final ics = generaIcs([EventoCalendario(titolo, inizio, fine)]);
       final nomeFile = 'cvs_${dateToIso(inizio)}_${_etichettaEvento(gruppo.first)}.ics';
-      final path = await salvaFilePiattaforma(ics, nomeFile, 'Evento calendario AmbuTurni');
+      final path = await salvaCalendarioPiattaforma(ics, nomeFile, 'Evento calendario AmbuTurni');
       if (mounted) {
         final msg = path != null ? 'File calendario salvato.' : 'Salvataggio annullato.';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -1210,7 +1209,7 @@ class _PianoTurniScreenState extends State<PianoTurniScreen>
             () async => Uint8List.fromList(utf8.encode(ics)), nomeFile, 'text/calendar');
         return;
       }
-      final path = await salvaFilePiattaforma(ics, nomeFile, 'Turni AmbuTurni');
+      final path = await salvaCalendarioPiattaforma(ics, nomeFile, 'Turni AmbuTurni');
       messenger.showSnackBar(SnackBar(
           content: Text(path != null
               ? 'File calendario salvato: importalo nella tua app calendario.'

@@ -69,6 +69,48 @@ Future<void> apriFileBinarioPiattaforma(
   }
 }
 
+/// Consegna il file .ics del Piano turni al calendario del dispositivo.
+/// Niente share_plus, a differenza di salvaFilePiattaforma: su Safari (iOS e
+/// macOS) la Web Share API accetta qualunque file e apre il foglio di
+/// condivisione di sistema, dove il Calendario non compare — il file finiva
+/// su Messaggi/Mail/File ma mai nel calendario. Su Chrome/Edge funzionava
+/// solo perché lì .ics non è tra i tipi condivisibili e share_plus ripiegava
+/// sul download.
+/// - iOS/iPadOS: navigazione a una data: URI text/calendar, che Safari
+///   intercetta mostrando "Aggiungi al calendario" (un tipo non visualizzabile
+///   non sostituisce la pagina dell'app). Un download finirebbe invece in
+///   File → Download, senza proposta di importazione.
+/// - Altrove: download diretto con il tipo giusto; sul Mac un doppio clic
+///   apre Calendario, su Windows/Android l'app calendario predefinita.
+Future<String?> salvaCalendarioPiattaforma(
+    String ics, String nomeFile, String shareText) async {
+  if (_isIOS()) {
+    html.window.location.href =
+        'data:text/calendar;charset=utf-8,${Uri.encodeComponent(ics)}';
+    return nomeFile;
+  }
+  final blob = html.Blob([utf8.encode(ics)], 'text/calendar;charset=utf-8');
+  final url = html.Url.createObjectUrlFromBlob(blob);
+  final link = html.AnchorElement(href: url)
+    ..download = nomeFile
+    ..style.display = 'none';
+  html.document.body!.append(link);
+  link.click();
+  link.remove();
+  // Revoca differita: alcuni browser leggono il blob dopo il click, in modo
+  // asincrono.
+  Future.delayed(const Duration(minutes: 1), () => html.Url.revokeObjectUrl(url));
+  return nomeFile;
+}
+
+/// iPhone/iPod/iPad. iPadOS 13+ in Safari si presenta come un Mac desktop:
+/// lo tradisce il touch (i Mac non hanno touch screen).
+bool _isIOS() {
+  final nav = html.window.navigator;
+  if (RegExp(r'iPad|iPhone|iPod').hasMatch(nav.userAgent)) return true;
+  return nav.userAgent.contains('Macintosh') && (nav.maxTouchPoints ?? 0) > 1;
+}
+
 /// Apre il file picker del browser e legge il contenuto testuale del backup
 /// scelto. Null se l'utente annulla la selezione. Sul web file_picker
 /// restituisce solo i bytes (mai un path reale), da qui `withData: true`.

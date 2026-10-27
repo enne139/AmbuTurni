@@ -120,6 +120,13 @@ Future<void> apriFileBinarioPiattaforma(
   await SharePlus.instance.share(ShareParams(files: [XFile(file.path, mimeType: mimeType)]));
 }
 
+/// File .ics del Piano turni. Esiste come funzione a sé per la variante web
+/// (vedi backup_file_web.dart: lì share_plus non va bene per un calendario);
+/// in nativo il "Salva come"/share di salvaFilePiattaforma è già corretto.
+Future<String?> salvaCalendarioPiattaforma(
+        String ics, String nomeFile, String shareText) =>
+    salvaFilePiattaforma(ics, nomeFile, shareText);
+
 /// Apre il file picker e legge il contenuto testuale del backup scelto.
 /// Null se l'utente annulla la selezione.
 Future<String?> leggiBackupScelto() async {
