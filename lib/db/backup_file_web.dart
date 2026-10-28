@@ -3,9 +3,12 @@
 // (file_picker non implementa saveFile nel browser, solo pickFiles).
 import 'dart:convert';
 import 'dart:html' as html;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import '../utils/calendario_ics.dart';
 
 /// "Salva" [contenuto] nel browser: si costruisce un XFile in memoria (mai
 /// scritto su disco: sul web XFile.fromData tiene solo i bytes) e lo si passa
@@ -78,14 +81,17 @@ Future<void> apriFileBinarioPiattaforma(
 /// sul download.
 ///
 /// Sui telefoni il file passa dal backend condiviso ([backendUrl], già
-/// normalizzato) con un form POST, e torna indietro come text/calendar (vedi
-/// backend/calendario.go):
+/// normalizzato), che lo rimanda come text/calendar a un indirizzo GET
+/// costruito qui (urlCalendarioBackend, vedi lì perché GET e compresso).
+/// L'indirizzo si apre subito, nello stesso tocco dell'utente: niente attese
+/// di rete prima, che farebbero bloccare la finestra nuova come popup.
 /// - iOS/iPadOS: Safari propone "Aggiungi al calendario" solo per una vera
-///   risposta HTTP text/calendar. Un download via Blob finisce in File →
-///   Download senza importazione, e una navigazione a una data: URI (prima
-///   versione di questo fix) viene ignorata in silenzio su device reale.
-///   Stessa scheda in Safari (un tipo non visualizzabile non sostituisce la
-///   pagina dell'app), scheda nuova nella web app aggiunta alla Home.
+///   risposta HTTP text/calendar (un download via Blob finisce in File →
+///   Download, una data: URI viene ignorata in silenzio). In una scheda di
+///   Safari basta navigarci (un tipo non visualizzabile non sostituisce la
+///   pagina dell'app); nella web app aggiunta alla Home invece la pagina non
+///   sa gestirlo, quindi si apre una finestra nuova, che iOS mostra in una
+///   vista Safari vera.
 /// - Android: un download via Blob funzionava solo la prima volta — Chrome
 ///   blocca i download automatici successivi della stessa scheda, e l'app
 ///   web non cambia mai pagina. In una scheda nuova (chiusa da Chrome a
@@ -94,26 +100,15 @@ Future<void> apriFileBinarioPiattaforma(
 /// sul Mac un doppio clic apre Calendario.
 Future<String?> salvaCalendarioPiattaforma(
     String ics, String nomeFile, String shareText, {String? backendUrl}) async {
-  final ua = html.window.navigator.userAgent;
   final ios = _isIOS();
-  final android = ua.contains('Android');
+  final android = html.window.navigator.userAgent.contains('Android');
   if ((ios || android) && backendUrl != null && backendUrl.isNotEmpty) {
-    final standalone = html.window.matchMedia('(display-mode: standalone)').matches;
-    final form = html.FormElement()
-      ..method = 'post'
-      ..action = '$backendUrl/api/calendario.ics'
-      ..target = (ios && !standalone) ? '_self' : '_blank'
-      ..style.display = 'none';
-    void campo(String nome, String valore) => form.append(
-        html.InputElement(type: 'hidden')
-          ..name = nome
-          ..value = valore);
-    campo('ics', ics);
-    campo('nome', nomeFile);
-    if (android) campo('scarica', '1');
-    html.document.body!.append(form);
-    form.submit();
-    form.remove();
+    final url = urlCalendarioBackend(backendUrl, ics, nomeFile, scarica: android);
+    if (ios && !_isStandalone()) {
+      html.window.location.href = url;
+    } else {
+      html.window.open(url, '_blank');
+    }
     return nomeFile;
   }
   final blob = html.Blob([utf8.encode(ics)], 'text/calendar;charset=utf-8');
@@ -136,6 +131,16 @@ bool _isIOS() {
   final nav = html.window.navigator;
   if (RegExp(r'iPad|iPhone|iPod').hasMatch(nav.userAgent)) return true;
   return nav.userAgent.contains('Macintosh') && (nav.maxTouchPoints ?? 0) > 1;
+}
+
+/// Web app aperta dall'icona sulla Home. Due controlli perché sbagliare qui
+/// costa caro: navigator.standalone è il segnale storico di iOS (dart:html
+/// non lo espone, da qui js_interop), display-mode quello standard.
+bool _isStandalone() {
+  final navigator = globalContext.getProperty<JSObject>('navigator'.toJS);
+  final standaloneIos = navigator.getProperty<JSAny?>('standalone'.toJS).dartify();
+  return standaloneIos == true ||
+      html.window.matchMedia('(display-mode: standalone)').matches;
 }
 
 /// Apre il file picker del browser e legge il contenuto testuale del backup

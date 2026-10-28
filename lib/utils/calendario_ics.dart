@@ -5,6 +5,9 @@
 // "tutti i miei turni" il file è l'unica strada su ogni piattaforma.
 //
 // Dart puro (niente import Flutter), come piano_mensile.dart: unit-testato.
+import 'dart:convert';
+
+import 'package:archive/archive.dart' show ZLibEncoder;
 
 /// Un evento da scrivere nel file: titolo e intervallo, nient'altro (niente
 /// descrizione, per scelta dell'utente — stesso formato dell'intent Android).
@@ -61,4 +64,25 @@ String _esc(String s) => s
 String _uid(EventoCalendario e) {
   final slug = e.titolo.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
   return '${_fmt(e.inizio)}-$slug@ambuturni';
+}
+
+/// Indirizzo GET del backend condiviso che rimanda [ics] come text/calendar
+/// (backend/calendario.go), per l'app web sui telefoni. iOS propone
+/// "Aggiungi al calendario" solo per una vera risposta HTTP, e una GET è
+/// l'unica richiesta che arriva intatta anche quando iOS la apre fuori dalla
+/// web app aggiunta alla Home (in una vista Safari separata, dove il corpo di
+/// un POST va perso: la v1.17.9 mostrava lì una pagina di errore). Il file
+/// viaggia quindi nell'indirizzo, compresso con zlib e in base64url senza
+/// padding: in chiaro un mese intero di turni supererebbe il limite di 8 KB
+/// della riga di richiesta di nginx. [scarica] chiede un download vero
+/// (Android) invece della visualizzazione (iOS).
+String urlCalendarioBackend(String backendUrl, String ics, String nomeFile,
+    {bool scarica = false}) {
+  final compresso = const ZLibEncoder().encode(utf8.encode(ics));
+  final d = base64Url.encode(compresso).replaceAll('=', '');
+  return Uri.parse('$backendUrl/api/calendario.ics').replace(queryParameters: {
+    'd': d,
+    'nome': nomeFile,
+    if (scarica) 'scarica': '1',
+  }).toString();
 }

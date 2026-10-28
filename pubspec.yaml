@@ -76,6 +76,13 @@ dependencies:
   # Lettura XLSX (tool Piano turni: foglio Google dei turni dell'associazione)
   excel: ^4.0.6
 
+  # Compressione zlib in Dart puro (gira anche sul web, a differenza di
+  # dart:io): l'app web sui telefoni passa il file .ics del Piano turni
+  # dentro l'indirizzo del backend, e in chiaro un mese intero di turni
+  # supererebbe il limite di 8 KB della riga di richiesta di nginx. Era già
+  # nel lockfile come dipendenza di excel: vincolo sulla versione risolta.
+  archive: ^3.6.1
+
   # Aggiunta eventi al calendario di sistema (tool Piano turni: pulsante
   # "Aggiungi al calendario" sulle card dei blocchi). Su Android apre l'editor
   # evento del calendario via intent, senza permessi runtime.

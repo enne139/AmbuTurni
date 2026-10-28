@@ -1,4 +1,7 @@
 // Test del generatore .ics del Piano turni (lib/utils/calendario_ics.dart).
+import 'dart:convert';
+
+import 'package:archive/archive.dart' show ZLibDecoder;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ambu_turni/utils/calendario_ics.dart';
 
@@ -44,5 +47,42 @@ void main() {
   test('lista vuota: calendario valido senza eventi', () {
     expect(generaIcs([]).split('\r\n'),
         ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AmbuTurni//IT', 'END:VCALENDAR']);
+  });
+
+  group('urlCalendarioBackend', () {
+    // Caso peggiore realistico: due turni al giorno per un mese intero.
+    final mesePieno = generaIcs([
+      for (var g = 1; g <= 31; g++) ...[
+        EventoCalendario('CVS (centralino)', DateTime(2026, 10, g, 7), DateTime(2026, 10, g, 13)),
+        EventoCalendario('CVS (sera)', DateTime(2026, 10, g, 18, 30), DateTime(2026, 10, g, 23, 30)),
+      ],
+    ], adesso: adesso);
+
+    String decodifica(String d) =>
+        utf8.decode(const ZLibDecoder().decodeBytes(base64Url.decode(base64Url.normalize(d))));
+
+    test('GET sul backend con il file compresso, che torna identico', () {
+      final url = Uri.parse(urlCalendarioBackend(
+          'https://esempio.it', mesePieno, 'cvs_turni_2026_10.ics'));
+      expect(url.origin, 'https://esempio.it');
+      expect(url.path, '/api/calendario.ics');
+      expect(url.queryParameters['nome'], 'cvs_turni_2026_10.ics');
+      expect(url.queryParameters.containsKey('scarica'), isFalse);
+      final d = url.queryParameters['d']!;
+      expect(d, isNot(contains('=')));
+      expect(decodifica(d), mesePieno);
+    });
+
+    test('un mese pieno resta ben sotto il limite di nginx (8 KB)', () {
+      final url = urlCalendarioBackend('https://esempio.it', mesePieno, 'x.ics');
+      expect(utf8.encode(mesePieno).length, greaterThan(8192)); // in chiaro non ci starebbe
+      expect(url.length, lessThan(4096));
+    });
+
+    test('scarica aggiunge il parametro per il download (Android)', () {
+      final url = Uri.parse(urlCalendarioBackend(
+          'https://esempio.it', mesePieno, 'x.ics', scarica: true));
+      expect(url.queryParameters['scarica'], '1');
+    });
   });
 }

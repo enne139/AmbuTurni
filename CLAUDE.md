@@ -69,6 +69,7 @@
 | Markdown nelle note | `flutter_markdown_plus` (fork mantenuto; l'ufficiale `flutter_markdown` è discontinued) |
 | Lettura XLSX (Piano turni) | `excel` |
 | Eventi calendario (Piano turni) | `add_2_calendar` (intent Android, nessun permesso; assente su desktop/web) |
+| Compressione del .ics nell'indirizzo (Piano turni, web su telefono) | `archive` (zlib in Dart puro, gira anche sul web; era già nel lockfile come dipendenza di `excel`) |
 | Mappa (Lista ospedali) | `flutter_map` + `latlong2`, tile OpenStreetMap, nessuna API key (funziona anche su Windows/web) |
 | Geocoding indirizzi (Lista ospedali) | Nominatim (OpenStreetMap), nessuna API key, chiamato solo alla creazione/modifica di un ospedale |
 | Apertura navigatore esterno (Lista ospedali) | `url_launcher`, link universale Google Maps |
@@ -97,7 +98,8 @@ lib/
 │   ├── piano_mensile.dart         parser XLSX del piano turni mensile (Dart puro, testato)
 │   ├── calendario_ics.dart        generaIcs(): file .ics con uno o più eventi (Piano turni:
 │   │                               singolo turno su desktop/web, tutti i propri turni del
-│   │                               mese ovunque), Dart puro, testato
+│   │                               mese ovunque); urlCalendarioBackend(): indirizzo GET del
+│   │                               backend col .ics compresso (web su telefono). Dart puro, testato
 │   ├── piano_cache.dart           cache dei piani decodificati: solo export condizionale
 │   │                               (vedi Piattaforma web), impl. in piano_cache_io.dart
 │   │                               (file JSON per mese) / piano_cache_web.dart
@@ -229,8 +231,8 @@ backend/                            API Go+PostgreSQL dell'elenco condiviso ospe
                                      (`admin`/`utente`) e i tre middleware di autenticazione
                                      (authMiddleware, utenteAuthMiddleware, contentAuthMiddleware),
                                      vedi Decisioni tecniche. calendario.go: rimanda come
-                                     text/calendar il .ics dell'app web (telefoni, vedi Decisioni
-                                     tecniche). Repository formazione e Comunicati
+                                     text/calendar il .ics che l'app web sui telefoni passa,
+                                     compresso, nell'indirizzo (vedi Decisioni tecniche). Repository formazione e Comunicati
                                      sono "contenuti riservati": lettura protetta da
                                      contentAuthMiddleware, richiede login nell'app.
                                      backend/Dockerfile + docker-compose.yml sono solo per
@@ -2507,50 +2509,69 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     l'errore di rete non viene più ingoiato (`manuale: true` lo rilancia) e
     finisce in una snackbar, insieme al numero di fogli nuovi arrivati.
 - **Piano turni: il file .ics non arrivava mai al calendario sui dispositivi
-  Apple (2026-10-27, segnalato dall'utente)**: su Apple c'è solo la versione
-  web (nessun target iOS/macOS), e lì il .ics passava da
-  `salvaFilePiattaforma` → `share_plus` → Web Share API. Chrome/Edge non
-  condividono file .ics (tipo non ammesso), quindi share_plus ripiegava sul
-  download e "funzionava"; Safari (iOS e macOS) accetta qualunque file e apre
-  il foglio di condivisione di sistema, dove il Calendario non compare — in
-  più il file era etichettato `application/json`, residuo del backup. Nuova
-  `salvaCalendarioPiattaforma` in `backup_file_web.dart` (in
-  `backup_file_io.dart` delega a `salvaFilePiattaforma`, invariato in nativo),
-  niente share_plus:
+  Apple e su Android web (2026-10-27/28, segnalato dall'utente, tre
+  tentativi)**: su Apple c'è solo la versione web (nessun target iOS/macOS),
+  e lì il .ics passava da `salvaFilePiattaforma` → `share_plus` → Web Share
+  API. Chrome/Edge non condividono file .ics (tipo non ammesso), quindi
+  share_plus ripiegava sul download e "funzionava"; Safari (iOS e macOS)
+  accetta qualunque file e apre il foglio di condivisione di sistema, dove
+  il Calendario non compare — in più il file era etichettato
+  `application/json`, residuo del backup. Nuova `salvaCalendarioPiattaforma`
+  in `backup_file_web.dart` (in `backup_file_io.dart` delega a
+  `salvaFilePiattaforma`, invariato in nativo), niente share_plus:
   - **iOS/iPadOS** (riconosciuto da user agent, iPadOS dal touch perché si
     presenta come Mac): Safari propone "Aggiungi al calendario" solo per una
-    vera risposta HTTP `text/calendar`. Una prima versione (v1.17.8) navigava
-    a una `data:text/calendar` URI, la via più citata online: **su iPhone
-    reale Safari la ignora in silenzio** (e la snackbar diceva comunque
-    "salvato"). Ora il file va al backend condiviso con un form POST
-    nascosto (`POST /api/calendario.ics`, `backend/calendario.go`), che lo
-    rimanda indietro così com'è con `Content-Type: text/calendar`: una
-    navigazione vera, nessun limite di lunghezza come in una query string,
-    niente salvato sul server. Endpoint pubblico (il contenuto è quello del
-    chiamante, nessun dato del server) ma accetta solo testo che inizi con
-    `BEGIN:VCALENDAR` e finisca con `END:VCALENDAR`, nome file filtrato e
-    `nosniff`: non diventa un echo generico di HTML. Target `_self` in Safari
-    (un tipo non visualizzabile non sostituisce la pagina), `_blank` nella
-    web app aggiunta alla Home (`display-mode: standalone`).
+    vera risposta HTTP `text/calendar` (WebKit esclude apposta text/calendar
+    dai tipi text/* visualizzabili come testo). Tentativi falliti, entrambi
+    su iPhone reale con la **web app aggiunta alla Home** (il modo in cui
+    l'utente usa l'app): v1.17.8 navigava a una `data:text/calendar` URI,
+    ignorata in silenzio (e la snackbar diceva comunque "salvato"); v1.17.9
+    mandava il file con un form POST nascosto in una finestra nuova
+    (`_blank`), ma dalla web app sulla Home iOS apre le finestre nuove in una
+    vista Safari separata passandole solo l'URL — il corpo del POST va perso,
+    arriva una GET e l'endpoint (solo POST) rispondeva con una pagina di
+    errore. Ora (v1.17.10) `GET /api/calendario.ics?d=...`
+    (`backend/calendario.go`): il file viaggia nell'indirizzo, compresso con
+    zlib (`archive`) e in base64url senza padding (`urlCalendarioBackend` in
+    `utils/calendario_ics.dart`) — in chiaro un mese di 62 turni pesa
+    10,4 KB, oltre la riga di richiesta da 8 KB di nginx, compresso diventa
+    un indirizzo di ~1 KB. Il backend lo decomprime (limite di 1 MiB sul
+    testo decompresso, contro i file gonfiati ad arte), accetta solo testo
+    che inizi con `BEGIN:VCALENDAR` e finisca con `END:VCALENDAR`, filtra il
+    nome file e manda `nosniff`: non diventa un echo generico di HTML. Niente
+    salvato sul server. L'indirizzo si apre nello stesso tocco dell'utente,
+    senza attese di rete prima (una finestra aperta dopo un'attesa verrebbe
+    bloccata come popup): nella web app sulla Home con `window.open` (iOS lo
+    mostra nella vista Safari separata, che sa gestire il calendario), in una
+    scheda di Safari navigando la pagina stessa (un tipo non visualizzabile
+    non la sostituisce). Web app sulla Home riconosciuta da
+    `navigator.standalone` (iOS, letto via `dart:js_interop`: `dart:html`
+    non lo espone) oppure `display-mode: standalone`.
   - **Android (Chrome)**: anche lì un download via Blob funzionava solo la
     prima volta, poi la snackbar compariva senza alcun file (segnalato
     dall'utente) — Chrome blocca i download automatici dopo il primo nella
     stessa scheda, e l'app web non cambia mai pagina, quindi la scheda non
-    si "sblocca" mai fino a un ricaricamento. Stesso endpoint del backend con
-    `scarica=1` (→ `Content-Disposition: attachment`) in una scheda nuova
-    (`_blank`, chiusa da Chrome a download partito): il limite è per scheda,
-    ogni volta riparte da zero. Il file poi si apre dalla notifica di
-    download; Google Calendar per Android non importa .ics (Samsung
-    Calendar/Etar sì): su Android l'APK, con l'intent nativo, resta la via
-    migliore.
+    si "sblocca" mai fino a un ricaricamento. Stesso indirizzo GET con
+    `scarica=1` (→ `Content-Disposition: attachment`) aperto in una scheda
+    nuova (`window.open`, chiusa da Chrome a download partito): il limite è
+    per scheda, ogni volta riparte da zero. Il file poi si apre dalla
+    notifica di download; Google Calendar per Android non importa .ics
+    (Samsung Calendar/Etar sì): su Android l'APK, con l'intent nativo, resta
+    la via migliore.
   - **Altrove** (computer, Mac compreso): download diretto via Blob con tipo
     `text/calendar`; sul Mac un doppio clic apre Calendario.
   - Sul web nessuna snackbar di esito: lo mostra il browser, e "salvato"
     compariva anche quando non era successo nulla.
-  - Endpoint verificato con `httptest` (risposta, rifiuto di contenuti non
-    .ics, nome file malevolo), app con analyze/test/`flutter build web`. **Il
-    passaggio iOS/Android va confermato su telefoni reali dopo il deploy del
-    backend.**
+  - **Effetto collaterale accettato**: essendo una GET, date e orari dei
+    turni esportati finiscono nei log di accesso di nginx (nessun nome: i
+    titoli sono solo "CVS (fascia)").
+  - **Verificato**: test Dart di `urlCalendarioBackend` (roundtrip zlib,
+    lunghezza di un mese pieno), backend con `httptest` sull'indirizzo
+    generato da Dart (62 eventi tornati intatti) e su HTML compresso, file
+    gonfiato da 5 MB e parametri malformati (tutti 400), `flutter build web`.
+    **Il comportamento di iOS va confermato su iPhone reale dopo il deploy**:
+    se anche la vista Safari separata mostrasse il calendario come testo, il
+    ripiego è un link `webcal://` (sottoscrizione dall'app Calendario).
 
 ---
 
@@ -2646,7 +2667,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 205 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 208 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 
