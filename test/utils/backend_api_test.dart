@@ -336,6 +336,101 @@ void main() {
     });
   });
 
+  group('getMezzi', () {
+    test('chiama GET /api/mezzi senza token e restituisce i nomi ordinati', () async {
+      final richieste = <http.Request>[];
+      final api = _api(
+        _json([
+          {'id': '1', 'nome': '12'},
+          {'id': '2', 'nome': '07'},
+        ], 200),
+        richieste,
+      );
+      expect(await api.getMezzi(), ['07', '12']);
+      expect(richieste.single.method, 'GET');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/mezzi');
+      expect(richieste.single.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('risposta non-lista lancia BackendApiException', () async {
+      final api = _api(_json({'nome': '12'}, 200), []);
+      expect(api.getMezzi(), throwsA(isA<BackendApiException>()));
+    });
+  });
+
+  group('materiali usati condivisi', () {
+    final riga = {
+      'id': 'mu1',
+      'materiale': 'Garze',
+      'quantita': 2,
+      'mezzo': '12',
+      'creatoDa': 'mario',
+      'createdAt': '2026-10-28T10:15:00Z',
+    };
+
+    test('getMaterialiCondivisi: GET con Authorization, righe non valide scartate', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json([riga, {'id': 'senza-materiale'}], 200), richieste);
+      final lista = await api.getMaterialiCondivisi(token: 'abc');
+      expect(lista.single.id, 'mu1');
+      expect(lista.single.creatoDa, 'mario');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/materiali-usati');
+      expect(richieste.single.headers['Authorization'], 'Bearer abc');
+    });
+
+    test('getMaterialiCondivisi: 401 lancia BackendApiUnauthorized', () async {
+      final api = _api(_json({'error': 'Token mancante o non valido'}, 401), []);
+      expect(api.getMaterialiCondivisi(token: 'scaduto'), throwsA(isA<BackendApiUnauthorized>()));
+    });
+
+    test('creaMaterialeCondiviso: POST col body e restituisce la riga creata', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json(riga, 201), richieste);
+      final dati = {'materiale': 'Garze', 'quantita': 2, 'mezzo': '12'};
+      final mu = await api.creaMaterialeCondiviso(token: 'abc', dati: dati);
+      expect(mu.id, 'mu1');
+      expect(richieste.single.method, 'POST');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/materiali-usati');
+      expect(richieste.single.headers['Authorization'], 'Bearer abc');
+      expect(jsonDecode(richieste.single.body), dati);
+    });
+
+    test('aggiornaMaterialeCondiviso: PUT su /:id', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json(riga, 200), richieste);
+      await api.aggiornaMaterialeCondiviso(token: 'abc', id: 'mu1', dati: {'materiale': 'Garze', 'quantita': 2});
+      expect(richieste.single.method, 'PUT');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/materiali-usati/mu1');
+    });
+
+    test('aggiornaMaterialeCondiviso: 404 lancia BackendApiNotFound (già ripristinato)', () async {
+      final api = _api(_json({'error': 'Materiale già ripristinato da qualcun altro'}, 404), []);
+      expect(
+        api.aggiornaMaterialeCondiviso(token: 'abc', id: 'mu1', dati: {}),
+        throwsA(isA<BackendApiNotFound>()),
+      );
+    });
+
+    test('variaQuantitaMaterialeCondiviso: manda il delta, non il valore', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json({...riga, 'quantita': 3}, 200), richieste);
+      final mu = await api.variaQuantitaMaterialeCondiviso(token: 'abc', id: 'mu1', delta: 1);
+      expect(mu.quantita, 3);
+      expect(richieste.single.method, 'POST');
+      expect(richieste.single.url.toString(), 'https://backend.test/api/materiali-usati/mu1/quantita');
+      expect(jsonDecode(richieste.single.body), {'delta': 1});
+    });
+
+    test('ripristinaMaterialiCondivisi: manda gli id e restituisce quanti esistevano', () async {
+      final richieste = <http.Request>[];
+      final api = _api(_json({'eliminati': 1}, 200), richieste);
+      final eliminati = await api.ripristinaMaterialiCondivisi(token: 'abc', ids: ['mu1', 'mu2']);
+      expect(eliminati, 1);
+      expect(richieste.single.url.toString(), 'https://backend.test/api/materiali-usati/ripristina');
+      expect(jsonDecode(richieste.single.body), {'ids': ['mu1', 'mu2']});
+    });
+  });
+
   group('messaggioErroreBackend', () {
     test('le eccezioni API passano il loro messaggio', () {
       expect(messaggioErroreBackend(const BackendApiException('ciao')), 'ciao');

@@ -214,7 +214,7 @@
     <div class="topbar">
       <div>
         <h1>AmbuTurni — Admin</h1>
-        <p class="sottotitolo">Ospedali, fogli turni, materiali, utenti admin, utenti app e comunicati condivisi</p>
+        <p class="sottotitolo">Ospedali, fogli turni, materiali, mezzi, utenti admin, utenti app e comunicati condivisi</p>
       </div>
       <button class="secondary" onclick="esci()" style="margin-top:0;">Esci</button>
     </div>
@@ -223,6 +223,7 @@
       <button class="tab active" data-tab="ospedali" onclick="mostraTab('ospedali')">🏥 Ospedali</button>
       <button class="tab" data-tab="fogli" onclick="mostraTab('fogli')">📅 Fogli turni</button>
       <button class="tab" data-tab="materiali" onclick="mostraTab('materiali')">📦 Materiali</button>
+      <button class="tab" data-tab="mezzi" onclick="mostraTab('mezzi')">🚑 Mezzi</button>
       <button class="tab" data-tab="utenti" onclick="mostraTab('utenti')">🔑 Utenti</button>
       <button class="tab" data-tab="utenti-app" onclick="mostraTab('utenti-app')">👤 Utenti app</button>
       <button class="tab" data-tab="comunicati" onclick="mostraTab('comunicati')">📣 Comunicati</button>
@@ -388,6 +389,52 @@
         </div>
       </section>
 
+      <!-- Mezzi ------------------------------------------------------- -->
+      <section class="panel" data-panel="mezzi">
+        <div class="card">
+          <strong>Mezzi</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Le ambulanze dell'associazione, scelte nel selettore in alto del
+            tool Materiali usati. Il nome è un numero a due cifre (es. 07).
+          </p>
+          <div class="row">
+            <input id="mz-nome" placeholder="Numero mezzo (es. 07)" maxlength="2" inputmode="numeric" />
+          </div>
+          <button onclick="aggiungiMezzo()">Aggiungi</button>
+          <div class="errore" id="errore-mezzo"></div>
+        </div>
+
+        <div class="card">
+          <strong>Elenco mezzi</strong>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Mezzo</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-mezzi"><tr><td colspan="2"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <strong>Materiali usati condivisi</strong>
+          <p class="sottotitolo" style="margin: 8px 0 12px;">
+            Ciò che i volontari hanno segnalato come usato e da ripristinare,
+            condiviso dall'app (interruttore "Condivisi"). Qui solo per
+            controllo: chi ricarica il mezzo li segna come ripristinati
+            dall'app, "Elimina" serve per togliere una segnalazione sbagliata.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Mezzo</th><th>Materiale</th><th>Quantità</th><th>Posizione</th><th>Note</th><th>Segnalato da</th><th>Data</th><th></th></tr>
+              </thead>
+              <tbody id="tabella-materiali-usati"><tr><td colspan="8"><div class="stato-caricamento">Caricamento…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Utenti -------------------------------------------------------- -->
       <section class="panel" data-panel="utenti">
         <div class="card">
@@ -508,10 +555,12 @@
           <strong>Backup completo</strong>
           <p class="sottotitolo" style="margin: 8px 0 12px;">
             Un unico archivio .zip con tutto ciò che questo backend conosce:
-            ospedali, fogli turni, materiali, il link di formazione, gli
+            ospedali, fogli turni, materiali, mezzi, il link di formazione, gli
             account utente-app e i comunicati (PDF inclusi). Utile per
             spostare i dati su un'altra istanza o come copia di sicurezza
-            prima di un intervento sul server.
+            prima di un intervento sul server. Esclusi i materiali usati
+            condivisi: sono lo stato di cosa manca adesso sui mezzi, un
+            ripristino li farebbe ricomparire anche se già rimessi a posto.
           </p>
           <button onclick="scaricaBackupCompleto()">Scarica backup completo</button>
         </div>
@@ -683,7 +732,7 @@ async function carica() {
   const resp = await fetch('/api/ospedali');
   ospedaliCache = await resp.json();
   filtraTabella();
-  await Promise.all([caricaFogli(), caricaMateriali(), caricaUtenti(), caricaUtentiApp(), caricaComunicati(), caricaFormazione()]);
+  await Promise.all([caricaFogli(), caricaMateriali(), caricaMezzi(), caricaMaterialiUsati(), caricaUtenti(), caricaUtentiApp(), caricaComunicati(), caricaFormazione()]);
 }
 
 function filtraTabella() {
@@ -944,6 +993,93 @@ async function eliminaMateriale(id) {
   });
   await caricaMateriali();
   toast('Materiale eliminato.');
+}
+
+// --- Mezzi ---
+
+async function caricaMezzi() {
+  const resp = await fetch('/api/mezzi');
+  const mezzi = await resp.json();
+  renderTabellaGenerica('tabella-mezzi', 2, mezzi, (m) => {
+    const riga = document.createElement('tr');
+    riga.innerHTML = `
+      <td>${escapeHtml(m.nome)}</td>
+      <td><button class="danger small">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => eliminaMezzo(m.id, m.nome);
+    return riga;
+  }, 'Nessun mezzo.');
+}
+
+async function aggiungiMezzo() {
+  const erroreEl = document.getElementById('errore-mezzo');
+  erroreEl.textContent = '';
+  const nome = document.getElementById('mz-nome').value.trim();
+  if (!nome) return;
+  // Stesso controllo del backend (nomeMezzoValido), anticipato qui solo
+  // per un messaggio immediato senza un giro sul server.
+  if (!/^[0-9]{2}$/.test(nome)) {
+    erroreEl.textContent = 'Il nome del mezzo deve essere un numero a due cifre (es. 07).';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/mezzi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify({ nome }),
+    });
+    const dati = await resp.json();
+    if (!resp.ok) throw new Error(dati.error || 'Errore di salvataggio');
+    document.getElementById('mz-nome').value = '';
+    await caricaMezzi();
+    toast('Mezzo aggiunto.');
+  } catch (e) {
+    erroreEl.textContent = e.message;
+  }
+}
+
+async function eliminaMezzo(id, nome) {
+  if (!confirm(`Eliminare il mezzo ${nome}? I materiali già segnalati su questo mezzo restano.`)) return;
+  await fetch(`/api/mezzi/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token()}` },
+  });
+  await caricaMezzi();
+  toast('Mezzo eliminato.');
+}
+
+// --- Materiali usati condivisi (sola lettura + elimina) ---
+
+async function caricaMaterialiUsati() {
+  const resp = await fetch('/api/materiali-usati', { headers: { Authorization: `Bearer ${token()}` } });
+  const lista = resp.ok ? await resp.json() : [];
+  renderTabellaGenerica('tabella-materiali-usati', 8, lista, (m) => {
+    const riga = document.createElement('tr');
+    const quantita = m.unita ? `${m.quantita} ${m.unita}` : `${m.quantita}`;
+    riga.innerHTML = `
+      <td>${escapeHtml(m.mezzo || '—')}</td>
+      <td>${escapeHtml(m.materiale)}</td>
+      <td>${escapeHtml(quantita)}</td>
+      <td>${escapeHtml(m.posizione || '')}</td>
+      <td>${escapeHtml(m.note || '')}</td>
+      <td>${escapeHtml(m.creatoDa)}</td>
+      <td>${escapeHtml(new Date(m.createdAt).toLocaleString('it-IT'))}</td>
+      <td><button class="danger small">Elimina</button></td>
+    `;
+    riga.querySelector('button').onclick = () => eliminaMaterialeUsato(m.id, m.materiale);
+    return riga;
+  }, 'Nessun materiale condiviso da ripristinare.');
+}
+
+async function eliminaMaterialeUsato(id, materiale) {
+  if (!confirm(`Eliminare la segnalazione "${materiale}"? Sparisce per tutti.`)) return;
+  await fetch('/api/materiali-usati/ripristina', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+    body: JSON.stringify({ ids: [id] }),
+  });
+  await caricaMaterialiUsati();
+  toast('Segnalazione eliminata.');
 }
 
 // --- Utenti admin ---
@@ -1447,6 +1583,7 @@ function testoRiepilogoRipristino(r) {
     sezione('Ospedali', r.ospedali),
     sezione('Fogli turni', r.fogli),
     sezione('Materiali', r.materiali),
+    sezione('Mezzi', r.mezzi || { creati: 0, aggiornati: 0, scartati: 0 }),
     sezione('Utenti app', r.utentiApp),
     sezione('Comunicati', r.comunicati),
   ];

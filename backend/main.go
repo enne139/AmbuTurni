@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func main() {
@@ -641,6 +642,164 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]int{
 			"creati": creati, "aggiornati": aggiornati, "scartati": scartati,
 		})
+	}))
+
+	// --- MEZZI ---
+	// Le ambulanze dell'associazione (nome = numero a due cifre), per il
+	// selettore del tool Materiali usati: lettura pubblica come il catalogo
+	// materiali (serve anche senza login, per i materiali usati locali),
+	// scrittura solo dalla pagina admin.
+
+	mux.HandleFunc("GET /api/mezzi", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listMezzi(r.Context(), pool)
+		if err != nil {
+			log.Printf("[mezzi] errore lista: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, lista)
+	})
+
+	mux.HandleFunc("POST /api/mezzi", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Nome string }
+		if !readJSON(w, r, &body) {
+			return
+		}
+		body.Nome = strings.TrimSpace(body.Nome)
+		if !nomeMezzoValido(body.Nome) {
+			writeError(w, http.StatusBadRequest, "il nome del mezzo deve essere un numero a due cifre (es. 07)")
+			return
+		}
+		creato, err := createMezzo(r.Context(), pool, body.Nome)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeError(w, http.StatusConflict, "Mezzo già presente")
+			return
+		}
+		if err != nil {
+			log.Printf("[mezzi] errore creazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusCreated, creato)
+	}))
+
+	mux.HandleFunc("DELETE /api/mezzi/{id}", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		rimosso, err := deleteMezzo(r.Context(), pool, r.PathValue("id"))
+		if err != nil {
+			log.Printf("[mezzi] errore eliminazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		if !rimosso {
+			writeError(w, http.StatusNotFound, "Mezzo non trovato")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+
+	// --- MATERIALI USATI CONDIVISI ---
+	// Scritti dall'app (non dalla pagina admin), quindi tutte le rotte
+	// richiedono un login: contentAuthMiddleware ammette utente-app e admin
+	// (l'admin li vede e li toglie dalla pagina di gestione). Qualunque
+	// utente con accesso può modificarli o ripristinarli, non solo chi li
+	// ha segnalati: di solito chi ricarica il mezzo non è chi ha usato il
+	// materiale (scelta esplicita dell'utente).
+
+	mux.HandleFunc("GET /api/materiali-usati", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listMaterialiCondivisi(r.Context(), pool)
+		if err != nil {
+			log.Printf("[materiali-usati] errore lista: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, lista)
+	}))
+
+	mux.HandleFunc("POST /api/materiali-usati", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body MaterialeUsatoCondivisoInput
+		if !readJSON(w, r, &body) {
+			return
+		}
+		pulito, err := body.normalizza()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		creato, err := createMaterialeCondiviso(r.Context(), pool, pulito, usernameFromContext(r))
+		if err != nil {
+			log.Printf("[materiali-usati] errore creazione: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusCreated, creato)
+	}))
+
+	mux.HandleFunc("PUT /api/materiali-usati/{id}", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body MaterialeUsatoCondivisoInput
+		if !readJSON(w, r, &body) {
+			return
+		}
+		pulito, err := body.normalizza()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		aggiornato, err := updateMaterialeCondiviso(r.Context(), pool, r.PathValue("id"), pulito)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Materiale già ripristinato da qualcun altro")
+			return
+		}
+		if err != nil {
+			log.Printf("[materiali-usati] errore aggiornamento: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, aggiornato)
+	}))
+
+	// Variazione rapida (+/-): un delta, non un valore — vedi
+	// variaQuantitaMaterialeCondiviso per il perché.
+	mux.HandleFunc("POST /api/materiali-usati/{id}/quantita", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Delta int `json:"delta"`
+		}
+		if !readJSON(w, r, &body) {
+			return
+		}
+		if body.Delta == 0 || body.Delta > 1000 || body.Delta < -1000 {
+			writeError(w, http.StatusBadRequest, "variazione non valida")
+			return
+		}
+		aggiornato, err := variaQuantitaMaterialeCondiviso(r.Context(), pool, r.PathValue("id"), body.Delta)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Materiale già ripristinato da qualcun altro")
+			return
+		}
+		if err != nil {
+			log.Printf("[materiali-usati] errore quantità: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, aggiornato)
+	}))
+
+	// Ripristino (singolo, "Ripristina tutto" e swipe di eliminazione): per
+	// elenco di id, vedi ripristinaMaterialiCondivisi.
+	mux.HandleFunc("POST /api/materiali-usati/ripristina", contentAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			IDs []string `json:"ids"`
+		}
+		if !readJSON(w, r, &body) {
+			return
+		}
+		eliminati, err := ripristinaMaterialiCondivisi(r.Context(), pool, body.IDs)
+		if err != nil {
+			log.Printf("[materiali-usati] errore ripristino: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "errore interno")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]int64{"eliminati": eliminati})
 	}))
 
 	// --- REPOSITORY FORMAZIONE ---

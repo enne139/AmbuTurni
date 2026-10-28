@@ -94,3 +94,15 @@ const kPrefModalitaChiara = 'modalita_chiara';
 // device, non va nel backup (come kPrefPianoTurniUltimoMese): su un device
 // nuovo ripristinato da un backup ha senso rivedere comunque il tutorial.
 const kPrefTutorialCompletato = 'tutorial_completato';
+
+// Tool Materiali usati: mezzo scelto nel selettore in alto (nome a due
+// cifre, assente = tutti i mezzi), interruttore "Condividi" (assente =
+// spento: i nuovi materiali restano solo su questo device; la lista
+// mostra comunque locali e condivisi insieme) e cache dei nomi dei mezzi
+// scaricati dal backend condiviso (List<String>), per avere il selettore
+// pieno anche offline. Stato locale al device, come
+// kPrefPianoTurniUltimoMese: non va nel backup — su un altro device si
+// può essere su un mezzo diverso, e la cache si riscarica da sola.
+const kPrefMaterialiMezzo = 'materiali_mezzo';
+const kPrefMaterialiCondivisi = 'materiali_condivisi';
+const kPrefMezziCache = 'mezzi_cache';

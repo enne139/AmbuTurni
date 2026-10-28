@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
   note TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  is_synced INTEGER DEFAULT 0
+  is_synced INTEGER DEFAULT 0,
+  mezzo TEXT
 );
 
 ''';
@@ -191,7 +192,7 @@ Future<Database> getDb() async {
       : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 12,
+    version: 13,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -451,6 +452,14 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // servizi.ospedale_id senza indice: con anni di turni/servizi accumulati
     // la query degenera in uno scan completo della tabella servizi.
     try { await db.execute('CREATE INDEX IF NOT EXISTS idx_servizi_ospedale ON servizi(ospedale_id)'); } catch (_) {}
+  }
+  if (oldVersion < 13) {
+    // Tools -> Materiali usati: da quale mezzo (ambulanza, numero a due
+    // cifre scaricato dal backend condiviso) è stato preso il materiale.
+    // Testo e non FK: i mezzi vivono sul backend, non in una tabella
+    // locale — un mezzo tolto dalla pagina admin non deve invalidare le
+    // righe già registrate. Le righe esistenti restano senza mezzo (NULL).
+    try { await db.execute('ALTER TABLE materiali_usati ADD COLUMN mezzo TEXT'); } catch (_) {}
   }
 }
 

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'materiali_condivisi.dart';
 
 /// Errore dell'API con messaggio già pronto da mostrare all'utente.
 class BackendApiException implements Exception {
@@ -23,6 +24,13 @@ class BackendApiException implements Exception {
 /// errore generico "impossibile contattare il server".
 class BackendApiUnauthorized extends BackendApiException {
   const BackendApiUnauthorized(super.message);
+}
+
+/// Risorsa non più esistente (404) — per i materiali usati condivisi
+/// significa che un altro volontario l'ha appena ripristinato: il chiamante
+/// la toglie dalla lista invece di mostrare un errore generico.
+class BackendApiNotFound extends BackendApiException {
+  const BackendApiNotFound(super.message);
 }
 
 /// Esito di un login utente-app: token da usare come Bearer sulle chiamate
@@ -156,6 +164,107 @@ class BackendApi {
     return decoded.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
   }
 
+  /// GET /api/mezzi — nomi delle ambulanze dell'associazione (numeri a due
+  /// cifre), per il selettore del tool Materiali usati. Pubblica.
+  Future<List<String>> getMezzi() async {
+    final resp = await _client.get(Uri.parse('$baseUrl/api/mezzi')).timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = _decodeJson(resp);
+    if (decoded is! List) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return nomiMezzi(decoded);
+  }
+
+  /// GET /api/materiali-usati — i materiali usati condivisi da tutti,
+  /// dal più recente. Richiede il login (utente-app o admin).
+  Future<List<MaterialeUsatoCondiviso>> getMaterialiCondivisi({required String token}) async {
+    final resp = await _client
+        .get(Uri.parse('$baseUrl/api/materiali-usati'), headers: _authHeader(token))
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = _decodeJson(resp);
+    if (decoded is! List) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return decoded
+        .whereType<Map>()
+        .map((m) => MaterialeUsatoCondiviso.fromJson(Map<String, dynamic>.from(m)))
+        .whereType<MaterialeUsatoCondiviso>()
+        .toList();
+  }
+
+  /// POST /api/materiali-usati — condivide un nuovo materiale usato.
+  /// [dati] da datiMaterialeCondiviso; l'autore lo mette il server dal token.
+  Future<MaterialeUsatoCondiviso> creaMaterialeCondiviso({
+    required String token,
+    required Map<String, dynamic> dati,
+  }) async {
+    final resp = await _client
+        .post(Uri.parse('$baseUrl/api/materiali-usati'),
+            headers: {..._authHeader(token), 'Content-Type': 'application/json'}, body: jsonEncode(dati))
+        .timeout(_timeout);
+    if (resp.statusCode != 201 && resp.statusCode != 200) _lanciaErrore(resp);
+    return _materialeCondivisoDaRisposta(resp);
+  }
+
+  /// PUT /api/materiali-usati/:id — modifica dal form. 404 →
+  /// BackendApiNotFound (già ripristinato da un altro volontario).
+  Future<MaterialeUsatoCondiviso> aggiornaMaterialeCondiviso({
+    required String token,
+    required String id,
+    required Map<String, dynamic> dati,
+  }) async {
+    final resp = await _client
+        .put(Uri.parse('$baseUrl/api/materiali-usati/${Uri.encodeComponent(id)}'),
+            headers: {..._authHeader(token), 'Content-Type': 'application/json'}, body: jsonEncode(dati))
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    return _materialeCondivisoDaRisposta(resp);
+  }
+
+  /// POST /api/materiali-usati/:id/quantita — variazione (+/-) come DELTA,
+  /// non come valore: due tocchi contemporanei di volontari diversi si
+  /// sommano invece di sovrascriversi. Restituisce la riga aggiornata.
+  Future<MaterialeUsatoCondiviso> variaQuantitaMaterialeCondiviso({
+    required String token,
+    required String id,
+    required int delta,
+  }) async {
+    final resp = await _client
+        .post(Uri.parse('$baseUrl/api/materiali-usati/${Uri.encodeComponent(id)}/quantita'),
+            headers: {..._authHeader(token), 'Content-Type': 'application/json'},
+            body: jsonEncode({'delta': delta}))
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    return _materialeCondivisoDaRisposta(resp);
+  }
+
+  /// POST /api/materiali-usati/ripristina — toglie esattamente gli [ids]
+  /// indicati (quelli che l'utente aveva davanti, non tutto ciò che c'è sul
+  /// server). Restituisce quanti esistevano ancora: 0 su un id singolo vuol
+  /// dire che qualcun altro l'aveva già ripristinato.
+  Future<int> ripristinaMaterialiCondivisi({required String token, required List<String> ids}) async {
+    final resp = await _client
+        .post(Uri.parse('$baseUrl/api/materiali-usati/ripristina'),
+            headers: {..._authHeader(token), 'Content-Type': 'application/json'},
+            body: jsonEncode({'ids': ids}))
+        .timeout(_timeout);
+    if (resp.statusCode != 200) _lanciaErrore(resp);
+    final decoded = _decodeJson(resp);
+    final eliminati = decoded is Map ? decoded['eliminati'] : null;
+    return eliminati is num ? eliminati.toInt() : 0;
+  }
+
+  MaterialeUsatoCondiviso _materialeCondivisoDaRisposta(http.Response resp) {
+    final decoded = _decodeJson(resp);
+    final mu = decoded is Map ? MaterialeUsatoCondiviso.fromJson(Map<String, dynamic>.from(decoded)) : null;
+    if (mu == null) {
+      throw const BackendApiException('Risposta del server non riconosciuta.');
+    }
+    return mu;
+  }
+
   /// GET /api/repository-formazione — l'unico link condiviso ai materiali
   /// di formazione (tool "Repository formazione"), impostato dalla pagina
   /// admin. Restituisce null se non è mai stato configurato: non è un
@@ -271,6 +380,7 @@ class BackendApi {
     // rotte autenticate lo intercettano per fare logout automatico invece
     // di mostrare un errore generico.
     if (resp.statusCode == 401) throw BackendApiUnauthorized(messaggio);
+    if (resp.statusCode == 404) throw BackendApiNotFound(messaggio);
     throw BackendApiException(messaggio);
   }
 }

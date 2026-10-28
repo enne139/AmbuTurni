@@ -524,17 +524,67 @@ void main() {
       expect(tutti.where((m) => m.id == id), isEmpty);
     });
 
-    test('segnaTuttiMaterialiRipristinati svuota la lista attiva', () async {
+    test('segnaMaterialiRipristinati elimina solo gli id indicati', () async {
+      // "Ripristina tutto" con un mezzo scelto deve togliere solo i
+      // materiali di quel mezzo, non quelli degli altri.
       await saveMateriale('Siringhe');
       final materiale =
           (await getMateriali()).firstWhere((m) => m.nome == 'Siringhe');
       final id1 = newId();
       final id2 = newId();
-      await saveMaterialeUsato(MaterialeUsato(id: id1, materialeId: materiale.id, quantita: 3));
-      await saveMaterialeUsato(MaterialeUsato(id: id2, materialeId: materiale.id, quantita: 5));
-      await segnaTuttiMaterialiRipristinati();
+      final idAltroMezzo = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: id1, materialeId: materiale.id, quantita: 3, mezzo: '12'));
+      await saveMaterialeUsato(MaterialeUsato(id: id2, materialeId: materiale.id, quantita: 5, mezzo: '12'));
+      await saveMaterialeUsato(MaterialeUsato(id: idAltroMezzo, materialeId: materiale.id, mezzo: '07'));
+      await segnaMaterialiRipristinati([id1, id2]);
       final attivi = await getMaterialiUsati();
       expect(attivi.where((m) => m.id == id1 || m.id == id2), isEmpty);
+      expect(attivi.where((m) => m.id == idAltroMezzo), hasLength(1));
+    });
+
+    test('segnaMaterialiRipristinati con lista vuota non tocca nulla', () async {
+      await saveMateriale('Mascherine');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Mascherine');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id));
+      await segnaMaterialiRipristinati([]);
+      expect((await getMaterialiUsati()).where((m) => m.id == id), hasLength(1));
+    });
+
+    test('mezzo salvato e riletto, modificabile e azzerabile', () async {
+      await saveMateriale('Lacci emostatici');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Lacci emostatici');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, mezzo: '12'));
+      var riga = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(riga.mezzo, '12');
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, mezzo: '07', createdAt: riga.createdAt));
+      riga = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(riga.mezzo, '07');
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id, createdAt: riga.createdAt));
+      riga = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(riga.mezzo, isNull);
+    });
+
+    test('un materiale nuovo riceve created_at, che la modifica conserva', () async {
+      await saveMateriale('Teli isotermici');
+      final materiale =
+          (await getMateriali()).firstWhere((m) => m.nome == 'Teli isotermici');
+      final id = newId();
+      await saveMaterialeUsato(MaterialeUsato(id: id, materialeId: materiale.id));
+      final creato = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(creato.createdAt, isNotNull);
+      await saveMaterialeUsato(MaterialeUsato(
+          id: id, materialeId: materiale.id, quantita: 2, createdAt: creato.createdAt));
+      final modificato = (await getMaterialiUsati()).firstWhere((m) => m.id == id);
+      expect(modificato.createdAt, creato.createdAt);
+    });
+
+    test('copyWith della quantità conserva il mezzo', () {
+      const mu = MaterialeUsato(id: 'x', materialeId: 'm', quantita: 1, mezzo: '12');
+      expect(mu.copyWith(quantita: 3).mezzo, '12');
     });
 
     test('aggiornaQuantitaMaterialeUsato modifica solo la quantità', () async {

@@ -27,12 +27,20 @@ import (
 // ~33%, e un archivio compresso è il formato naturale per un mix di testo
 // e binari. Questo struct rappresenta solo il contenuto di data.json,
 // quindi ComunicatoBackupMeta (sotto) non include mai i byte del PDF.
+//
+// Mezzi inclusi (anagrafica, come materiali). I materiali usati condivisi
+// invece NO, di proposito: sono lo stato "cosa manca adesso" sui mezzi, e
+// ripristinare un backup di qualche giorno prima (upsert, mai distruttivo)
+// farebbe ricomparire materiali già rimessi a posto — un'informazione
+// sbagliata peggiore di nessuna informazione. Un backup precedente senza la
+// sezione mezzi si ripristina lo stesso (slice nil, nessuna riga).
 type BackupCompleto struct {
 	Versione             int                    `json:"versione"`
 	EsportatoIl          time.Time              `json:"esportatoIl"`
 	Ospedali             []OspedaleInput        `json:"ospedali"`
 	Fogli                []FoglioInput          `json:"fogli"`
 	Materiali            []MaterialeInput       `json:"materiali"`
+	Mezzi                []MezzoInput           `json:"mezzi"`
 	RepositoryFormazione *string                `json:"repositoryFormazione"`
 	UtentiApp            []UtenteAppBackup      `json:"utentiApp"`
 	Comunicati           []ComunicatoBackupMeta `json:"comunicati"`
@@ -63,6 +71,7 @@ type RiepilogoRipristino struct {
 	Ospedali             ConteggioSezione `json:"ospedali"`
 	Fogli                ConteggioSezione `json:"fogli"`
 	Materiali            ConteggioSezione `json:"materiali"`
+	Mezzi                ConteggioSezione `json:"mezzi"`
 	FormazioneAggiornata bool             `json:"formazioneAggiornata"`
 	UtentiApp            ConteggioSezione `json:"utentiApp"`
 	Comunicati           ConteggioSezione `json:"comunicati"`
@@ -115,6 +124,15 @@ func costruisciBackup(ctx context.Context, pool *pgxpool.Pool) (BackupCompleto, 
 	b.Materiali = make([]MaterialeInput, 0, len(materiali))
 	for _, m := range materiali {
 		b.Materiali = append(b.Materiali, MaterialeInput{Nome: m.Nome})
+	}
+
+	mezzi, err := listMezzi(ctx, pool)
+	if err != nil {
+		return b, nil, err
+	}
+	b.Mezzi = make([]MezzoInput, 0, len(mezzi))
+	for _, m := range mezzi {
+		b.Mezzi = append(b.Mezzi, MezzoInput{Nome: m.Nome})
 	}
 
 	rf, err := getRepositoryFormazione(ctx, pool)
@@ -247,6 +265,12 @@ func ripristinaBackup(ctx context.Context, pool *pgxpool.Pool, raw []byte) (Riep
 		return r, err
 	}
 	r.Materiali = ConteggioSezione{cm, am, sm}
+
+	cz, az, sz, err := upsertMezzi(ctx, pool, meta.Mezzi)
+	if err != nil {
+		return r, err
+	}
+	r.Mezzi = ConteggioSezione{cz, az, sz}
 
 	// Nessun URL nel backup (mai impostato sull'istanza di origine): non
 	// tocca il valore già presente qui, coerente con "niente cancellazioni".

@@ -59,6 +59,15 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 //     rimossi, vedi CLAUDE.md): l'ADD COLUMN IF NOT EXISTS sotto è
 //     idempotente sia che la colonna sia già assente sia che sia già
 //     presente da un avvio precedente.
+//   - mezzi: le ambulanze dell'associazione (nome = numero a due cifre),
+//     scelte nel selettore in alto del tool Materiali usati. Lettura
+//     pubblica, scrittura solo admin, come il catalogo materiali.
+//   - materiali_usati_condivisi: materiali usati che un volontario ha
+//     scelto di condividere con tutti dall'app (vedi materiali_condivisi.go).
+//     Unica tabella scritta dall'app invece che dalla pagina admin: lettura
+//     e scrittura richiedono il login utente-app. `mezzo` è testo, non una
+//     FK verso mezzi: eliminare un mezzo non deve cancellare le segnalazioni
+//     ancora aperte su di lui.
 //
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` invece di un vero sistema di
 // migrazioni (assente qui, a differenza del client Flutter): un solo campo
@@ -138,6 +147,25 @@ func initSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		-- ai fini del filtro — non un CHECK qui, stessa fiducia nel client
 		-- già in uso per gli altri campi opzionali di questa tabella.
 		ALTER TABLE comunicati ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+
+		CREATE TABLE IF NOT EXISTS mezzi (
+			id TEXT PRIMARY KEY,
+			nome TEXT NOT NULL UNIQUE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		CREATE TABLE IF NOT EXISTS materiali_usati_condivisi (
+			id TEXT PRIMARY KEY,
+			materiale TEXT NOT NULL,
+			quantita INTEGER NOT NULL DEFAULT 1 CHECK (quantita >= 1),
+			unita TEXT,
+			posizione TEXT CHECK (posizione IN ('AMBULANZA','BOMBOLINO','ZAINO')),
+			mezzo TEXT,
+			note TEXT,
+			creato_da TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
 	`)
 	return err
 }

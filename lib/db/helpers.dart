@@ -892,6 +892,11 @@ Future<void> saveMaterialeUsato(MaterialeUsato materialeUsato) async {
   final exists = await db.query('materiali_usati',
       columns: ['id'], where: 'id = ?', whereArgs: [materialeUsato.id], limit: 1);
   if (exists.isEmpty) {
+    // Un materiale nuovo arriva dal form senza createdAt: toMap lo
+    // scriverebbe come NULL esplicito (il DEFAULT della colonna vale solo
+    // se la colonna è omessa), e l'ordinamento "dal più recente" sotto
+    // metteva i nuovi in fondo.
+    map['created_at'] ??= now;
     await db.insert('materiali_usati', map);
   } else {
     final updateMap = Map<String, dynamic>.from(map)..remove('id');
@@ -909,11 +914,19 @@ Future<void> deleteMaterialeUsato(String id) async {
   await db.delete('materiali_usati', where: 'id = ?', whereArgs: [id]);
 }
 
-/// Segna come ripristinati tutti gli utilizzi in un colpo solo (pulsante
-/// "Ripristina tutto"): svuota la tabella, stessa logica di sopra.
-Future<void> segnaTuttiMaterialiRipristinati() async {
+/// Segna come ripristinati in un colpo solo gli utilizzi indicati (pulsante
+/// "Ripristina tutto"), stessa logica di sopra. Per id e non "tutta la
+/// tabella": con un mezzo scelto nel selettore la lista mostra solo i suoi
+/// materiali, e "tutto" deve voler dire ciò che si ha davanti, non anche
+/// quelli degli altri mezzi.
+Future<void> segnaMaterialiRipristinati(List<String> ids) async {
+  if (ids.isEmpty) return;
   final db = await getDb();
-  await db.delete('materiali_usati');
+  final batch = db.batch();
+  for (final id in ids) {
+    batch.delete('materiali_usati', where: 'id = ?', whereArgs: [id]);
+  }
+  await batch.commit(noResult: true);
 }
 
 // ---------------------------------------------------------------------------

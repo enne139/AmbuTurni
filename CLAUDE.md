@@ -3,11 +3,11 @@
 > Questo è il rewrite completo in Flutter dell'app originale React Native / Expo.
 > Il rewrite è stato integrato su `main` (2026-07-01). Il backend in
 > `backend/` (Go, dal 2026-07-14) espone risorse condivise tra installazioni/
-> associazioni diverse (ospedali, fogli turni, catalogo materiali, link al
-> repository di formazione, comunicati PDF, account "utente-app") con una
-> pagina admin di gestione — non è un backend di sincronizzazione dei dati
-> dell'app (turni, persone, assistenze... restano locali sul device, vedi
-> Decisioni tecniche).
+> associazioni diverse (ospedali, fogli turni, catalogo materiali, mezzi,
+> link al repository di formazione, comunicati PDF, account "utente-app",
+> materiali usati condivisi) con una pagina admin di gestione — non è un
+> backend di sincronizzazione dei dati dell'app (turni, persone,
+> assistenze... restano locali sul device, vedi Decisioni tecniche).
 
 ---
 
@@ -111,6 +111,9 @@ lib/
 │   │                               Lista ospedali, testato con MockClient
 │   ├── backend_api.dart           client Dart puro del backend condiviso ospedali (backend/,
 │   │                               Go): GET /api/ospedali?citta=, testato con MockClient
+│   ├── materiali_condivisi.dart   Dart puro, testato: MaterialeUsatoCondiviso (materiale usato
+│   │                               condiviso sul backend), nomi dei mezzi, filtraPerMezzo
+│   │                               (tool Materiali usati)
 │   ├── comunicati.dart            Dart puro, testato: raggruppaPerMese/dataComunicato per il
 │   │                               tool Archivio comunicati (data dal nome file AAAAMMGG,
 │   │                               fallback su createdAt)
@@ -192,10 +195,13 @@ lib/
     │   │                               regione dal backend condiviso (backend_api.dart) — la
     │   │                               configurazione del server è in Impostazioni
     │   ├── materiali_usati_screen.dart lista utilizzi attivi, stepper +/- quantità,
-    │   │                               swipe elimina, ripristina (singolo/tutto); pulsante per
-    │   │                               scaricare il catalogo dal backend condiviso (come in
-    │   │                               materiali_screen.dart, raggiungibile anche da qui)
-    │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, posizione, note)
+    │   │                               swipe elimina, ripristina (singolo/tutto); un'unica lista
+    │   │                               con locali + condivisi sul backend (login richiesto per
+    │   │                               questi); sotto l'AppBar selettore del mezzo + interruttore
+    │   │                               "Condividi" (dove finiscono i nuovi); catalogo materiali e
+    │   │                               mezzi scaricati in automatico all'apertura
+    │   ├── materiale_usato_form.dart  form crea/modifica (materiale, quantità+unità, mezzo,
+    │   │                               posizione, note), locale o condiviso secondo l'interruttore
     │   ├── materiali_screen.dart      gestione catalogo materiali: FAB aggiungi/rinomina/elimina
     │   │                               (doppioni case-insensitive bloccati: niente UNIQUE sul nome);
     │   │                               pulsante per scaricare il catalogo dal backend condiviso
@@ -218,11 +224,14 @@ lib/
 
 backend/                            API Go+PostgreSQL dell'elenco condiviso ospedali (nome, via,
                                      città, regione, coordinate), dei link ai fogli turni mensili,
-                                     del catalogo materiali, del link al repository di formazione
-                                     e degli account "utente-app" che sbloccano i contenuti
-                                     riservati dell'app (Repository formazione, Archivio
-                                     comunicati) + pagina admin statica; NON è un backend di
-                                     sincronizzazione, vedi Decisioni tecniche.
+                                     del catalogo materiali, dei mezzi, del link al repository di
+                                     formazione, degli account "utente-app" che sbloccano i
+                                     contenuti riservati dell'app (Repository formazione, Archivio
+                                     comunicati) e dei materiali usati condivisi (unica risorsa
+                                     scritta dall'app, con login) + pagina admin statica; NON è
+                                     un backend di sincronizzazione, vedi Decisioni tecniche.
+                                     mezzi.go/materiali_condivisi.go: vedi il bullet "Materiali
+                                     usati: mezzi e condivisione" in Decisioni tecniche.
                                      ospedali.go/fogli.go/materiali.go/formazione.go/utenti_app.go/
                                      comunicati.go: CRUD (o lettura/scrittura per formazione.go,
                                      un solo valore; create/list/delete/login/cambio-password per
@@ -272,12 +281,15 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 12); `_onOpen` esegue soltanto i PRAGMA di connessione
+(versione corrente: 13); `_onOpen` esegue soltanto i PRAGMA di connessione
 (WAL + foreign_keys).
 
 `ospedali` ha anche `via` (indirizzo testuale), `lat`/`lng` (coordinate da
 geocoding automatico, v9) e `regione` (v11, stessa fonte): vedi il tool
 "Lista ospedali" in Decisioni tecniche.
+
+`materiali_usati` ha anche `mezzo` (v13, testo: il nome a due cifre del
+mezzo, non una FK — i mezzi vivono sul backend condiviso).
 
 ### Desktop (Windows/Linux/macOS)
 
@@ -961,7 +973,9 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     form di utilizzo. Lì non ricarica la lista utilizzi dopo il download
     (a differenza di `materiali_screen.dart`): il sync tocca solo il
     catalogo dei nomi, non gli utilizzi già registrati mostrati in quella
-    schermata.
+    schermata. (Il pulsante in `materiali_usati_screen.dart` è stato poi
+    sostituito dal download automatico, vedi "Materiali usati: mezzi e
+    condivisione" più sotto.)
   - **Pagina admin ridisegnata (2026-07-20)**: era un'unica pagina con tutte
     le sezioni impilate (login, form ospedale, import, tabella ospedali,
     fogli, materiali) — sempre più lunga da scorrere man mano che si
@@ -2572,6 +2586,110 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     **Il comportamento di iOS va confermato su iPhone reale dopo il deploy**:
     se anche la vista Safari separata mostrasse il calendario come testo, il
     ripiego è un link `webcal://` (sottoscrizione dall'app Calendario).
+- **Materiali usati: mezzi e condivisione (2026-10-28)**: tre richieste
+  esplicite dell'utente sullo stesso tool — catalogo scaricato da solo,
+  elenco dei mezzi anch'esso scaricato, e un selettore per condividere i
+  materiali usati con tutti.
+  - **Download automatico**: catalogo materiali (stesso upsert per nome di
+    prima) e mezzi si scaricano all'apertura del tool, in silenzio come la
+    sincronizzazione fogli del Piano turni (offline il tool resta usabile
+    coi dati locali), e di nuovo col trascinamento verso il basso, che
+    invece mostra l'errore. Tolto il pulsante nuvola dall'AppBar di
+    Materiali usati; resta in "Gestisci materiali" come aggiornamento
+    manuale esplicito. I mezzi vanno in una cache in SharedPreferences
+    (`kPrefMezziCache`), non in una tabella locale: sono solo nomi, e una
+    tabella in più avrebbe richiesto migrazione + backup per dei dati che
+    si riscaricano da soli.
+  - **Mezzi** (`backend/mezzi.go`, tabella `mezzi`): le ambulanze, nome =
+    numero a due cifre (richiesta esplicita; validato sia lato server sia
+    nella pagina admin, così "7" e "07" non diventano due mezzi), UNIQUE sul
+    nome (tabella nuova, a differenza di materiali/ospedali non c'è uno
+    storico da rispettare: un doppione dà 409). Lettura pubblica come il
+    catalogo materiali, scrittura solo dalla nuova scheda "Mezzi" della
+    pagina admin; inclusi nel backup completo del backend.
+  - **Selettore del mezzo e interruttore "Condividi" sotto l'AppBar** (una
+    riga in `AppBar.bottom`: l'utente li voleva in alto, e nelle actions non
+    c'era spazio su telefono). Il mezzo filtra la lista (anche quella
+    locale: colonna `materiali_usati.mezzo`, migrazione v13, testo e non
+    FK) e precompila il form; "Tutti i mezzi" = nessun filtro.
+    "Ripristina tutto" ora toglie solo ciò che la lista mostra
+    (`segnaMaterialiRipristinati(ids)` al posto di svuotare la tabella),
+    altrimenti col filtro attivo avrebbe cancellato anche i materiali degli
+    altri mezzi. Mezzo, interruttore e cache sono locali al device, fuori
+    dal backup.
+  - **Un'unica lista, l'interruttore decide solo dove vanno i nuovi**:
+    locali e condivisi stanno nella stessa lista, mescolati per data (i
+    condivisi con l'icona del gruppo e "Condiviso da ..."), qualunque sia la
+    posizione dell'interruttore "Condividi", che sceglie solo dove finisce
+    il prossimo materiale aggiunto. Una prima versione usava l'interruttore
+    per passare tra due liste separate: scartata dall'utente dopo averla
+    provata, perché chi ricarica il mezzo doveva guardare due posti per
+    sapere cosa manca. Senza login la lista mostra solo i locali, con un
+    avviso "Accedi" in testa (che fa solo entrare, non accende la
+    condivisione); accendere l'interruttore senza login apre prima la
+    pagina di accesso (`_AccessoCondivisiScreen`, lo stesso
+    `AccessoRichiesto` dei contenuti riservati) e resta spento se l'accesso
+    non va a buon fine — acceso "a vuoto" farebbe credere di condividere.
+    Dopo un logout appare spento, e torna acceso al login successivo
+    (`_condividi` è la preferenza, `condividiAttivo` la usa solo col login).
+    I condivisi si caricano dopo i locali, con una barra sottile invece di
+    bloccare la lista; un errore di rete diventa un avviso con "Riprova" in
+    testa, i locali restano consultabili. Una riga esistente si modifica
+    dove vive (locale o condivisa), indipendentemente dall'interruttore;
+    nessuno spostamento da locale a condivisa o viceversa. "Ripristina
+    tutto" toglie entrambe le parti visibili, avvisando che i condivisi
+    spariscono per tutti. Mescolare per data ha fatto emergere un bug
+    preesistente: `saveMaterialeUsato` inseriva i nuovi materiali locali con
+    `created_at` NULL esplicito (`toMap` include la chiave, e il DEFAULT
+    della colonna vale solo se è omessa), quindi anche l'ordine "dal più
+    recente" della vecchia lista non funzionava. Ora l'insert mette `now`;
+    per le righe già salvate così la lista ripiega su `updated_at`.
+  - **Materiali condivisi** (`backend/materiali_condivisi.go`, tabella
+    `materiali_usati_condivisi`): prima e unica risorsa del backend scritta
+    dall'APP invece che dalla pagina admin — fin qui il client poteva solo
+    leggere. Per questo tutte le rotte (`GET/POST /api/materiali-usati`,
+    `PUT /:id`, `POST /:id/quantita`, `POST /ripristina`) richiedono il
+    login utente-app (`contentAuthMiddleware`, scelta dell'utente: senza,
+    chiunque conoscesse l'indirizzo potrebbe scrivere), e l'autore
+    (`creato_da`) viene sempre dal token, mai dal body. Chiunque abbia
+    l'accesso può modificare o ripristinare qualunque riga (scelta
+    dell'utente: chi ricarica il mezzo di solito non è chi ha usato il
+    materiale); una modifica non cambia l'autore. Validazione lato server
+    (posizione nel set fisso, mezzo a due cifre, quantità >= 1, lunghezze
+    massime) perché qui scrive chiunque abbia un account, non un admin.
+    Il materiale è salvato per NOME: gli id dei cataloghi locali sono
+    diversi su ogni device. Aprendo in modifica un condiviso il cui nome
+    manca nel catalogo locale, il form lo aggiunge (stesso upsert).
+  - **+/- come DELTA atomico** (`POST /:id/quantita {delta}`, `UPDATE ...
+    SET quantita = GREATEST(1, quantita + $1)`), non come valore: due
+    volontari che premono "+" insieme sommano entrambi i tocchi invece di
+    sovrascriversi. Lato app resta l'aggiornamento ottimistico, e un
+    contatore per riga (`_seqQuantita`) fa applicare solo la risposta
+    all'ultimo tocco inviato (con più tocchi rapidi le risposte possono
+    arrivare in disordine).
+  - **Ripristino per elenco di id**, anche "Ripristina tutto": una riga
+    aggiunta da un altro un attimo prima e mai vista resta. Un 404 (o
+    `eliminati: 0`) vuol dire "già ripristinato da qualcun altro": la lista
+    si ricarica con un messaggio, non un errore (`BackendApiNotFound`,
+    nuova sottoclasse come `BackendApiUnauthorized`); 401 → logout come
+    negli altri contenuti riservati.
+  - **Esclusi di proposito dal backup completo del backend**: sono lo stato
+    "cosa manca adesso", e un ripristino (upsert, mai distruttivo) di un
+    backup di qualche giorno prima farebbe ricomparire materiali già rimessi
+    a posto. La pagina admin li mostra nella scheda "Mezzi" con un
+    "Elimina" per togliere una segnalazione sbagliata.
+  - **Verificato** (Postgres usa e getta via Podman + `go run` + `curl`):
+    validazioni (400), doppione mezzo (409), rotte senza token (401),
+    autore preso dal token anche con un `creatoDa` falso nel body, 20 "+"
+    in parallelo da due utenti diversi (da 2 a 22 esatti), delta che non
+    scende sotto 1, modifica di un altro utente che conserva l'autore,
+    ripristino doppio (`eliminati` 1 poi 0) e 404 dopo il ripristino,
+    backup con i mezzi e ripristino di un backup senza la sezione. App web
+    in Chromium headless contro quel backend: lista mista con e senza
+    login, filtro per mezzo, form col mezzo precompilato; pagina admin,
+    scheda Mezzi.
+    **Da verificare su Android reale** (regola 8): migrazione v13 e i flussi
+    di rete con l'APK release.
 
 ---
 
@@ -2600,9 +2718,13 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   password/logout utente-app).
 - ✅ **Backup**: export/import JSON completo e leggibile, nomi file con timestamp.
 - ✅ **Combobox con creazione inline** per persone/ospedali/materiali.
-- ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/posizione),
-  nessuno storico. Pulsante per scaricare il catalogo condiviso dal backend
-  (upsert per nome, case-insensitive).
+- ✅ **Tools → Materiali usati**: catalogo + utilizzi (quantità/unità/
+  mezzo/posizione), nessuno storico. Catalogo materiali e mezzi scaricati in
+  automatico dal backend (all'apertura e col trascinamento verso il basso).
+  Un'unica lista con i materiali locali e quelli condivisi con tutti (login
+  utente-app; chiunque abbia l'accesso può modificarli o ripristinarli).
+  Sotto l'AppBar: selettore del mezzo (filtra la lista, precompila i nuovi)
+  e interruttore "Condividi" che sceglie dove finiscono i nuovi materiali.
 - ✅ **Tools → Piano turni**: calendario equipaggi/buchi dal foglio Google
   mensile dell'associazione (pallini per fascia, dettaglio per blocco, filtri
   ruolo, aggiunta del turno al calendario di sistema). Sincronizza in
@@ -2651,11 +2773,13 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Impostazioni → Aspetto**: selettore Sistema/Chiaro/Scuro per il tema
   dell'app (default: Sistema, segue il tema del device).
 - ✅ **Backend condiviso** (`backend/`, Go+PostgreSQL): API pubblica di sola
-  lettura per ospedali (per città/regione), fogli turni e catalogo
-  materiali + pagina admin (login) per gestirli uno alla volta o in blocco
-  da file JSON, incorporato nell'immagine Docker della versione web. Gestisce
-  anche gli account utente-app (contenuti riservati dell'app) e i comunicati
-  PDF, entrambi creabili/caricabili SOLO dalla pagina admin. Pagina admin
+  lettura per ospedali (per città/regione), fogli turni, catalogo
+  materiali e mezzi + pagina admin (login) per gestirli uno alla volta o in
+  blocco da file JSON, incorporato nell'immagine Docker della versione web.
+  Gestisce anche gli account utente-app (contenuti riservati dell'app) e i
+  comunicati PDF, entrambi creabili/caricabili SOLO dalla pagina admin, e i
+  materiali usati condivisi, scritti dall'app con login (la pagina admin li
+  mostra e può eliminarli). Pagina admin
   con backup/ripristino completo con un click (tab "Backup"): un solo file
   .zip con tutte le tabelle, PDF e account inclusi, upsert non distruttivo al
   ripristino.
@@ -2667,7 +2791,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 208 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 233 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

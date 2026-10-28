@@ -512,6 +512,9 @@ class MaterialeUsato {
   final int quantita;
   final String? unita;
   final String? posizione;
+  // Nome del mezzo (numero a due cifre, dal backend condiviso) da cui è
+  // stato preso il materiale: testo, non FK, vedi la migrazione v13.
+  final String? mezzo;
   final String? note;
   final String? createdAt;
   final String? updatedAt;
@@ -526,6 +529,7 @@ class MaterialeUsato {
     this.quantita = 1,
     this.unita,
     this.posizione,
+    this.mezzo,
     this.note,
     this.createdAt,
     this.updatedAt,
@@ -542,6 +546,7 @@ class MaterialeUsato {
         quantita: (m['quantita'] as num?)?.toInt() ?? 1,
         unita: m['unita'] as String?,
         posizione: m['posizione'] as String?,
+        mezzo: m['mezzo'] as String?,
         note: m['note'] as String?,
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
@@ -555,6 +560,7 @@ class MaterialeUsato {
         'quantita': quantita,
         'unita': unita,
         'posizione': posizione,
+        'mezzo': mezzo,
         'note': note,
         'created_at': createdAt,
         'updated_at': updatedAt,
@@ -567,6 +573,7 @@ class MaterialeUsato {
         quantita: quantita ?? this.quantita,
         unita: unita,
         posizione: posizione,
+        mezzo: mezzo,
         note: note,
         createdAt: createdAt,
         updatedAt: updatedAt,
