@@ -293,7 +293,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: `kVersioneDb` = 16); `_onOpen` esegue soltanto i PRAGMA
+(versione corrente: `kVersioneDb` = 17); `_onOpen` esegue soltanto i PRAGMA
 di connessione (WAL + foreign_keys). Le migrazioni si testano in
 `test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
 schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
@@ -310,8 +310,9 @@ al posto della vecchia `descrizione`; i `servizi` tengono la loro
 `descrizione`. Vedi "Orario al posto della descrizione" in Decisioni tecniche.
 
 `campi_servizio` (v15) contiene le definizioni dei campi personalizzati dei
-servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO` o lo speciale
-`SESSO_ETA` dalla v16, valori possibili in JSON, `visibile`, `ordine`); i valori di ogni servizio stanno in
+servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO`, `ORARIO`/`COMBO`
+dalla v17 o lo speciale `SESSO_ETA` dalla v16, valori possibili in JSON,
+`visibile`, `ordine`); i valori di ogni servizio stanno in
 `servizi.campi` (JSON id campo -> valore). Vedi "Campi personalizzati dei
 servizi" in Decisioni tecniche.
 
@@ -2886,6 +2887,38 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     un test di `salvaListaCampiServizio`. Web in Chromium: esporta, poi
     import di una lista con un valore di colore in più, un campo nuovo e
     un altro ordine.
+- **Campi orario e combo box (2026-11-12, DB v17)**: richiesta esplicita,
+  due tipi in più per i campi personalizzati.
+  - **Orario** (`ORARIO`): un'ora del giorno scelta con `showTimePicker`
+    forzato a 24 ore, salvata come testo "HH:MM" (valido solo in quel
+    formato); nel form un campo senza tastiera con l'icona dell'orologio e
+    una x per toglierla. Interpretazione mia di "orario": un'ora sola (es.
+    l'ora della chiamata), non un intervallo come l'orario dei turni.
+  - **Combo box** (`COMBO`): per l'utente "combo box" vuol dire **scelta
+    multipla** (una prima versione con un menu e testo libero era un
+    malinteso): si spuntano uno o più valori dell'elenco con dei
+    `FilterChip`. Si salva la **lista degli id** scelti, nell'ordine
+    dell'elenco; come per la tendina rinominare un valore non tocca i
+    servizi, e toglierlo lo toglie dalle liste. Nella card e nel CSV i nomi
+    separati da virgola.
+  - **Cambio di tipo** (`CampoServizio.convertiDa`): tra tendina/colori e
+    combo box cambia la forma del valore (un id o una lista di id), quindi
+    `saveCampoServizio` legge la definizione vecchia e converte: verso la
+    combo l'id diventa una lista di uno, verso la tendina resta il primo
+    valore scelto. `contaValoriNonPiuValidi` conta solo i valori persi
+    davvero (`valorePerso`: una combo con più valori che torna tendina ne
+    perde), non quelli che cambiano solo forma. Nell'unione di una lista
+    importata la combo box si unisce solo con un'altra combo box.
+  - Nel form del campo i sei tipi sono `ChoiceChip` con l'icona, che vanno
+    a capo: il `SegmentedButton` di prima non ci stava più in larghezza.
+  - **Migrazione v17**: i due tipi vanno nel CHECK di `campi_servizio`,
+    ricostruita come nella v16; i valori dei servizi non cambiano.
+  - **Verificato**: `flutter test` (valori validi, etichette, `convertiDa`
+    nei due sensi, tendina → combo → tendina su servizi veri, unione,
+    CSV, migrazione v16 → v17). Web in Chromium: chip dei tipi, esempio
+    "es. Patologie" nel nome, orologio a 24 ore, scelta multipla di due
+    valori, valori nella card. **Da verificare su Android reale**
+    (regola 8): migrazioni v14–v17.
 - **Servizi in CSV (2026-11-12)**: richiesta esplicita, "esportare i
   servizi in formato CSV"; scelta dell'utente: tutti i servizi, senza
   filtri. Pulsante "Esporta servizi in CSV (Excel)" in Impostazioni →
@@ -2930,7 +2963,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Orario** di turni e assistenze (v14, prima "Descrizione"): campo di
   una riga accanto a data e ore, es. "12:00 - 18:00".
 - ✅ **Campi personalizzati dei servizi** (v15, Impostazioni → Campi dei
-  servizi): tendina, colori, testo o numero, mostrati o nascosti,
+  servizi): tendina, colori, testo, numero, orario o combo box, mostrati o nascosti,
   riordinabili; partono Sesso ed età (campo speciale, affiancati, v16) e
   Colore invio (verde, giallo, rosso); valori nel form e nella card del
   servizio, sotto la descrizione. La lista si esporta in un file e si
@@ -3020,7 +3053,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 263 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 269 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

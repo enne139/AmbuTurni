@@ -683,8 +683,10 @@ Future<void> saveCampoServizio(CampoServizio campo) async {
         ..remove('id')
         ..remove('ordine')
         ..remove('created_at');
+      final vecchio = CampoServizio.fromMap(Map<String, dynamic>.from(
+          (await txn.query('campi_servizio', where: 'id = ?', whereArgs: [campo.id])).first));
       await txn.update('campi_servizio', map, where: 'id = ?', whereArgs: [campo.id]);
-      await _aggiornaValori(txn, campo.id, campo.pulisci);
+      await _aggiornaValori(txn, campo.id, (v) => campo.convertiDa(vecchio, v));
     }
   });
 }
@@ -763,14 +765,17 @@ Future<int> contaServiziConCampo(String campoId) async {
 }
 
 /// Quanti servizi perderebbero il loro valore, o una parte (nel campo
-/// speciale), salvando [campo] così com'è (per la conferma prima di salvare
-/// una modifica).
+/// speciale), salvando [campo] così com'è al posto di quello salvato (per
+/// la conferma prima di salvare una modifica). Un valore che cambia solo
+/// forma, come da tendina a combo box, non conta.
 Future<int> contaValoriNonPiuValidi(CampoServizio campo) async {
   final db = await getDb();
+  final righe = await db.query('campi_servizio', where: 'id = ?', whereArgs: [campo.id]);
+  final vecchio = righe.isEmpty ? campo : CampoServizio.fromMap(Map<String, dynamic>.from(righe.first));
   final servizi = await _serviziConValore(db, campo.id);
   return servizi.where((s) {
     final valore = s.campi[campo.id];
-    return !stessoValoreCampo(campo.pulisci(valore), valore);
+    return valorePerso(valore, campo.convertiDa(vecchio, valore));
   }).length;
 }
 

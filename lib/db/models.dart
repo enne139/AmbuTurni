@@ -495,6 +495,13 @@ const String kCampoTendina = 'TENDINA';
 const String kCampoColori = 'COLORI';
 const String kCampoTesto = 'TESTO';
 const String kCampoNumero = 'NUMERO';
+// Un'ora del giorno, scelta con l'orologio (v17, richiesta dell'utente):
+// il valore è il testo "HH:MM".
+const String kCampoOrario = 'ORARIO';
+// Combo box (v17, richiesta dell'utente): scelta multipla, si spuntano uno
+// o più valori dell'elenco. Il valore è la lista degli id scelti, come per
+// la tendina: rinominare un valore non tocca i servizi.
+const String kCampoCombo = 'COMBO';
 // Tipo speciale (v16, richiesta dell'utente): sesso ed età del paziente in
 // un campo solo, con i due controlli affiancati. È uno e fisso: si nasconde,
 // si sposta e se ne cambiano i valori del sesso, ma non si crea da "Nuovo
@@ -503,7 +510,18 @@ const String kCampoNumero = 'NUMERO';
 const String kCampoSessoEta = 'SESSO_ETA';
 const String kIdCampoSessoEta = 'sesso_eta';
 // Tipi che si possono scegliere creando un campo (lo speciale no).
-const List<String> tipiCampoServizio = [kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero];
+const List<String> tipiCampoServizio = [
+  kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero, kCampoOrario, kCampoCombo,
+];
+
+/// true per i tipi che hanno un elenco di valori da impostare: tendina e
+/// colori (si sceglie per forza tra quelli), combo box (proposti) e lo
+/// speciale (i valori del sesso).
+bool tipoConOpzioni(String tipo) =>
+    tipo == kCampoTendina || tipo == kCampoColori || tipo == kCampoCombo || tipo == kCampoSessoEta;
+
+/// Formato dei valori dei campi orario.
+final _formatoOrario = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
 
 /// Nome del tipo di campo da mostrare all'utente.
 String nomeTipoCampo(String tipo) => switch (tipo) {
@@ -511,6 +529,8 @@ String nomeTipoCampo(String tipo) => switch (tipo) {
       kCampoColori => 'Colori',
       kCampoTesto => 'Testo',
       kCampoNumero => 'Numero',
+      kCampoOrario => 'Orario',
+      kCampoCombo => 'Combo box',
       kCampoSessoEta => 'Sesso ed età',
       _ => tipo,
     };
@@ -566,8 +586,8 @@ class CampoServizio {
     this.updatedAt,
   });
 
-  /// true per i tipi con un elenco di valori (nello speciale, quelli del sesso).
-  bool get haOpzioni => tipo == kCampoTendina || tipo == kCampoColori || tipo == kCampoSessoEta;
+  /// true per i tipi con un elenco di valori (vedi tipoConOpzioni).
+  bool get haOpzioni => tipoConOpzioni(tipo);
 
   /// true per il campo speciale sesso ed età.
   bool get speciale => tipo == kCampoSessoEta;
@@ -592,8 +612,18 @@ class CampoServizio {
         return valore is String && opzione(valore) != null ? valore : null;
       case kCampoTesto:
         return valore is String && valore.isNotEmpty ? valore : null;
+      case kCampoCombo:
+        // Solo gli id che sono ancora nell'elenco, senza doppioni.
+        if (valore is! List) return null;
+        final scelti = <String>[];
+        for (final id in valore) {
+          if (id is String && opzione(id) != null && !scelti.contains(id)) scelti.add(id);
+        }
+        return scelti.isEmpty ? null : scelti;
       case kCampoNumero:
         return valore is num ? valore : null;
+      case kCampoOrario:
+        return valore is String && _formatoOrario.hasMatch(valore) ? valore : null;
       case kCampoSessoEta:
         if (valore is! Map) return null;
         final sesso = valore['sesso'];
@@ -609,6 +639,30 @@ class CampoServizio {
 
   /// true se [valore] vale (almeno in parte) per il campo com'è adesso.
   bool valoreValido(dynamic valore) => pulisci(valore) != null;
+
+  /// Il [valore] che un servizio aveva quando il campo era definito come
+  /// [vecchio], portato nella definizione attuale. Tra tendina/colori e
+  /// combo box cambia la forma: le prime salvano un id, la combo una lista
+  /// di id. Da tendina a combo l'id diventa una lista di uno; da combo a
+  /// tendina resta il primo scelto (gli altri si perdono, e valorePerso lo
+  /// dice). Negli altri casi è pulisci.
+  dynamic convertiDa(CampoServizio vecchio, dynamic valore) {
+    final daScelta = vecchio.tipo == kCampoTendina || vecchio.tipo == kCampoColori;
+    final aScelta = tipo == kCampoTendina || tipo == kCampoColori;
+    if (daScelta && tipo == kCampoCombo) {
+      return pulisci(valore is String ? [valore] : null);
+    }
+    if (vecchio.tipo == kCampoCombo && aScelta) {
+      // Resta il primo valore scelto che c'è ancora nell'elenco.
+      if (valore is! List) return null;
+      for (final id in valore) {
+        final v = pulisci(id);
+        if (v != null) return v;
+      }
+      return null;
+    }
+    return pulisci(valore);
+  }
 
   /// Opzione del sesso scelta in un valore del campo speciale.
   OpzioneCampo? sessoDi(dynamic valore) =>
@@ -629,7 +683,11 @@ class CampoServizio {
         if (eta != null) '${formatNumeroCampo(eta)} anni',
       ].join(' · ');
     }
-    if (haOpzioni) return opzione(v as String)!.nome;
+    if (tipo == kCampoTendina || tipo == kCampoColori) return opzione(v as String)!.nome;
+    // Combo: i nomi scelti nell'ordine dell'elenco, non in quello del tocco.
+    if (tipo == kCampoCombo) {
+      return opzioni.where((o) => (v as List).contains(o.id)).map((o) => o.nome).join(', ');
+    }
     if (v is num) return formatNumeroCampo(v);
     return v as String;
   }
@@ -690,11 +748,31 @@ class CampoServizio {
       );
 }
 
+/// true se passando da [vecchio] a [nuovo] un valore salvato perde qualcosa:
+/// sparisce del tutto, o nel campo speciale perde una delle due parti. Un
+/// valore che cambia solo forma (id ↔ nome con la combo box) non perde.
+bool valorePerso(dynamic vecchio, dynamic nuovo) {
+  if (vecchio == null) return false;
+  if (nuovo == null) return true;
+  if (vecchio is Map && nuovo is Map) return nuovo.length < vecchio.length;
+  if (vecchio is List && nuovo is List) return nuovo.length < vecchio.length;
+  // Da più valori scelti (combo) a uno solo (tendina).
+  if (vecchio is List && nuovo is! List) return vecchio.length > 1;
+  return false;
+}
+
 /// true se due valori di un campo personalizzato sono uguali, anche quando
 /// sono mappe (campo speciale) con le chiavi in un ordine diverso.
 bool stessoValoreCampo(dynamic a, dynamic b) {
   if (a is Map && b is Map) {
     return a.length == b.length && a.keys.every((k) => b.containsKey(k) && a[k] == b[k]);
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
   return a == b;
 }

@@ -95,6 +95,8 @@ class _ServizioFormState extends State<ServizioForm> {
         }
         continue;
       }
+      // Tendina, colori, combo box e orario sono già nella mappa (scelti col
+      // tocco); testo e numero si leggono dai loro controller.
       if (campo.tipo != kCampoTesto && campo.tipo != kCampoNumero) continue;
       final testo = _ctrlCampi[campo.id]?.text.trim() ?? '';
       if (testo.isEmpty) {
@@ -245,12 +247,33 @@ class _ServizioFormState extends State<ServizioForm> {
         }
       });
 
+  /// Apre l'orologio per un campo orario, partendo dall'ora salvata o da
+  /// adesso, sempre nel formato 24 ore.
+  Future<void> _scegliOrario(CampoServizio campo, String? attuale) async {
+    final parti = attuale?.split(':');
+    final iniziale = parti == null
+        ? TimeOfDay.now()
+        : TimeOfDay(hour: int.parse(parti[0]), minute: int.parse(parti[1]));
+    final ora = await showTimePicker(
+      context: context,
+      initialTime: iniziale,
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (ora == null || !mounted) return;
+    String due(int n) => n.toString().padLeft(2, '0');
+    _scegli(campo, '${due(ora.hour)}:${due(ora.minute)}');
+  }
+
   /// Il controllo giusto per il tipo di un campo personalizzato.
   Widget _inputCampo(CampoServizio campo) {
     // Un valore che non vale più (opzione tolta) va trattato come vuoto,
     // altrimenti la tendina riceverebbe un valore che non ha tra le voci.
     final valore = _campi[campo.id];
-    final scelto = campo.haOpzioni && campo.valoreValido(valore) ? valore as String : null;
+    final daElenco = campo.tipo == kCampoTendina || campo.tipo == kCampoColori;
+    final scelto = daElenco && campo.valoreValido(valore) ? valore as String : null;
     switch (campo.tipo) {
       case kCampoTendina:
         return DropdownButtonFormField<String?>(
@@ -289,6 +312,56 @@ class _ServizioFormState extends State<ServizioForm> {
           controller: _ctrlCampo(campo),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(hintText: 'Numero'),
+        );
+      case kCampoOrario:
+        // Niente tastiera: si tocca e si sceglie l'ora con l'orologio; la
+        // x la toglie.
+        final ora = campo.pulisci(valore) as String?;
+        return InkWell(
+          onTap: () => _scegliOrario(campo, ora),
+          borderRadius: BorderRadius.circular(8),
+          child: InputDecorator(
+            isEmpty: ora == null,
+            decoration: InputDecoration(
+              hintText: 'Tocca per scegliere l\'ora',
+              prefixIcon: const Icon(Icons.access_time, size: 18),
+              suffixIcon: ora == null
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      tooltip: 'Togli l\'orario',
+                      onPressed: () => _scegli(campo, null),
+                    ),
+            ),
+            child: Text(ora ?? ''),
+          ),
+        );
+      case kCampoCombo:
+        // Scelta multipla: un chip con la spunta per ogni valore, se ne
+        // accendono quanti se ne vuole. Si salvano gli id nell'ordine
+        // dell'elenco, non in quello del tocco.
+        final scelti = (campo.pulisci(valore) as List?) ?? const [];
+        return Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: campo.opzioni.map((o) {
+            return FilterChip(
+              label: Text(o.nome),
+              selected: scelti.contains(o.id),
+              selectedColor: kPrimary.withValues(alpha: 0.25),
+              onSelected: (v) => setState(() {
+                final nuovi = campo.opzioni
+                    .where((x) => x.id == o.id ? v : scelti.contains(x.id))
+                    .map((x) => x.id)
+                    .toList();
+                if (nuovi.isEmpty) {
+                  _campi.remove(campo.id);
+                } else {
+                  _campi[campo.id] = nuovi;
+                }
+              }),
+            );
+          }).toList(),
         );
       default:
         return TextField(

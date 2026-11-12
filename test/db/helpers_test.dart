@@ -180,6 +180,46 @@ void main() {
       expect(stessoValoreCampo({'eta': 1}, {'sesso': 'm', 'eta': 1}), isFalse);
     });
 
+    test('orario e combo box: valori validi ed etichette', () {
+      const ora = CampoServizio(id: 'o', nome: 'Ora chiamata', tipo: kCampoOrario);
+      expect(ora.etichetta('14:30'), '14:30');
+      expect(ora.valoreValido('24:00'), isFalse);
+      expect(ora.valoreValido('9:30'), isFalse); // sempre due cifre
+      expect(ora.valoreValido(1430), isFalse);
+      const combo = CampoServizio(id: 'c', nome: 'Destinazione', tipo: kCampoCombo, opzioni: [
+        OpzioneCampo(id: 'ps', nome: 'Pronto soccorso'),
+        OpzioneCampo(id: 'rep', nome: 'Reparto'),
+      ]);
+      expect(combo.haOpzioni, isTrue);
+      // Nomi nell'ordine dell'elenco, non in quello della scelta.
+      expect(combo.etichetta(['rep', 'ps']), 'Pronto soccorso, Reparto');
+      // Valori tolti dall'elenco e doppioni spariscono; lista vuota = nessun valore.
+      expect(combo.pulisci(['x', 'rep', 'rep']), ['rep']);
+      expect(combo.valoreValido(['x']), isFalse);
+      expect(combo.valoreValido('ps'), isFalse); // non è una lista
+    });
+
+    test('convertiDa: tendina ↔ combo box', () {
+      const tendina = CampoServizio(id: 'd', nome: 'Destinazione', tipo: kCampoTendina, opzioni: [
+        OpzioneCampo(id: 'ps', nome: 'Pronto soccorso'),
+        OpzioneCampo(id: 'rep', nome: 'Reparto'),
+      ]);
+      final combo = tendina.copyWith(tipo: kCampoCombo);
+      expect(combo.convertiDa(tendina, 'ps'), ['ps']);
+      expect(tendina.convertiDa(combo, ['rep', 'ps']), 'rep'); // resta il primo
+      expect(tendina.convertiDa(combo, ['x']), isNull);
+      const testo = CampoServizio(id: 'd', nome: 'Destinazione', tipo: kCampoTesto);
+      expect(combo.convertiDa(testo, 'Casa'), isNull); // un testo non è una scelta
+      expect(valorePerso('ps', ['ps']), isFalse);
+      expect(valorePerso(['ps'], 'ps'), isFalse);
+      expect(valorePerso(['ps', 'rep'], 'ps'), isTrue);
+      expect(valorePerso(['ps', 'rep'], ['ps']), isTrue);
+      expect(valorePerso('Casa', null), isTrue);
+      expect(valorePerso({'sesso': 'f', 'eta': 1}, {'eta': 1}), isTrue);
+      expect(stessoValoreCampo(['a', 'b'], ['a', 'b']), isTrue);
+      expect(stessoValoreCampo(['a', 'b'], ['a']), isFalse);
+    });
+
     test('decodificaCampi: vuoto, rovinato o assente diventa una mappa vuota', () {
       expect(decodificaCampi('{"eta":45,"sesso":"m"}'), {'eta': 45, 'sesso': 'm'});
       expect(decodificaCampi(null), isEmpty);
@@ -658,6 +698,27 @@ void main() {
       await saveCampoServizio(aNumero);
 
       expect(await campiDi(id), {scelta.id: 'alta'});
+    });
+
+    test('da tendina a combo box e ritorno: i servizi tengono il valore', () async {
+      final campo = CampoServizio(id: newId(), nome: 'Arrivo', tipo: kCampoTendina, opzioni: const [
+        OpzioneCampo(id: 'ps', nome: 'Pronto soccorso'),
+        OpzioneCampo(id: 'rep', nome: 'Reparto'),
+      ]);
+      await saveCampoServizio(campo);
+      final id = await servizioCon({campo.id: 'ps'});
+
+      final combo = campo.copyWith(tipo: kCampoCombo);
+      expect(await contaValoriNonPiuValidi(combo), 0); // cambia forma, non si perde
+      await saveCampoServizio(combo);
+      expect((await campiDi(id))[campo.id], ['ps']);
+
+      // Con due valori scelti, tornare alla tendina ne fa perdere uno.
+      final due = await servizioCon({campo.id: ['ps', 'rep']});
+      expect(await contaValoriNonPiuValidi(campo), 1);
+      await saveCampoServizio(campo);
+      expect((await campiDi(id))[campo.id], 'ps');
+      expect((await campiDi(due))[campo.id], 'ps');
     });
 
     test('nascondere un campo tiene i valori, eliminarlo li toglie', () async {

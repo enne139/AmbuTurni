@@ -63,6 +63,24 @@ void main() {
         '11/11/2026;;;;;2;;;;;"Prima riga\nseconda; con ""virgolette""";;7;;"a;b"');
   });
 
+  test('orario come testo, combo box coi nomi separati da virgola', () {
+    final csv = serviziInCsv([
+      const RigaServizioCsv(data: '2026-11-12', numeroServizio: 1, campi: {
+        'ora': '07:05',
+        'dest': ['rep', 'ps'],
+      }),
+    ], const [
+      CampoServizio(id: 'ora', nome: 'Ora chiamata', tipo: kCampoOrario),
+      CampoServizio(id: 'dest', nome: 'Destinazione', tipo: kCampoCombo, opzioni: [
+        OpzioneCampo(id: 'ps', nome: 'Pronto soccorso'),
+        OpzioneCampo(id: 'rep', nome: 'Reparto'),
+      ]),
+    ]);
+    final righe = csv.substring(1).split('\r\n');
+    expect(righe[0].endsWith(';Ora chiamata;Destinazione'), isTrue);
+    expect(righe[1].endsWith(';07:05;Pronto soccorso, Reparto'), isTrue);
+  });
+
   test('senza servizi resta solo l\'intestazione', () {
     final csv = serviziInCsv(const [], const []);
     expect(csv, '﻿Data;Turno n.;Associazione;Tipologia;Orario turno;Servizio n.;Codice chiamata;'

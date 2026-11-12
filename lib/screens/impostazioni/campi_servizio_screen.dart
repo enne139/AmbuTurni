@@ -150,6 +150,8 @@ IconData _iconaTipo(String tipo) => switch (tipo) {
       kCampoTendina => Icons.arrow_drop_down_circle_outlined,
       kCampoColori => Icons.palette_outlined,
       kCampoNumero => Icons.pin_outlined,
+      kCampoOrario => Icons.access_time,
+      kCampoCombo => Icons.checklist,
       kCampoSessoEta => Icons.person_outline,
       _ => Icons.short_text,
     };
@@ -273,7 +275,9 @@ class _CampoCard extends StatelessWidget {
       final sessi = campo.opzioni.map((o) => o.nome).join(', ');
       return Text('Speciale · sesso ($sessi) ed età affiancati$nascosto', style: stile);
     }
-    final valori = campo.tipo == kCampoTendina ? ' · ${campo.opzioni.map((o) => o.nome).join(', ')}' : '';
+    final valori = (campo.tipo == kCampoTendina || campo.tipo == kCampoCombo) && campo.opzioni.isNotEmpty
+        ? ' · ${campo.opzioni.map((o) => o.nome).join(', ')}'
+        : '';
     return Text('${nomeTipoCampo(campo.tipo)}$valori$nascosto', style: stile);
   }
 }
@@ -307,7 +311,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
   late final List<_OpzioneInModifica> _opzioni;
   bool _saving = false;
 
-  bool get _haOpzioni => _tipo == kCampoTendina || _tipo == kCampoColori || _speciale;
+  bool get _haOpzioni => tipoConOpzioni(_tipo);
 
   // Il campo speciale sesso ed età ha nome e tipo fissi: qui se ne cambiano
   // solo la visibilità e i valori del sesso.
@@ -448,7 +452,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
       final n = await contaValoriNonPiuValidi(campo);
       if (!mounted) return;
       if (n > 0) {
-        final tipoCambiato = !(widget.campo!.haOpzioni && campo.haOpzioni) && widget.campo!.tipo != campo.tipo;
+        final tipoCambiato = widget.campo!.tipo != campo.tipo;
         final quanti = n == 1 ? 'un servizio' : '$n servizi';
         final ok = await showDialog<bool>(
           context: context,
@@ -495,6 +499,8 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
       kCampoTendina => 'Si sceglie un valore da un menu a tendina.',
       kCampoColori => 'Si sceglie un valore tra quelli dell\'elenco, ognuno col suo colore.',
       kCampoNumero => 'Si scrive un numero, per esempio un\'età.',
+      kCampoOrario => 'Si sceglie un\'ora con l\'orologio, per esempio 14:30.',
+      kCampoCombo => 'Si possono scegliere più valori dell\'elenco insieme.',
       _ => 'Si scrive un testo libero.',
     };
     return Scaffold(
@@ -520,21 +526,29 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
             TextField(
               controller: _nomeCtrl,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(hintText: 'es. Codice fiscale'),
+              decoration: const InputDecoration(hintText: 'es. Patologie'),
             ),
           const SizedBox(height: 20),
           _label('Tipo'),
           if (_speciale)
             Text(nomeTipoCampo(_tipo), style: const TextStyle(fontSize: 16))
           else
-            SegmentedButton<String>(
-              showSelectedIcon: false,
-              segments: [
+            // Chip che vanno a capo invece di un SegmentedButton: con sei
+            // tipi i segmenti non ci stanno nella larghezza di un telefono.
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
                 for (final t in tipiCampoServizio)
-                  ButtonSegment(value: t, label: Text(nomeTipoCampo(t))),
+                  ChoiceChip(
+                    label: Text(nomeTipoCampo(t)),
+                    avatar: Icon(_iconaTipo(t), size: 18),
+                    showCheckmark: false,
+                    selected: _tipo == t,
+                    selectedColor: kPrimary.withValues(alpha: 0.25),
+                    onSelected: (_) => _cambiaTipo(t),
+                  ),
               ],
-              selected: {_tipo},
-              onSelectionChanged: (s) => _cambiaTipo(s.first),
             ),
           const SizedBox(height: 6),
           Text(spiegazione, style: TextStyle(color: coloreTesto(context, 0.55), fontSize: 12)),
@@ -552,7 +566,10 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
           ),
           if (_haOpzioni) ...[
             const SizedBox(height: 12),
-            _label(_speciale ? 'Valori del sesso' : 'Valori'),
+            _label(switch (_tipo) {
+              kCampoSessoEta => 'Valori del sesso',
+              _ => 'Valori',
+            }),
             for (var i = 0; i < _opzioni.length; i++)
               Padding(
                 key: ObjectKey(_opzioni[i]),

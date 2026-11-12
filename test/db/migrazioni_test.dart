@@ -213,4 +213,39 @@ void main() {
       await db.close();
     }
   });
+
+  test('v16 → v17: campi_servizio accetta orario e combo box, i campi restano', () async {
+    final vecchio = await openDatabase(percorso, version: 16, onCreate: (db, _) async {
+      await db.execute('''CREATE TABLE servizi (
+        id TEXT PRIMARY KEY, turno_id TEXT NOT NULL, campi TEXT DEFAULT '{}'
+      )''');
+      await db.execute('''CREATE TABLE campi_servizio (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA')),
+        opzioni TEXT DEFAULT '[]',
+        visibile INTEGER NOT NULL DEFAULT 1,
+        ordine INTEGER DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+      )''');
+    });
+    await vecchio.insert('campi_servizio', {'id': 'sesso_eta', 'nome': 'Sesso ed età', 'tipo': 'SESSO_ETA', 'ordine': 0});
+    await vecchio.insert('campi_servizio', {'id': 'mio', 'nome': 'Cosa', 'tipo': 'TESTO', 'ordine': 1, 'visibile': 0});
+    await vecchio.insert('servizi', {'id': 's1', 'turno_id': 't1', 'campi': '{"mio":"ok"}'});
+    await vecchio.close();
+
+    final db = await openTestDbAt(percorso);
+    try {
+      final campi = await db.query('campi_servizio', orderBy: 'ordine');
+      expect(campi.map((c) => c['id']), ['sesso_eta', 'mio']);
+      expect(campi.last['visibile'], 0);
+      expect((await db.query('servizi')).single['campi'], '{"mio":"ok"}');
+      await db.insert('campi_servizio', {'id': 'o', 'nome': 'Ora', 'tipo': 'ORARIO'});
+      await db.insert('campi_servizio', {'id': 'c', 'nome': 'Combo', 'tipo': 'COMBO'});
+      expect(() => db.insert('campi_servizio', {'id': 'y', 'nome': 'Y', 'tipo': 'BOH'}), throwsA(anything));
+    } finally {
+      await db.close();
+    }
+  });
 }

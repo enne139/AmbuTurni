@@ -102,7 +102,7 @@ CampoServizio? _campoDaMappa(Map<dynamic, dynamic> m) {
     id: id is String && id.isNotEmpty ? id : _uuid.v4(),
     nome: nome.trim(),
     tipo: tipo,
-    opzioni: (tipo == kCampoTendina || tipo == kCampoColori || tipo == kCampoSessoEta) ? opzioni : const [],
+    opzioni: tipoConOpzioni(tipo) ? opzioni : const [],
     visibile: visibile is bool ? visibile : (visibile is num ? visibile != 0 : true),
   );
 }
@@ -120,9 +120,11 @@ class EsitoUnioneCampi {
 }
 
 /// true se un campo di tipo [da] può diventare di tipo [a] senza perdere
-/// valori: stesso tipo, oppure tendina e colori (stessi valori, stessi id).
+/// valori né cambiarne la forma: stesso tipo, oppure tendina e colori
+/// (stessi valori, stessi id). La combo box salva una lista di id, quindi
+/// si unisce solo con un'altra combo box.
 bool _tipiCompatibili(String da, String a) =>
-    da == a || ({da, a}.difference({kCampoTendina, kCampoColori}).isEmpty);
+    da == a || {da, a}.difference({kCampoTendina, kCampoColori}).isEmpty;
 
 /// Unisce la lista [daFile] a quella del dispositivo [locali], come scelto
 /// dall'utente: i campi uguali si aggiornano, quelli nuovi si aggiungono,
@@ -203,7 +205,7 @@ EsitoUnioneCampi unisciCampi(List<CampoServizio> locali, List<CampoServizio> daF
 /// dispositivo. Solo i campi a colori tengono un colore.
 List<OpzioneCampo> _unisciOpzioni(
     List<OpzioneCampo> locali, List<OpzioneCampo> daFile, String tipo, List<String> palette) {
-  if (!(tipo == kCampoTendina || tipo == kCampoColori || tipo == kCampoSessoEta)) return const [];
+  if (!tipoConOpzioni(tipo)) return const [];
   final colori = tipo == kCampoColori;
   final usati = <String>{};
   final risultato = <OpzioneCampo>[];

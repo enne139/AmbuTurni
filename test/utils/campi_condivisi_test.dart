@@ -106,6 +106,28 @@ void main() {
       expect(c.opzioni.last.colore, '#E53935'); // il primo colore libero
     });
 
+    test('la combo box si unisce solo con un\'altra combo box', () {
+      const combo = CampoServizio(id: 't', nome: 'Destinazione', tipo: kCampoCombo, opzioni: [
+        OpzioneCampo(id: 'ps', nome: 'Pronto soccorso'),
+      ]);
+      final esito = unisciCampi([combo], [
+        const CampoServizio(id: 'altro', nome: 'Destinazione', tipo: kCampoCombo, opzioni: [
+          OpzioneCampo(id: 'x', nome: 'Reparto'),
+        ]),
+      ]);
+      expect(esito.saltati, isEmpty);
+      final c = esito.campi.single;
+      expect(c.id, 't');
+      expect(c.opzioni.map((o) => o.nome), ['Reparto', 'Pronto soccorso']);
+      // Da testo o da tendina cambierebbe la forma dei valori: non si unisce.
+      const testo = CampoServizio(id: 'n', nome: 'Note', tipo: kCampoTesto);
+      expect(unisciCampi([testo], [const CampoServizio(id: 'n', nome: 'Note', tipo: kCampoCombo)]).saltati,
+          ['Note']);
+      const tendina = CampoServizio(id: 'd', nome: 'Arrivo', tipo: kCampoTendina);
+      expect(unisciCampi([tendina], [const CampoServizio(id: 'd', nome: 'Arrivo', tipo: kCampoCombo)]).saltati,
+          ['Arrivo']);
+    });
+
     test('il campo speciale si riconosce dal tipo e tiene il suo nome', () {
       final esito = unisciCampi([_speciale], [
         const CampoServizio(id: 'diverso', nome: 'Paziente', tipo: kCampoSessoEta, visibile: false, opzioni: [
