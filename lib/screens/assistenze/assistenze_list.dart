@@ -16,7 +16,7 @@ import 'assistenza_detail.dart';
 const _kVistaCalendarioKey = 'assistenze_vista_calendario';
 
 /// Lista assistenze, speculare a TurniList: filtro per associazione, ricerca
-/// testuale (descrizione/note: le assistenze non hanno servizi) e vista
+/// testuale (orario/note: le assistenze non hanno servizi) e vista
 /// calendario mensile (CalendarioMensile condiviso coi turni).
 /// L'eliminazione (swipe e long-press) è stata rimossa dalla lista, come
 /// per TurniList: l'unico modo per eliminare un'assistenza resta il
@@ -139,7 +139,7 @@ class _AssistenzeListState extends State<AssistenzeList> {
                 autofocus: true,
                 style: TextStyle(color: coloreTesto(context)),
                 decoration: InputDecoration(
-                  hintText: 'Cerca in descrizione e note...',
+                  hintText: 'Cerca in orario e note...',
                   hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
                   border: InputBorder.none,
                 ),

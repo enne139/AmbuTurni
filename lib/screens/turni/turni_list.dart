@@ -143,7 +143,7 @@ class _TurniListState extends State<TurniList> {
                 autofocus: true,
                 style: TextStyle(color: coloreTesto(context)),
                 decoration: InputDecoration(
-                  hintText: 'Cerca in descrizione, note, servizi...',
+                  hintText: 'Cerca in orario, note, servizi...',
                   hintStyle: TextStyle(color: coloreTesto(context, 0.38)),
                   border: InputBorder.none,
                 ),

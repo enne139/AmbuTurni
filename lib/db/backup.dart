@@ -178,7 +178,7 @@ Future<String?> exportSemplificato() async {
       'tipologie': tipIds.map((id) => tipologieMap[id]).whereType<String>().toList(),
       'num_servizi': t['num_servizi'],
       'cambio_meta': (t['cambio_meta'] as int?) == 1,
-      'descrizione': t['descrizione'],
+      'orario': t['orario'],
       'note': t['note'],
       'eq1_autista': p(t['eq1_autista_id']),
       'eq1_cs': p(t['eq1_cs_id']),
@@ -208,7 +208,7 @@ Future<String?> exportSemplificato() async {
         'numero_progressivo': a['numero_progressivo'],
         'data': a['data'],
         'ore': a['ore'],
-        'descrizione': a['descrizione'],
+        'orario': a['orario'],
         'note': a['note'],
         'eq1_autista': p(a['eq1_autista_id']),
         'eq1_cs': p(a['eq1_cs_id']),
@@ -321,8 +321,16 @@ Future<String> importBackup() async {
       map
         ..remove('tipologia_id')
         ..remove('tipologie_extra');
+      _descrizioneInOrario(map);
       return map;
     }).toList();
+  }
+  // I backup fino alla DB v13 hanno `descrizione` in turni e assistenze, che
+  // dalla v14 si chiama `orario` (stessa conversione della migrazione).
+  if (tables['assistenze'] is List) {
+    tables['assistenze'] = (tables['assistenze'] as List)
+        .map((row) => _descrizioneInOrario(Map<String, dynamic>.from(row as Map)))
+        .toList();
   }
 
   final db = await getDb();
@@ -454,6 +462,18 @@ Future<String> importBackup() async {
       ? ''
       : ' Attenzione: $scartate righe non valide scartate (dettagli nel log).';
   return 'Import completato. Dati del $ts ripristinati.$avviso';
+}
+
+/// Porta il valore di `descrizione` in `orario` in una riga di turno o di
+/// assistenza di un backup precedente alla DB v14. Se la riga ha già
+/// `orario` (backup nuovo) resta com'è. Senza questa conversione l'INSERT
+/// fallirebbe sulla colonna che non esiste più e la riga verrebbe scartata.
+Map<String, dynamic> _descrizioneInOrario(Map<String, dynamic> riga) {
+  if (riga.containsKey('descrizione')) {
+    final descrizione = riga.remove('descrizione');
+    riga.putIfAbsent('orario', () => descrizione);
+  }
+  return riga;
 }
 
 /// Esporta la sola anagrafica ospedali (nome, via, città, regione,

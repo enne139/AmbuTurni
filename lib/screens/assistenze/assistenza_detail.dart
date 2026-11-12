@@ -121,7 +121,7 @@ class _AssistenzaDetailState extends State<AssistenzaDetail> {
                   _Row('Associazione', a.associazioneNome ?? '—'),
                   _Row('Data', formatDate(a.data)),
                   _Row('Ore', formatOre(a.ore)),
-                  if (a.descrizione != null) _Row('Descrizione', a.descrizione!),
+                  if (a.orario != null && a.orario!.isNotEmpty) _Row('Orario', a.orario!),
                 ],
               ),
             ),

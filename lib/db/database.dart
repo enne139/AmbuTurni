@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS turni (
   ore REAL,
   tipologie TEXT DEFAULT '[]',
   num_servizi INTEGER DEFAULT 0,
-  descrizione TEXT,
+  orario TEXT,
   note TEXT,
   eq1_autista_id TEXT REFERENCES persone(id),
   eq1_cs_id TEXT REFERENCES persone(id),
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS assistenze (
   numero_progressivo INTEGER,
   data TEXT NOT NULL,
   ore REAL,
-  descrizione TEXT,
+  orario TEXT,
   note TEXT,
   eq1_autista_id TEXT REFERENCES persone(id),
   eq1_cs_id TEXT REFERENCES persone(id),
@@ -149,6 +149,10 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
 
 ''';
 
+/// Versione corrente dello schema: ogni cambiamento allo schema la fa salire
+/// di uno, con la sua migrazione in _onUpgrade (regola 7 del CLAUDE.md).
+const int kVersioneDb = 14;
+
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
 
@@ -164,6 +168,23 @@ Future<Database> openTestDb() async {
     inMemoryDatabasePath,
     version: 1,
     onCreate: _onCreate,
+    onOpen: _onOpen,
+  );
+}
+
+/// Solo per i test delle migrazioni: apre (o crea) il DB nel file [path]
+/// alla [version] indicata con le migrazioni vere, così un test può creare
+/// un DB con lo schema di una versione vecchia, chiuderlo e riaprirlo qui
+/// per verificare che _onUpgrade porti i dati nella forma nuova.
+@visibleForTesting
+Future<Database> openTestDbAt(String path, {int version = kVersioneDb}) {
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  return openDatabase(
+    path,
+    version: version,
+    onCreate: _onCreate,
+    onUpgrade: _onUpgrade,
     onOpen: _onOpen,
   );
 }
@@ -192,7 +213,7 @@ Future<Database> getDb() async {
       : join(await getDatabasesPath(), 'ambulanza_turni.db');
   _db = await openDatabase(
     dbPath,
-    version: 13,
+    version: kVersioneDb,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onOpen: _onOpen,
@@ -460,6 +481,89 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // locale — un mezzo tolto dalla pagina admin non deve invalidare le
     // righe già registrate. Le righe esistenti restano senza mezzo (NULL).
     try { await db.execute('ALTER TABLE materiali_usati ADD COLUMN mezzo TEXT'); } catch (_) {}
+  }
+  if (oldVersion < 14) {
+    // Turni e assistenze: il campo "Descrizione" diventa "Orario" (testo
+    // corto, es. "12:00 - 18:00"). Le descrizioni già salvate erano di fatto
+    // tutte orari (indicazione dell'utente), quindi passano così come sono.
+    // Niente ALTER TABLE ... RENAME COLUMN: richiede SQLite 3.25, che i
+    // telefoni Android più vecchi (API < 30) non hanno. Le tabelle vengono
+    // ricostruite come nella v8, con le FK spente durante onUpgrade: il DROP
+    // di turni non tocca i servizi figli, che restano validi perché gli id
+    // non cambiano. Gli statement CREATE sono copiati qui e non presi da
+    // _schema, perché una migrazione deve restare uguale anche quando lo
+    // schema corrente cambierà ancora.
+    await _rinominaDescrizioneInOrario(db, 'turni', '''
+      CREATE TABLE turni (
+        id TEXT PRIMARY KEY,
+        associazione_id TEXT REFERENCES associazioni(id),
+        numero_progressivo INTEGER,
+        data TEXT NOT NULL,
+        ore REAL,
+        tipologie TEXT DEFAULT '[]',
+        num_servizi INTEGER DEFAULT 0,
+        orario TEXT,
+        note TEXT,
+        eq1_autista_id TEXT REFERENCES persone(id),
+        eq1_cs_id TEXT REFERENCES persone(id),
+        eq1_terzo_id TEXT REFERENCES persone(id),
+        eq1_quarto_id TEXT REFERENCES persone(id),
+        eq1_centralinista_id TEXT REFERENCES persone(id),
+        eq2_autista_id TEXT REFERENCES persone(id),
+        eq2_cs_id TEXT REFERENCES persone(id),
+        eq2_terzo_id TEXT REFERENCES persone(id),
+        eq2_quarto_id TEXT REFERENCES persone(id),
+        eq2_centralinista_id TEXT REFERENCES persone(id),
+        cambio_meta INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        is_synced INTEGER DEFAULT 0
+      )
+    ''', 'CREATE INDEX IF NOT EXISTS idx_turni_assoc ON turni(associazione_id)');
+    await _rinominaDescrizioneInOrario(db, 'assistenze', '''
+      CREATE TABLE assistenze (
+        id TEXT PRIMARY KEY,
+        associazione_id TEXT REFERENCES associazioni(id),
+        numero_progressivo INTEGER,
+        data TEXT NOT NULL,
+        ore REAL,
+        orario TEXT,
+        note TEXT,
+        eq1_autista_id TEXT REFERENCES persone(id),
+        eq1_cs_id TEXT REFERENCES persone(id),
+        eq1_terzo_id TEXT REFERENCES persone(id),
+        eq1_quarto_id TEXT REFERENCES persone(id),
+        eq1_centralinista_id TEXT REFERENCES persone(id),
+        eq2_autista_id TEXT REFERENCES persone(id),
+        eq2_cs_id TEXT REFERENCES persone(id),
+        eq2_terzo_id TEXT REFERENCES persone(id),
+        eq2_quarto_id TEXT REFERENCES persone(id),
+        eq2_centralinista_id TEXT REFERENCES persone(id),
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        is_synced INTEGER DEFAULT 0
+      )
+    ''', 'CREATE INDEX IF NOT EXISTS idx_assistenze_assoc ON assistenze(associazione_id)');
+  }
+}
+
+/// Ricostruisce [tabella] con [creaTabella] (stesso schema, ma `orario` al
+/// posto di `descrizione`) e ci ricopia le righe spostando il valore da una
+/// colonna all'altra. Gira solo se la tabella ha ancora la colonna vecchia:
+/// rilanciata su una tabella già convertita non fa niente. [indice] va
+/// ricreato perché il DROP lo elimina insieme alla tabella.
+Future<void> _rinominaDescrizioneInOrario(
+    Database db, String tabella, String creaTabella, String indice) async {
+  final cols = await db.rawQuery('PRAGMA table_info($tabella)');
+  if (!cols.any((c) => c['name'] == 'descrizione')) return;
+  final righe = await db.query(tabella);
+  await db.execute('DROP TABLE $tabella');
+  await db.execute(creaTabella);
+  await db.execute(indice);
+  for (final riga in righe) {
+    final nuovaRiga = Map<String, dynamic>.from(riga);
+    nuovaRiga['orario'] = nuovaRiga.remove('descrizione');
+    await db.insert(tabella, nuovaRiga);
   }
 }
 

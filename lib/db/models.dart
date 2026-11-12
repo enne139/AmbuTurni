@@ -226,7 +226,9 @@ class Turno {
   // AnagraficheProvider.byIdTipologia nelle schermate.
   final List<String> tipologie;
   final int numServizi;
-  final String? descrizione;
+  // Orario del turno, testo libero corto (es. "12:00 - 18:00"): fino alla
+  // DB v13 era la colonna `descrizione`, vedi la migrazione v14.
+  final String? orario;
   final String? note;
   // Equipaggio prima parte
   final String? eq1AutistaId;
@@ -258,7 +260,7 @@ class Turno {
     this.ore,
     this.tipologie = const [],
     this.numServizi = 0,
-    this.descrizione,
+    this.orario,
     this.note,
     this.eq1AutistaId,
     this.eq1CsId,
@@ -300,7 +302,7 @@ class Turno {
       ore: (m['ore'] as num?)?.toDouble(),
       tipologie: tipologie,
       numServizi: (m['num_servizi'] as int?) ?? 0,
-      descrizione: m['descrizione'] as String?,
+      orario: m['orario'] as String?,
       note: m['note'] as String?,
       eq1AutistaId: m['eq1_autista_id'] as String?,
       eq1CsId: m['eq1_cs_id'] as String?,
@@ -329,7 +331,7 @@ class Turno {
         'ore': ore,
         'tipologie': jsonEncode(tipologie),
         'num_servizi': numServizi,
-        'descrizione': descrizione,
+        'orario': orario,
         'note': note,
         'eq1_autista_id': eq1AutistaId,
         'eq1_cs_id': eq1CsId,
@@ -355,7 +357,7 @@ class Turno {
     double? ore,
     List<String>? tipologie,
     int? numServizi,
-    String? descrizione,
+    String? orario,
     String? note,
     String? eq1AutistaId,
     String? eq1CsId,
@@ -379,7 +381,7 @@ class Turno {
         ore: ore ?? this.ore,
         tipologie: tipologie ?? this.tipologie,
         numServizi: numServizi ?? this.numServizi,
-        descrizione: descrizione ?? this.descrizione,
+        orario: orario ?? this.orario,
         note: note ?? this.note,
         eq1AutistaId: eq1AutistaId ?? this.eq1AutistaId,
         eq1CsId: eq1CsId ?? this.eq1CsId,
@@ -588,7 +590,8 @@ class Assistenza {
   final int? numeroProgressivo;
   final String data;
   final double? ore;
-  final String? descrizione;
+  // Orario dell'assistenza (es. "14:00 - 19:00"), come in Turno.
+  final String? orario;
   final String? note;
   final String? eq1AutistaId;
   final String? eq1CsId;
@@ -615,7 +618,7 @@ class Assistenza {
     this.numeroProgressivo,
     required this.data,
     this.ore,
-    this.descrizione,
+    this.orario,
     this.note,
     this.eq1AutistaId,
     this.eq1CsId,
@@ -640,7 +643,7 @@ class Assistenza {
         numeroProgressivo: m['numero_progressivo'] as int?,
         data: m['data'] as String,
         ore: (m['ore'] as num?)?.toDouble(),
-        descrizione: m['descrizione'] as String?,
+        orario: m['orario'] as String?,
         note: m['note'] as String?,
         eq1AutistaId: m['eq1_autista_id'] as String?,
         eq1CsId: m['eq1_cs_id'] as String?,
@@ -665,7 +668,7 @@ class Assistenza {
         'numero_progressivo': numeroProgressivo,
         'data': data,
         'ore': ore,
-        'descrizione': descrizione,
+        'orario': orario,
         'note': note,
         'eq1_autista_id': eq1AutistaId,
         'eq1_cs_id': eq1CsId,

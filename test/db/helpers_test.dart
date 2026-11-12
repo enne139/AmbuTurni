@@ -402,22 +402,28 @@ void main() {
       expect(turniB.single.numeroProgressivo, 1);
     });
 
-    test('getTurni con ricerca trova per descrizione, note o descrizione servizio', () async {
-      final tDescr = newId();
+    test('getTurni con ricerca trova per orario, note o descrizione servizio', () async {
+      final tOrario = newId();
       final tNota = newId();
       final tServizio = newId();
       final tAltro = newId();
-      await saveTurno(Turno(id: tDescr, data: '2024-08-01', associazioneId: assocId, descrizione: 'Trasporto urgente Milano'));
-      await saveTurno(Turno(id: tNota, data: '2024-08-02', associazioneId: assocId, note: 'Chiamare prima Milano'));
+      await saveTurno(Turno(id: tOrario, data: '2024-08-01', associazioneId: assocId, orario: '14:00 - 20:00'));
+      await saveTurno(Turno(id: tNota, data: '2024-08-02', associazioneId: assocId, note: 'Rientro alle 20:00'));
       await saveTurno(Turno(id: tServizio, data: '2024-08-03', associazioneId: assocId));
-      await saveServizio(Servizio(id: newId(), turnoId: tServizio, descrizione: 'Consegna referti Milano'));
-      await saveTurno(Turno(id: tAltro, data: '2024-08-04', associazioneId: assocId, descrizione: 'Nessuna corrispondenza'));
+      await saveServizio(Servizio(id: newId(), turnoId: tServizio, descrizione: 'Dimesso alle 20:00'));
+      await saveTurno(Turno(id: tAltro, data: '2024-08-04', associazioneId: assocId, orario: '08:00 - 14:00'));
 
-      final risultati = await getTurni(associazioneId: assocId, ricerca: 'Milano');
+      final risultati = await getTurni(associazioneId: assocId, ricerca: '20:00');
       final idsTrovati = risultati.map((t) => t.id).toSet();
 
-      expect(idsTrovati, {tDescr, tNota, tServizio});
+      expect(idsTrovati, {tOrario, tNota, tServizio});
       expect(idsTrovati.contains(tAltro), isFalse);
+    });
+
+    test('saveTurno salva e rilegge l\'orario', () async {
+      final id = newId();
+      await saveTurno(Turno(id: id, data: '2024-08-05', associazioneId: assocId, orario: '12:00 - 18:00'));
+      expect((await getTurnoById(id))!.orario, '12:00 - 18:00');
     });
   });
 
@@ -430,26 +436,27 @@ void main() {
       assocId = list.firstWhere((a) => a.nome == 'Assoc Assistenze Test').id;
     });
 
-    test('getAssistenze con ricerca trova per descrizione o note', () async {
-      final aDescr = newId();
+    test('getAssistenze con ricerca trova per orario o note', () async {
+      final aOrario = newId();
       final aNota = newId();
       final aAltra = newId();
       await saveAssistenza(Assistenza(
-          id: aDescr, data: '2024-09-01', associazioneId: assocId,
-          descrizione: 'Partita allo stadio'));
+          id: aOrario, data: '2024-09-01', associazioneId: assocId,
+          orario: '14:00 - 19:00'));
       await saveAssistenza(Assistenza(
           id: aNota, data: '2024-09-02', associazioneId: assocId,
-          note: 'Ritrovo stadio ore 14'));
+          note: 'Ritrovo allo stadio alle 14:00'));
       await saveAssistenza(Assistenza(
           id: aAltra, data: '2024-09-03', associazioneId: assocId,
-          descrizione: 'Concerto in piazza'));
+          orario: '20:00 - 23:00'));
 
-      final risultati = await getAssistenze(associazioneId: assocId, ricerca: 'stadio');
-      expect(risultati.map((a) => a.id).toSet(), {aDescr, aNota});
+      final risultati = await getAssistenze(associazioneId: assocId, ricerca: '14:00');
+      expect(risultati.map((a) => a.id).toSet(), {aOrario, aNota});
+      expect((await getAssistenzaById(aOrario))!.orario, '14:00 - 19:00');
 
       // Ricerca di soli spazi = nessun filtro: restano tutte.
       final tutte = await getAssistenze(associazioneId: assocId, ricerca: '  ');
-      expect(tutte.map((a) => a.id).toSet(), {aDescr, aNota, aAltra});
+      expect(tutte.map((a) => a.id).toSet(), {aOrario, aNota, aAltra});
     });
 
     test('getAssistenze espone il colore dell\'associazione (pallini calendario)', () async {

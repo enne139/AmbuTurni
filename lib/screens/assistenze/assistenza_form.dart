@@ -22,7 +22,7 @@ class AssistenzaForm extends StatefulWidget {
 class _AssistenzaFormState extends State<AssistenzaForm> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _oreCtrl;
-  late TextEditingController _descrizioneCtrl;
+  late TextEditingController _orarioCtrl;
   late TextEditingController _noteCtrl;
   late TextEditingController _dataCtrl;
 
@@ -40,7 +40,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
   void initState() {
     super.initState();
     _oreCtrl = TextEditingController();
-    _descrizioneCtrl = TextEditingController();
+    _orarioCtrl = TextEditingController();
     _noteCtrl = TextEditingController();
     // dataIniziale vince su oggi solo in creazione; in modifica _caricaDati
     // sovrascrive comunque con la data dell'assistenza.
@@ -64,7 +64,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
             _data = DateTime.tryParse(a.data) ?? DateTime.now();
             _dataCtrl.text = a.data;
             _oreCtrl.text = a.ore != null ? formatOre(a.ore) : '';
-            _descrizioneCtrl.text = a.descrizione ?? '';
+            _orarioCtrl.text = a.orario ?? '';
             _noteCtrl.text = a.note ?? '';
             _eq1Autista = a.eq1AutistaId;
             _eq1Cs = a.eq1CsId;
@@ -119,7 +119,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
         associazioneId: _associazioneId,
         data: _dataCtrl.text,
         ore: parseOre(_oreCtrl.text),
-        descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
+        orario: _orarioCtrl.text.trim().isEmpty ? null : _orarioCtrl.text.trim(),
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         eq1AutistaId: _eq1Autista,
         eq1CsId: _eq1Cs,
@@ -147,7 +147,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
   @override
   void dispose() {
     _oreCtrl.dispose();
-    _descrizioneCtrl.dispose();
+    _orarioCtrl.dispose();
     _noteCtrl.dispose();
     _dataCtrl.dispose();
     super.dispose();
@@ -186,7 +186,7 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
               onChanged: (v) => setState(() => _associazioneId = v),
             ),
             const SizedBox(height: 20),
-            _label('Data e ore'),
+            _label('Data, ore e orario'),
             Row(children: [
               Expanded(
                 child: TextFormField(
@@ -214,6 +214,18 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
                 ),
               ),
             ]),
+            const SizedBox(height: 12),
+            // Orario (fino alla DB v13 era "Descrizione"): una riga sola,
+            // come nel form turno.
+            TextFormField(
+              controller: _orarioCtrl,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Orario',
+                hintText: 'es. 12:00 - 18:00',
+                prefixIcon: Icon(Icons.access_time, size: 18),
+              ),
+            ),
             const SizedBox(height: 20),
             _label('Equipaggio — 1ª parte'),
             _eqGrid(anag.persone, _eq1Autista, _eq1Cs, _eq1Terzo, _eq1Quarto, _eq1Central, true),
@@ -222,8 +234,6 @@ class _AssistenzaFormState extends State<AssistenzaForm> {
             _eqGrid(anag.persone, _eq2Autista, _eq2Cs, _eq2Terzo, _eq2Quarto, _eq2Central, false),
             const SizedBox(height: 20),
             _label('Note'),
-            TextFormField(controller: _descrizioneCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Descrizione')),
-            const SizedBox(height: 12),
             TextFormField(controller: _noteCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Note')),
             const SizedBox(height: 32),
           ],

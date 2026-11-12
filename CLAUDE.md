@@ -281,8 +281,10 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: 13); `_onOpen` esegue soltanto i PRAGMA di connessione
-(WAL + foreign_keys).
+(versione corrente: `kVersioneDb` = 14); `_onOpen` esegue soltanto i PRAGMA
+di connessione (WAL + foreign_keys). Le migrazioni si testano in
+`test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
+schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
 
 `ospedali` ha anche `via` (indirizzo testuale), `lat`/`lng` (coordinate da
 geocoding automatico, v9) e `regione` (v11, stessa fonte): vedi il tool
@@ -290,6 +292,10 @@ geocoding automatico, v9) e `regione` (v11, stessa fonte): vedi il tool
 
 `materiali_usati` ha anche `mezzo` (v13, testo: il nome a due cifre del
 mezzo, non una FK — i mezzi vivono sul backend condiviso).
+
+`turni` e `assistenze` hanno `orario` (v14, testo corto tipo "12:00 - 18:00")
+al posto della vecchia `descrizione`; i `servizi` tengono la loro
+`descrizione`. Vedi "Orario al posto della descrizione" in Decisioni tecniche.
 
 ### Desktop (Windows/Linux/macOS)
 
@@ -2690,6 +2696,36 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     scheda Mezzi.
     **Da verificare su Android reale** (regola 8): migrazione v13 e i flussi
     di rete con l'APK release.
+- **Orario al posto della descrizione in turni e assistenze (2026-11-12,
+  DB v14)**: richiesta esplicita. Il campo "Descrizione" di turni e
+  assistenze diventa "Orario", un campo di una riga accanto a data e ore
+  (sezione "Data, ore e orario" del form, prima era su 3 righe sotto
+  "Note"), con suggerimento "es. 12:00 - 18:00". Testo libero, nessun
+  formato imposto né validazione, e le ore **non** si calcolano
+  dall'orario (scelta dell'utente: restano un campo a parte). I servizi
+  tengono la loro descrizione in markdown.
+  - **Migrazione v14**: le descrizioni già salvate erano tutte orari
+    (indicazione dell'utente), quindi passano in `orario` così come sono.
+    Niente `ALTER TABLE ... RENAME COLUMN`, che richiede SQLite 3.25 e
+    manca sui telefoni con Android < 11: `_rinominaDescrizioneInOrario`
+    ricostruisce la tabella come la v8 (FK spente durante `_onUpgrade`, i
+    servizi figli restano validi perché gli id dei turni non cambiano),
+    ricrea l'indice e non fa niente se la colonna vecchia non c'è più. Gli
+    statement CREATE sono copiati nella migrazione, non presi da `_schema`,
+    perché la migrazione non deve cambiare quando cambierà lo schema.
+  - **Backup**: `importBackup` porta `descrizione` in `orario` nelle righe
+    di turni e assistenze dei backup fino alla v13 (`_descrizioneInOrario`),
+    altrimenti l'INSERT fallirebbe sulla colonna che non esiste più;
+    l'export leggibile (`exportSemplificato`) ha la chiave `orario`.
+  - **Ricerca**: `getTurni`/`getAssistenze` cercano in orario e note (e
+    nella descrizione dei servizi per i turni), suggerimenti delle barre
+    di ricerca aggiornati. Dettagli: riga "Orario" solo se valorizzato.
+  - `kVersioneDb` in `database.dart` è ora l'unico punto con la versione
+    dello schema (usato da `getDb` e dai test delle migrazioni).
+  - **Verificato**: `flutter analyze` senza errori, `flutter test` (nuovo
+    `test/db/migrazioni_test.dart`: v13 → v14 con turno, servizio figlio e
+    assistenza, colonne, valori, indici; DB nuovo già con `orario`).
+    **Da verificare su Android reale** (regola 8): migrazione v14.
 
 ---
 
@@ -2707,7 +2743,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Equipaggio**: form 1ª/2ª parte con "Copia 1ª → 2ª"; affiancate per ruolo nel dettaglio.
 - ✅ **Note** (turno/assistenza): card dedicata in markdown, editor a schermo intero.
 - ✅ **Assistenze**: come i turni ma senza tipologia né servizi; ricerca
-  testuale (descrizione/note) e vista calendario come i turni.
+  testuale (orario/note) e vista calendario come i turni.
+- ✅ **Orario** di turni e assistenze (v14, prima "Descrizione"): campo di
+  una riga accanto a data e ore, es. "12:00 - 18:00".
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
   associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
@@ -2791,7 +2829,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 233 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 236 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

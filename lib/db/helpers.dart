@@ -409,7 +409,7 @@ Future<Map<String, int>> contaOccorrenzeTipologie() async {
 /// query nelle liste; le tipologie (colonna JSON multi-valore) si risolvono
 /// in nomi via AnagraficheProvider nelle schermate.
 ///
-/// Se [ricerca] è valorizzato, filtra sui turni la cui descrizione/note oppure
+/// Se [ricerca] è valorizzato, filtra sui turni il cui orario/note oppure
 /// la descrizione di un servizio collegato contengono il testo (case-insensitive
 /// per via del collate NOCASE di default di SQLite su colonne TEXT).
 /// Il JOIN su servizi e il DISTINCT si attivano solo in questo caso: nelle query
@@ -426,7 +426,7 @@ Future<List<Turno>> getTurni({String? associazioneId, String? ricerca}) async {
   final q = ricerca?.trim();
   final cercaTesto = q != null && q.isNotEmpty;
   if (cercaTesto) {
-    conditions.add("(t.descrizione LIKE ? ESCAPE '\\' OR t.note LIKE ? ESCAPE '\\' OR s.descrizione LIKE ? ESCAPE '\\')");
+    conditions.add("(t.orario LIKE ? ESCAPE '\\' OR t.note LIKE ? ESCAPE '\\' OR s.descrizione LIKE ? ESCAPE '\\')");
     final pattern = '%${_escapeLike(q)}%';
     args.addAll([pattern, pattern, pattern]);
   }
@@ -650,7 +650,7 @@ Future<void> spostaServizio(
 /// Come getTurni ma per le assistenze; LEFT JOIN solo su associazioni
 /// perché le assistenze non hanno tipologia né servizi.
 /// Lista assistenze con filtro associazione e ricerca testuale su
-/// descrizione/note (stessa forma di getTurni, ma senza il JOIN sui servizi
+/// orario/note (stessa forma di getTurni, ma senza il JOIN sui servizi
 /// che le assistenze non hanno).
 Future<List<Assistenza>> getAssistenze({String? associazioneId, String? ricerca}) async {
   final db = await getDb();
@@ -662,7 +662,7 @@ Future<List<Assistenza>> getAssistenze({String? associazioneId, String? ricerca}
   }
   final q = ricerca?.trim();
   if (q != null && q.isNotEmpty) {
-    conditions.add("(a.descrizione LIKE ? ESCAPE '\\' OR a.note LIKE ? ESCAPE '\\')");
+    conditions.add("(a.orario LIKE ? ESCAPE '\\' OR a.note LIKE ? ESCAPE '\\')");
     final pattern = '%${_escapeLike(q)}%';
     args.addAll([pattern, pattern]);
   }

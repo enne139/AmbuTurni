@@ -24,7 +24,7 @@ class TurnoForm extends StatefulWidget {
 class _TurnoFormState extends State<TurnoForm> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _oreCtrl;
-  late TextEditingController _descrizioneCtrl;
+  late TextEditingController _orarioCtrl;
   late TextEditingController _noteCtrl;
   late TextEditingController _dataCtrl;
 
@@ -45,7 +45,7 @@ class _TurnoFormState extends State<TurnoForm> {
   void initState() {
     super.initState();
     _oreCtrl = TextEditingController();
-    _descrizioneCtrl = TextEditingController();
+    _orarioCtrl = TextEditingController();
     _noteCtrl = TextEditingController();
     _dataCtrl = TextEditingController(text: widget.dataIniziale ?? todayIso());
     // _data alimenta initialDate del date picker: va allineato al campo,
@@ -71,7 +71,7 @@ class _TurnoFormState extends State<TurnoForm> {
             _data = DateTime.tryParse(t.data) ?? DateTime.now();
             _dataCtrl.text = t.data;
             _oreCtrl.text = t.ore != null ? formatOre(t.ore) : '';
-            _descrizioneCtrl.text = t.descrizione ?? '';
+            _orarioCtrl.text = t.orario ?? '';
             _noteCtrl.text = t.note ?? '';
             _eq1Autista = t.eq1AutistaId;
             _eq1Cs = t.eq1CsId;
@@ -111,7 +111,7 @@ class _TurnoFormState extends State<TurnoForm> {
         data: _dataCtrl.text,
         ore: parseOre(_oreCtrl.text),
         tipologie: List.of(_tipologieSel),
-        descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
+        orario: _orarioCtrl.text.trim().isEmpty ? null : _orarioCtrl.text.trim(),
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         eq1AutistaId: _eq1Autista,
         eq1CsId: _eq1Cs,
@@ -139,7 +139,7 @@ class _TurnoFormState extends State<TurnoForm> {
   @override
   void dispose() {
     _oreCtrl.dispose();
-    _descrizioneCtrl.dispose();
+    _orarioCtrl.dispose();
     _noteCtrl.dispose();
     _dataCtrl.dispose();
     super.dispose();
@@ -180,8 +180,8 @@ class _TurnoFormState extends State<TurnoForm> {
             ),
             const SizedBox(height: 20),
 
-            // --- Data e Ore ---
-            _Sezione(titolo: 'Data e ore'),
+            // --- Data, ore e orario ---
+            _Sezione(titolo: 'Data, ore e orario'),
             Row(children: [
               Expanded(
                 child: TextFormField(
@@ -216,6 +216,19 @@ class _TurnoFormState extends State<TurnoForm> {
                 ),
               ),
             ]),
+            const SizedBox(height: 12),
+            // Orario (fino alla DB v13 era "Descrizione"): una riga sola,
+            // accanto a data e ore, perché ci va un testo corto tipo
+            // "12:00 - 18:00" e non una nota.
+            TextFormField(
+              controller: _orarioCtrl,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Orario',
+                hintText: 'es. 12:00 - 18:00',
+                prefixIcon: Icon(Icons.access_time, size: 18),
+              ),
+            ),
             const SizedBox(height: 20),
 
             // --- Tipologia ---
@@ -309,14 +322,8 @@ class _TurnoFormState extends State<TurnoForm> {
             ),
             const SizedBox(height: 20),
 
-            // --- Note e Descrizione ---
+            // --- Note ---
             _Sezione(titolo: 'Note'),
-            TextFormField(
-              controller: _descrizioneCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Descrizione'),
-            ),
-            const SizedBox(height: 12),
             TextFormField(
               controller: _noteCtrl,
               maxLines: 3,
