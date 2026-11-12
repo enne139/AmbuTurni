@@ -604,17 +604,13 @@ void main() {
     Future<Map<String, dynamic>> campiDi(String servizioId) async =>
         (await getServizi(turnoId)).firstWhere((s) => s.id == servizioId).campi;
 
-    test('un DB nuovo parte con Sesso ed età (speciale) e Colore invio', () async {
+    test('un DB nuovo parte solo con Sesso ed età (speciale)', () async {
       final campi = await getCampiServizio();
-      expect(campi.take(2).map((c) => c.nome), ['Sesso ed età', 'Colore invio']);
-      final sessoEta = campi[0], colore = campi[1];
+      final sessoEta = campi.single;
       expect(sessoEta.id, kIdCampoSessoEta);
       expect(sessoEta.tipo, kCampoSessoEta);
       expect(sessoEta.opzioni.map((o) => o.nome), ['M', 'F', 'A']);
-      expect(colore.tipo, kCampoColori);
-      expect(colore.opzioni.map((o) => o.nome), ['Verde', 'Giallo', 'Rosso']);
-      expect(colore.opzioni.every((o) => o.colore != null), isTrue);
-      expect(campi.take(2).every((c) => c.visibile), isTrue);
+      expect(sessoEta.visibile, isTrue);
     });
 
     test('i valori si salvano e si rileggono col servizio', () async {

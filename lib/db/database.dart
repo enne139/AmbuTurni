@@ -707,34 +707,23 @@ const _opzioniSesso = [
   {'id': 'a', 'nome': 'A'},
 ];
 
-/// "Colore invio": colori presi dalla palette dell'app, così si ritrovano
-/// uguali nel selettore quando si modifica il campo.
-const _campoColoreInvio = {
-  'id': 'colore_invio',
-  'nome': 'Colore invio',
-  'tipo': 'COLORI',
-  'opzioni': [
-    {'id': 'verde', 'nome': 'Verde', 'colore': '#43A047'},
-    {'id': 'giallo', 'nome': 'Giallo', 'colore': '#FDD835'},
-    {'id': 'rosso', 'nome': 'Rosso', 'colore': '#E53935'},
-  ],
-};
-
 /// Campi personalizzati con cui parte una installazione nuova (indicati
-/// dall'utente): il campo speciale sesso ed età e Colore invio. Id fissi e
+/// dall'utente): solo il campo speciale sesso ed età. "Colore invio" c'era
+/// nella 1.19.0 ed è stato tolto dai campi iniziali su richiesta: chi l'ha
+/// già lo tiene finché non lo elimina dalle Impostazioni. Id fissi e
 /// leggibili al posto degli UUID: sono uguali su ogni dispositivo.
 const _campiServizioIniziali = [
   {'id': 'sesso_eta', 'nome': 'Sesso ed età', 'tipo': 'SESSO_ETA', 'opzioni': _opzioniSesso},
-  _campoColoreInvio,
 ];
 
-/// I campi iniziali come li creava la migrazione v15, quando sesso ed età
-/// erano ancora due campi separati: la migrazione deve restare uguale anche
-/// se i campi iniziali cambiano, e la v16 li unisce nel campo speciale.
+/// I campi iniziali creati dalla migrazione v15 su un dispositivo che arriva
+/// da una versione precedente, quando sesso ed età erano ancora due campi
+/// separati: la v16 li unisce nel campo speciale. Colore invio è stato tolto
+/// anche da qui, così chi aggiorna adesso dalla 1.18 ha gli stessi campi
+/// iniziali di un'installazione nuova.
 const _campiServizioV15 = [
   {'id': 'sesso', 'nome': 'Sesso', 'tipo': 'TENDINA', 'opzioni': _opzioniSesso},
   {'id': 'eta', 'nome': 'Età', 'tipo': 'NUMERO', 'opzioni': []},
-  _campoColoreInvio,
 ];
 
 /// Inserisce [campi] solo se la tabella è vuota: se l'utente li ha già

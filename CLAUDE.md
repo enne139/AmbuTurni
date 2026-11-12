@@ -2919,6 +2919,13 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     "es. Patologie" nel nome, orologio a 24 ore, scelta multipla di due
     valori, valori nella card. **Da verificare su Android reale**
     (regola 8): migrazioni v14–v17.
+- **Colore invio tolto dai campi iniziali (2026-11-12, dopo la 1.19.0)**:
+  richiesta esplicita. Una installazione nuova parte solo con Sesso ed età;
+  anche `_campiServizioV15` (i campi che la v15 crea a chi aggiorna da una
+  versione precedente) non lo crea più, così chi aggiorna adesso dalla 1.18
+  ha gli stessi campi di un'installazione nuova. Chi ha già la 1.19.0 lo
+  tiene, coi suoi valori: nessuna migrazione lo cancella, lo si elimina a
+  mano da Impostazioni → Campi dei servizi se non serve.
 - **Servizi in CSV (2026-11-12)**: richiesta esplicita, "esportare i
   servizi in formato CSV"; scelta dell'utente: tutti i servizi, senza
   filtri. Pulsante "Esporta servizi in CSV (Excel)" in Impostazioni →
@@ -2964,8 +2971,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   una riga accanto a data e ore, es. "12:00 - 18:00".
 - ✅ **Campi personalizzati dei servizi** (v15, Impostazioni → Campi dei
   servizi): tendina, colori, testo, numero, orario o combo box, mostrati o nascosti,
-  riordinabili; partono Sesso ed età (campo speciale, affiancati, v16) e
-  Colore invio (verde, giallo, rosso); valori nel form e nella card del
+  riordinabili; parte Sesso ed età (campo speciale, affiancati, v16:
+  Colore invio non c'è più tra i campi iniziali); valori nel form e nella card del
   servizio, sotto la descrizione. La lista si esporta in un file e si
   importa unendola a quella del dispositivo.
 - ✅ **Servizi in CSV** (Impostazioni → Backup): tutti i servizi, una riga

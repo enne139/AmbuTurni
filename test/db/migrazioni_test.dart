@@ -134,7 +134,8 @@ void main() {
       expect(await _colonne(db, 'servizi'), contains('campi'));
       expect(servizio['campi'], '{}');
       final campi = await db.query('campi_servizio', orderBy: 'ordine');
-      expect(campi.map((c) => c['nome']), ['Sesso ed età', 'Colore invio']);
+      // Colore invio non è più tra i campi iniziali (tolto dopo la 1.19.0).
+      expect(campi.map((c) => c['nome']), ['Sesso ed età']);
       expect(campi.first['tipo'], 'SESSO_ETA');
 
       // Gli indici eliminati col DROP sono stati ricreati.
@@ -154,7 +155,7 @@ void main() {
       expect(await _colonne(db, 'assistenze'), allOf(contains('orario'), isNot(contains('descrizione'))));
       expect(await _colonne(db, 'servizi'), contains('campi'));
       final campi = await db.query('campi_servizio', orderBy: 'ordine');
-      expect(campi.map((c) => c['id']), ['sesso_eta', 'colore_invio']);
+      expect(campi.map((c) => c['id']), ['sesso_eta']);
     } finally {
       await db.close();
     }
