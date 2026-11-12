@@ -109,6 +109,68 @@ void main() {
     });
   });
 
+  group('Modello CampoServizio', () {
+    const sesso = CampoServizio(id: 'sesso', nome: 'Sesso', tipo: kCampoTendina, opzioni: [
+      OpzioneCampo(id: 'm', nome: 'M'),
+      OpzioneCampo(id: 'f', nome: 'F'),
+    ]);
+
+    test('fromMap → toMap è identico, opzioni e visibilità comprese', () {
+      final map = {
+        'id': 'c1',
+        'nome': 'Colore invio',
+        'tipo': kCampoColori,
+        'opzioni': '[{"id":"verde","nome":"Verde","colore":"#43A047"}]',
+        'visibile': 0,
+        'ordine': 2,
+        'created_at': '2026-11-12T00:00:00Z',
+        'updated_at': '2026-11-12T00:00:00Z',
+      };
+      final c = CampoServizio.fromMap(map);
+      expect(c.visibile, isFalse);
+      expect(c.opzioni.single.colore, '#43A047');
+      expect(c.toMap(), map);
+    });
+
+    test('opzioni rovinate: il campo si legge lo stesso, senza valori', () {
+      final c = CampoServizio.fromMap({'id': 'c', 'nome': 'X', 'tipo': kCampoTendina, 'opzioni': '{non json'});
+      expect(c.opzioni, isEmpty);
+      expect(c.visibile, isTrue);
+    });
+
+    test('valoreValido ed etichetta per ogni tipo', () {
+      expect(sesso.etichetta('f'), 'F');
+      expect(sesso.valoreValido('x'), isFalse); // opzione che non c'è più
+      expect(sesso.etichetta('x'), isNull);
+      const eta = CampoServizio(id: 'eta', nome: 'Età', tipo: kCampoNumero);
+      expect(eta.etichetta(45), '45');
+      expect(eta.etichetta(37.5), '37,5');
+      expect(eta.valoreValido('45'), isFalse); // un testo non è un numero
+      const nota = CampoServizio(id: 'n', nome: 'Nota', tipo: kCampoTesto);
+      expect(nota.etichetta('ok'), 'ok');
+      expect(nota.valoreValido(''), isFalse);
+      expect(nota.valoreValido(3), isFalse);
+    });
+
+    test('parseNumeroCampo e formatNumeroCampo', () {
+      expect(parseNumeroCampo(' 45 '), 45);
+      expect(parseNumeroCampo('37,5'), 37.5);
+      expect(parseNumeroCampo('37.5'), 37.5);
+      expect(parseNumeroCampo('abc'), isNull);
+      expect(parseNumeroCampo(''), isNull);
+      expect(formatNumeroCampo(45.0), '45');
+      expect(formatNumeroCampo(12), '12');
+    });
+
+    test('decodificaCampi: vuoto, rovinato o assente diventa una mappa vuota', () {
+      expect(decodificaCampi('{"eta":45,"sesso":"m"}'), {'eta': 45, 'sesso': 'm'});
+      expect(decodificaCampi(null), isEmpty);
+      expect(decodificaCampi(''), isEmpty);
+      expect(decodificaCampi('[1,2]'), isEmpty);
+      expect(decodificaCampi('{rotto'), isEmpty);
+    });
+  });
+
   group('StatisticheData', () {
     test('oreTotali somma turni e assistenze', () {
       const s = StatisticheData(
@@ -463,6 +525,127 @@ void main() {
       final assistenze = await getAssistenze(associazioneId: assocId);
       expect(assistenze, isNotEmpty);
       expect(assistenze.first.associazioneColore, '#43A047');
+    });
+  });
+
+  group('Campi personalizzati dei servizi', () {
+    late String turnoId;
+
+    setUpAll(() async {
+      turnoId = newId();
+      await saveTurno(Turno(id: turnoId, data: '2026-11-10'));
+    });
+
+    /// Crea un servizio del turno di prova coi valori [campi] e ne restituisce l'id.
+    Future<String> servizioCon(Map<String, dynamic> campi) async {
+      final id = newId();
+      await saveServizio(Servizio(id: id, turnoId: turnoId, campi: campi));
+      return id;
+    }
+
+    Future<Map<String, dynamic>> campiDi(String servizioId) async =>
+        (await getServizi(turnoId)).firstWhere((s) => s.id == servizioId).campi;
+
+    test('un DB nuovo parte con Sesso, Età e Colore invio, in quest\'ordine', () async {
+      final campi = await getCampiServizio();
+      expect(campi.take(3).map((c) => c.nome), ['Sesso', 'Età', 'Colore invio']);
+      final sesso = campi[0], eta = campi[1], colore = campi[2];
+      expect(sesso.tipo, kCampoTendina);
+      expect(sesso.opzioni.map((o) => o.nome), ['M', 'F', 'A']);
+      expect(eta.tipo, kCampoNumero);
+      expect(colore.tipo, kCampoColori);
+      expect(colore.opzioni.map((o) => o.nome), ['Verde', 'Giallo', 'Rosso']);
+      expect(colore.opzioni.every((o) => o.colore != null), isTrue);
+      expect(campi.take(3).every((c) => c.visibile), isTrue);
+    });
+
+    test('i valori si salvano e si rileggono col servizio', () async {
+      final id = await servizioCon({'sesso': 'f', 'eta': 45, 'colore_invio': 'giallo'});
+      expect(await campiDi(id), {'sesso': 'f', 'eta': 45, 'colore_invio': 'giallo'});
+    });
+
+    test('un campo nuovo va in fondo; rinominare un valore non tocca i servizi', () async {
+      final campo = CampoServizio(id: newId(), nome: 'Mezzo', tipo: kCampoTendina, opzioni: const [
+        OpzioneCampo(id: 'o1', nome: 'Ambulanza'),
+        OpzioneCampo(id: 'o2', nome: 'Auto medica'),
+      ]);
+      await saveCampoServizio(campo);
+      expect((await getCampiServizio()).last.id, campo.id);
+
+      final servizio = await servizioCon({campo.id: 'o2'});
+      final rinominato = campo.copyWith(opzioni: const [
+        OpzioneCampo(id: 'o1', nome: 'Ambulanza'),
+        OpzioneCampo(id: 'o2', nome: 'Automedica'),
+      ]);
+      expect(await contaValoriNonPiuValidi(rinominato), 0);
+      await saveCampoServizio(rinominato);
+      final salvato = (await getCampiServizio()).firstWhere((c) => c.id == campo.id);
+      expect(salvato.etichetta((await campiDi(servizio))[campo.id]), 'Automedica');
+    });
+
+    test('togliere un valore dall\'elenco lo toglie solo dai servizi che lo usavano', () async {
+      final campo = CampoServizio(id: newId(), nome: 'Esito', tipo: kCampoTendina, opzioni: const [
+        OpzioneCampo(id: 'a', nome: 'Trasportato'),
+        OpzioneCampo(id: 'b', nome: 'Rifiuto'),
+      ]);
+      await saveCampoServizio(campo);
+      final conA = await servizioCon({campo.id: 'a', 'eta': 30});
+      final conB = await servizioCon({campo.id: 'b'});
+
+      final senzaB = campo.copyWith(opzioni: const [OpzioneCampo(id: 'a', nome: 'Trasportato')]);
+      expect(await contaValoriNonPiuValidi(senzaB), 1);
+      await saveCampoServizio(senzaB);
+
+      expect(await campiDi(conA), {campo.id: 'a', 'eta': 30});
+      expect(await campiDi(conB), isEmpty);
+    });
+
+    test('da tendina a colori i valori restano, da testo a numero vengono tolti', () async {
+      final scelta = CampoServizio(id: newId(), nome: 'Priorità', tipo: kCampoTendina, opzioni: const [
+        OpzioneCampo(id: 'alta', nome: 'Alta'),
+      ]);
+      final testo = CampoServizio(id: newId(), nome: 'Peso', tipo: kCampoTesto);
+      await saveCampoServizio(scelta);
+      await saveCampoServizio(testo);
+      final id = await servizioCon({scelta.id: 'alta', testo.id: 'circa 80'});
+
+      final aColori = scelta.copyWith(tipo: kCampoColori, opzioni: const [
+        OpzioneCampo(id: 'alta', nome: 'Alta', colore: '#E53935'),
+      ]);
+      expect(await contaValoriNonPiuValidi(aColori), 0);
+      await saveCampoServizio(aColori);
+
+      final aNumero = testo.copyWith(tipo: kCampoNumero);
+      expect(await contaValoriNonPiuValidi(aNumero), 1);
+      await saveCampoServizio(aNumero);
+
+      expect(await campiDi(id), {scelta.id: 'alta'});
+    });
+
+    test('nascondere un campo tiene i valori, eliminarlo li toglie', () async {
+      final campo = CampoServizio(id: newId(), nome: 'Note paziente', tipo: kCampoTesto);
+      await saveCampoServizio(campo);
+      final id = await servizioCon({campo.id: 'allergico', 'eta': 70});
+
+      await setCampoServizioVisibile(campo.id, false);
+      expect((await getCampiServizio()).firstWhere((c) => c.id == campo.id).visibile, isFalse);
+      expect((await campiDi(id))[campo.id], 'allergico');
+
+      expect(await contaServiziConCampo(campo.id), 1);
+      await deleteCampoServizio(campo.id);
+      expect((await getCampiServizio()).any((c) => c.id == campo.id), isFalse);
+      expect(await campiDi(id), {'eta': 70});
+      expect(await contaServiziConCampo(campo.id), 0);
+    });
+
+    test('spostaCampoServizio scambia due campi vicini', () async {
+      final prima = await getCampiServizio();
+      await spostaCampoServizio(0, 1);
+      final dopo = await getCampiServizio();
+      expect(dopo[0].id, prima[1].id);
+      expect(dopo[1].id, prima[0].id);
+      expect(dopo.skip(2).map((c) => c.id), prima.skip(2).map((c) => c.id));
+      await spostaCampoServizio(0, 1); // rimette com'era per gli altri test
     });
   });
 

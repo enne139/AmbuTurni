@@ -76,7 +76,7 @@ void main() {
     await cartella.delete(recursive: true);
   });
 
-  test('v13 → v14: la descrizione di turni e assistenze diventa l\'orario', () async {
+  test('v13 → ultima: la descrizione diventa l\'orario (v14), arrivano i campi dei servizi (v15)', () async {
     final vecchio = await openDatabase(percorso, version: 13, onCreate: (db, _) async {
       for (final sql in _schemaV13) {
         await db.execute(sql);
@@ -128,6 +128,12 @@ void main() {
       expect(servizio['turno_id'], 't1');
       expect(servizio['descrizione'], 'descrizione del servizio');
 
+      // v15: campi personalizzati iniziali e servizi esistenti senza valori.
+      expect(await _colonne(db, 'servizi'), contains('campi'));
+      expect(servizio['campi'], '{}');
+      final campi = await db.query('campi_servizio', orderBy: 'ordine');
+      expect(campi.map((c) => c['nome']), ['Sesso', 'Età', 'Colore invio']);
+
       // Gli indici eliminati col DROP sono stati ricreati.
       final indici = (await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'index'"))
           .map((r) => r['name'])
@@ -138,11 +144,13 @@ void main() {
     }
   });
 
-  test('un DB nuovo ha già orario e non descrizione in turni e assistenze', () async {
+  test('un DB nuovo ha già orario, la colonna campi e i campi iniziali', () async {
     final db = await openTestDbAt(percorso);
     try {
       expect(await _colonne(db, 'turni'), allOf(contains('orario'), isNot(contains('descrizione'))));
       expect(await _colonne(db, 'assistenze'), allOf(contains('orario'), isNot(contains('descrizione'))));
+      expect(await _colonne(db, 'servizi'), contains('campi'));
+      expect(await db.query('campi_servizio'), hasLength(3));
     } finally {
       await db.close();
     }

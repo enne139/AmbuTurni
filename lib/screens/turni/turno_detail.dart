@@ -6,6 +6,7 @@ import '../../providers/app_provider.dart';
 import '../../utils/format.dart';
 import '../../utils/theme.dart';
 import '../../widgets/codice_chip.dart';
+import '../../widgets/campi_servizio.dart';
 import '../../widgets/nota_markdown.dart';
 import '../shared/note_editor_screen.dart';
 import 'turno_form.dart';
@@ -478,10 +479,13 @@ class _ServizioCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(osp.label, style: TextStyle(color: coloreTesto(context, 0.7), fontSize: 12)),
                   ],
+                  // Stesso ordine del form: descrizione subito dopo
+                  // l'ospedale, poi i campi personalizzati.
                   if (s.descrizione != null && s.descrizione!.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     NotaMarkdown(data: s.descrizione!, fontSize: 12, color: coloreTesto(context, 0.54)),
                   ],
+                  ValoriCampiServizio(campi: anag.campiServizioVisibili, valori: s.campi),
                 ],
               ),
             ),

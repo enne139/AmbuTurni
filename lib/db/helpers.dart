@@ -644,6 +644,129 @@ Future<void> spostaServizio(
 }
 
 // ---------------------------------------------------------------------------
+// CAMPI PERSONALIZZATI DEI SERVIZI (v15)
+// ---------------------------------------------------------------------------
+//
+// Le definizioni stanno in `campi_servizio`, i valori nella colonna JSON
+// `servizi.campi` (id campo -> valore). Per contare o pulire i valori si
+// leggono i servizi che ne hanno almeno uno e si decodificano in Dart, come
+// per le tipologie dei turni in contaOccorrenzeTipologie: più semplice di
+// una query sul JSON, e la tabella non è mai così grande da pesare.
+
+/// Restituisce i campi personalizzati nell'ordine scelto dall'utente.
+Future<List<CampoServizio>> getCampiServizio() async {
+  final db = await getDb();
+  final rows = await db.query('campi_servizio', orderBy: 'ordine ASC, nome ASC');
+  return rows.map(CampoServizio.fromMap).toList();
+}
+
+/// Crea o modifica un campo. Un campo nuovo va in fondo all'ordine. In
+/// modifica, i valori dei servizi che con la nuova definizione non valgono
+/// più (tipo cambiato, valore tolto dall'elenco) vengono tolti nella stessa
+/// transazione: il form chiede conferma prima, con contaValoriNonPiuValidi.
+Future<void> saveCampoServizio(CampoServizio campo) async {
+  final db = await getDb();
+  final now = _now();
+  await db.transaction((txn) async {
+    final esiste = await txn.query('campi_servizio',
+        columns: ['id'], where: 'id = ?', whereArgs: [campo.id], limit: 1);
+    final map = campo.toMap()..['updated_at'] = now;
+    if (esiste.isEmpty) {
+      final n = (await txn.rawQuery('SELECT COUNT(*) AS n FROM campi_servizio')).first['n'] as int;
+      map
+        ..['ordine'] = n
+        ..['created_at'] = now;
+      await txn.insert('campi_servizio', map);
+    } else {
+      // 'ordine' e 'created_at' restano quelli salvati: il form non li cambia.
+      map
+        ..remove('id')
+        ..remove('ordine')
+        ..remove('created_at');
+      await txn.update('campi_servizio', map, where: 'id = ?', whereArgs: [campo.id]);
+      await _togliValori(txn, campo.id, (v) => !campo.valoreValido(v));
+    }
+  });
+}
+
+/// Mostra o nasconde un campo senza toccare i valori salvati nei servizi.
+Future<void> setCampoServizioVisibile(String id, bool visibile) async {
+  final db = await getDb();
+  await db.update('campi_servizio', {'visibile': visibile ? 1 : 0, 'updated_at': _now()},
+      where: 'id = ?', whereArgs: [id]);
+}
+
+/// Elimina un campo e toglie il suo valore da tutti i servizi, così non
+/// restano dati che nessuna schermata può più mostrare.
+Future<void> deleteCampoServizio(String id) async {
+  final db = await getDb();
+  await db.transaction((txn) async {
+    await txn.delete('campi_servizio', where: 'id = ?', whereArgs: [id]);
+    await _togliValori(txn, id, (_) => true);
+  });
+}
+
+/// Scambia l'ordine di due campi adiacenti, stesso pattern di spostaTipologia.
+Future<void> spostaCampoServizio(int fromIndex, int toIndex) async {
+  final db = await getDb();
+  final list = await getCampiServizio();
+  if (fromIndex < 0 || fromIndex >= list.length) return;
+  if (toIndex < 0 || toIndex >= list.length) return;
+  final batch = db.batch();
+  // Riassegna a tutti l'indice attuale prima dello scambio: dopo un import o
+  // una cancellazione gli `ordine` possono avere buchi o doppioni, e
+  // scambiare solo i due valori non sposterebbe niente.
+  for (var i = 0; i < list.length; i++) {
+    final ordine = i == fromIndex ? toIndex : (i == toIndex ? fromIndex : i);
+    batch.update('campi_servizio', {'ordine': ordine}, where: 'id = ?', whereArgs: [list[i].id]);
+  }
+  await batch.commit(noResult: true);
+}
+
+/// Quanti servizi hanno un valore nel campo [campoId] (per la conferma
+/// prima di eliminarlo).
+Future<int> contaServiziConCampo(String campoId) async {
+  final db = await getDb();
+  final servizi = await _serviziConValore(db, campoId);
+  return servizi.length;
+}
+
+/// Quanti servizi perderebbero il loro valore salvando [campo] così com'è
+/// (per la conferma prima di salvare una modifica).
+Future<int> contaValoriNonPiuValidi(CampoServizio campo) async {
+  final db = await getDb();
+  final servizi = await _serviziConValore(db, campo.id);
+  return servizi.where((s) => !campo.valoreValido(s.campi[campo.id])).length;
+}
+
+/// Servizi che hanno una chiave [campoId] in `campi`, con la mappa decodificata.
+Future<List<({String id, Map<String, dynamic> campi})>> _serviziConValore(
+    DatabaseExecutor db, String campoId) async {
+  final rows = await db.query('servizi',
+      columns: ['id', 'campi'], where: "campi IS NOT NULL AND campi != '{}'");
+  final risultato = <({String id, Map<String, dynamic> campi})>[];
+  for (final r in rows) {
+    final campi = decodificaCampi(r['campi']);
+    if (campi.containsKey(campoId)) risultato.add((id: r['id'] as String, campi: campi));
+  }
+  return risultato;
+}
+
+/// Toglie dai servizi il valore del campo [campoId] quando [daTogliere] dice
+/// di sì. Aggiorna anche `updated_at` dei servizi toccati, perché il loro
+/// contenuto cambia.
+Future<void> _togliValori(
+    DatabaseExecutor db, String campoId, bool Function(dynamic valore) daTogliere) async {
+  final now = _now();
+  for (final s in await _serviziConValore(db, campoId)) {
+    if (!daTogliere(s.campi[campoId])) continue;
+    s.campi.remove(campoId);
+    await db.update('servizi', {'campi': jsonEncode(s.campi), 'updated_at': now},
+        where: 'id = ?', whereArgs: [s.id]);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ASSISTENZE
 // ---------------------------------------------------------------------------
 

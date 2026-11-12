@@ -5,6 +5,7 @@ import '../../db/models.dart';
 import '../../providers/app_provider.dart';
 import '../../utils/theme.dart';
 import '../../widgets/anag_pickers.dart';
+import '../../widgets/campi_servizio.dart';
 
 /// Form per aggiungere o modificare un servizio di un turno.
 class ServizioForm extends StatefulWidget {
@@ -22,6 +23,12 @@ class _ServizioFormState extends State<ServizioForm> {
   String? _codiceUscita;
   String? _ospedaleId;
   late TextEditingController _descCtrl;
+  // Valori dei campi personalizzati, partendo da quelli salvati: comprende
+  // anche i campi nascosti, che il form non mostra ma non deve cancellare.
+  Map<String, dynamic> _campi = {};
+  // Controller dei campi di testo e numero, creati alla prima costruzione
+  // del campo (l'elenco dei campi arriva dal provider, non da qui).
+  final Map<String, TextEditingController> _ctrlCampi = {};
   bool _loading = true;
   bool _saving = false;
   String? _existingId;
@@ -49,6 +56,7 @@ class _ServizioFormState extends State<ServizioForm> {
             _codiceUscita = s.codiceUscita;
             _ospedaleId = s.ospedaleId;
             _descCtrl.text = s.descrizione ?? '';
+            _campi = Map<String, dynamic>.from(s.campi);
           });
         }
       }
@@ -58,7 +66,36 @@ class _ServizioFormState extends State<ServizioForm> {
     }
   }
 
+  /// Valori da salvare: quelli salvati prima (campi nascosti compresi), con
+  /// sopra quelli dei campi visibili come sono adesso nel form. Restituisce
+  /// null, dopo aver avvisato, se un campo numero contiene un testo che non
+  /// è un numero.
+  Map<String, dynamic>? _valoriCampi() {
+    final valori = Map<String, dynamic>.from(_campi);
+    for (final campo in context.read<AnagraficheProvider>().campiServizioVisibili) {
+      if (campo.tipo != kCampoTesto && campo.tipo != kCampoNumero) continue;
+      final testo = _ctrlCampi[campo.id]?.text.trim() ?? '';
+      if (testo.isEmpty) {
+        valori.remove(campo.id);
+      } else if (campo.tipo == kCampoTesto) {
+        valori[campo.id] = testo;
+      } else {
+        final n = parseNumeroCampo(testo);
+        if (n == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('«${campo.nome}» deve essere un numero')),
+          );
+          return null;
+        }
+        valori[campo.id] = n;
+      }
+    }
+    return valori;
+  }
+
   Future<void> _salva() async {
+    final campi = _valoriCampi();
+    if (campi == null) return;
     setState(() => _saving = true);
     final s = Servizio(
       id: _existingId ?? newId(),
@@ -68,6 +105,7 @@ class _ServizioFormState extends State<ServizioForm> {
       ospedaleId: _ospedaleId,
       descrizione: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       ordine: widget.ordine,
+      campi: campi,
     );
     try {
       await saveServizio(s);
@@ -85,7 +123,82 @@ class _ServizioFormState extends State<ServizioForm> {
   @override
   void dispose() {
     _descCtrl.dispose();
+    for (final c in _ctrlCampi.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  /// Controller di un campo testo o numero, creato col valore salvato.
+  TextEditingController _ctrlCampo(CampoServizio campo) =>
+      _ctrlCampi.putIfAbsent(campo.id, () {
+        final v = _campi[campo.id];
+        final testo = v is num ? formatNumeroCampo(v) : (v is String ? v : '');
+        return TextEditingController(text: testo);
+      });
+
+  /// Imposta (o toglie, con null) il valore scelto in un campo a tendina o
+  /// a colori.
+  void _scegli(CampoServizio campo, String? opzioneId) => setState(() {
+        if (opzioneId == null) {
+          _campi.remove(campo.id);
+        } else {
+          _campi[campo.id] = opzioneId;
+        }
+      });
+
+  /// Il controllo giusto per il tipo di un campo personalizzato.
+  Widget _inputCampo(CampoServizio campo) {
+    // Un valore che non vale più (opzione tolta) va trattato come vuoto,
+    // altrimenti la tendina riceverebbe un valore che non ha tra le voci.
+    final valore = _campi[campo.id];
+    final scelto = campo.haOpzioni && campo.valoreValido(valore) ? valore as String : null;
+    switch (campo.tipo) {
+      case kCampoTendina:
+        return DropdownButtonFormField<String?>(
+          initialValue: scelto,
+          dropdownColor: Theme.of(context).colorScheme.surface,
+          decoration: const InputDecoration(),
+          hint: const Text('—'),
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('—')),
+            ...campo.opzioni.map((o) => DropdownMenuItem<String?>(value: o.id, child: Text(o.nome))),
+          ],
+          onChanged: (v) => _scegli(campo, v),
+        );
+      case kCampoColori:
+        // Chip colorati come i codici chiamata/uscita; toccare quello già
+        // scelto lo toglie.
+        return Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: campo.opzioni.map((o) {
+            final sel = scelto == o.id;
+            final colore = colorFromHex(o.colore) ?? coloreTesto(context, 0.4);
+            return ChoiceChip(
+              avatar: PallinoColore(colore: o.colore),
+              label: Text(o.nome),
+              selected: sel,
+              showCheckmark: false,
+              selectedColor: colore.withValues(alpha: 0.3),
+              side: sel ? BorderSide(color: colore, width: 1.5) : null,
+              onSelected: (v) => _scegli(campo, v ? o.id : null),
+            );
+          }).toList(),
+        );
+      case kCampoNumero:
+        return TextField(
+          controller: _ctrlCampo(campo),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(hintText: 'Numero'),
+        );
+      default:
+        return TextField(
+          controller: _ctrlCampo(campo),
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(),
+        );
+    }
   }
 
   @override
@@ -106,86 +219,80 @@ class _ServizioFormState extends State<ServizioForm> {
             IconButton(icon: const Icon(Icons.check), onPressed: _salva),
         ],
       ),
-      // CustomScrollView + SliverFillRemaining invece di una Column con
-      // Expanded diretto: quando la tastiera riduce l'altezza disponibile
-      // (o su schermi piccoli), i campi fissi sopra la descrizione non ci
-      // starebbero più nello spazio rimasto e Flutter andrebbe in overflow
-      // (il tipico rettangolo giallo/nero). Con lo sliver, se il contenuto
-      // fisso non lascia spazio, l'intera schermata diventa scrollabile
-      // invece di rompersi; quando lo spazio c'è, il campo lo riempie tutto
-      // come richiesto.
-      body: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Codice chiamata
-                  const Text('Codice chiamata', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: codiciChiamata.map((c) => ChoiceChip(
-                      label: Text(c),
-                      selected: _codiceChiamata == c,
-                      selectedColor: getCodiceColor(c).withValues(alpha: 0.3),
-                      labelStyle: TextStyle(color: _codiceChiamata == c ? getCodiceColor(c) : coloreTesto(context, 0.6)),
-                      onSelected: (sel) => setState(() => _codiceChiamata = sel ? c : null),
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 20),
+      // Ordine richiesto dall'utente: codici, ospedale, descrizione e solo
+      // dopo i campi personalizzati, così la descrizione resta in alto anche
+      // quando i campi sono tanti. Prima la descrizione era in fondo e
+      // riempiva lo spazio libero (CustomScrollView + SliverFillRemaining):
+      // in mezzo agli altri campi ha invece un'altezza che cresce col testo
+      // (da 4 a 10 righe, poi scorre dentro il campo), e la pagina intera
+      // scorre in una ListView, quindi la tastiera non manda in overflow.
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Codice chiamata
+          const Text('Codice chiamata', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: codiciChiamata.map((c) => ChoiceChip(
+              label: Text(c),
+              selected: _codiceChiamata == c,
+              selectedColor: getCodiceColor(c).withValues(alpha: 0.3),
+              labelStyle: TextStyle(color: _codiceChiamata == c ? getCodiceColor(c) : coloreTesto(context, 0.6)),
+              onSelected: (sel) => setState(() => _codiceChiamata = sel ? c : null),
+            )).toList(),
+          ),
+          const SizedBox(height: 20),
 
-                  // Codice uscita
-                  const Text('Codice uscita', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: codiciUscita.map((c) => ChoiceChip(
-                      label: Text(c),
-                      selected: _codiceUscita == c,
-                      selectedColor: getCodiceColor(c).withValues(alpha: 0.3),
-                      labelStyle: TextStyle(color: _codiceUscita == c ? getCodiceColor(c) : coloreTesto(context, 0.6)),
-                      onSelected: (sel) => setState(() => _codiceUscita = sel ? c : null),
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 20),
+          // Codice uscita
+          const Text('Codice uscita', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: codiciUscita.map((c) => ChoiceChip(
+              label: Text(c),
+              selected: _codiceUscita == c,
+              selectedColor: getCodiceColor(c).withValues(alpha: 0.3),
+              labelStyle: TextStyle(color: _codiceUscita == c ? getCodiceColor(c) : coloreTesto(context, 0.6)),
+              onSelected: (sel) => setState(() => _codiceUscita = sel ? c : null),
+            )).toList(),
+          ),
+          const SizedBox(height: 20),
 
-                  // Ospedale
-                  const Text('Ospedale', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  OspedalePicker(
-                    ospedali: anag.ospedali,
-                    selectedId: _ospedaleId,
-                    onChanged: (v) => setState(() => _ospedaleId = v),
-                  ),
-                  const SizedBox(height: 20),
+          // Ospedale
+          const Text('Ospedale', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          OspedalePicker(
+            ospedali: anag.ospedali,
+            selectedId: _ospedaleId,
+            onChanged: (v) => setState(() => _ospedaleId = v),
+          ),
+          const SizedBox(height: 20),
 
-                  // Descrizione: accetta markdown.
-                  const Text('Descrizione', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                ],
-              ),
+          // Descrizione: accetta markdown.
+          const Text('Descrizione', style: TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _descCtrl,
+            minLines: 4,
+            maxLines: 10,
+            keyboardType: TextInputType.multiline,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: const InputDecoration(
+              hintText: 'Descrizione del servizio in markdown (opzionale)',
+              alignLabelWithHint: true,
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverFillRemaining(
-              hasScrollBody: false,
-              child: TextFormField(
-                controller: _descCtrl,
-                expands: true,
-                maxLines: null,
-                minLines: null,
-                textAlignVertical: TextAlignVertical.top,
-                decoration: const InputDecoration(
-                  hintText: 'Descrizione del servizio in markdown (opzionale)',
-                  alignLabelWithHint: true,
-                ),
-              ),
-            ),
-          ),
+          const SizedBox(height: 20),
+
+          // Campi personalizzati visibili, nell'ordine delle
+          // Impostazioni → Campi dei servizi.
+          for (final campo in anag.campiServizioVisibili) ...[
+            Text(campo.nome, style: const TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            _inputCampo(campo),
+            const SizedBox(height: 20),
+          ],
         ],
       ),
     );

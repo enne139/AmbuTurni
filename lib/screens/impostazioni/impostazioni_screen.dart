@@ -10,6 +10,7 @@ import '../../utils/theme.dart';
 import '../../utils/tools_config.dart';
 import '../../widgets/accesso_richiesto.dart';
 import '../shared/cambia_password_screen.dart';
+import 'campi_servizio_screen.dart';
 
 /// Schermata Impostazioni: backup/ripristino, navigazione, tool attivi e
 /// backend condiviso. Le anagrafiche (Associazioni/Persone/Ospedali/
@@ -31,6 +32,8 @@ class ImpostazioniScreen extends StatelessWidget {
           _SezioneNavigazione(),
           Divider(height: 24),
           _SezioneAspetto(),
+          Divider(height: 24),
+          _SezioneCampiServizi(),
           Divider(height: 24),
           _SezioneToolsAttivi(),
           Divider(height: 24),
@@ -424,6 +427,56 @@ class _SezioneAspettoState extends State<_SezioneAspetto> {
 /// (ToolsProvider). Collassata di default come le sezioni anagrafiche: non è
 /// qualcosa che si tocca spesso, non deve occupare spazio in cima alla
 /// schermata a ogni apertura.
+// ---------------------------------------------------------------------------
+// Campi dei servizi
+// ---------------------------------------------------------------------------
+
+/// Voce che apre la gestione dei campi personalizzati dei servizi. Non si
+/// espande qui come le altre sezioni: ogni campo ha nome, tipo, valori e
+/// colori, troppo per stare dentro questa lista, quindi ha una pagina sua.
+/// Il contatore dice quanti campi sono mostrati su quanti esistono.
+class _SezioneCampiServizi extends StatelessWidget {
+  const _SezioneCampiServizi();
+
+  @override
+  Widget build(BuildContext context) {
+    final campi = context.watch<AnagraficheProvider>().campiServizio;
+    final visibili = campi.where((c) => c.visibile).length;
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CampiServizioScreen()),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          children: [
+            const Icon(Icons.tune, size: 18, color: kPrimary),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Campi dei servizi',
+                  style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: kPrimary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$visibili/${campi.length}',
+                style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, color: coloreTesto(context, 0.38), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SezioneToolsAttivi extends StatefulWidget {
   const _SezioneToolsAttivi();
 

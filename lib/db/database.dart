@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS servizi (
   ordine INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  is_synced INTEGER DEFAULT 0
+  is_synced INTEGER DEFAULT 0,
+  campi TEXT DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS assistenze (
@@ -147,11 +148,22 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
   mezzo TEXT
 );
 
+CREATE TABLE IF NOT EXISTS campi_servizio (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO')),
+  opzioni TEXT DEFAULT '[]',
+  visibile INTEGER NOT NULL DEFAULT 1,
+  ordine INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 ''';
 
 /// Versione corrente dello schema: ogni cambiamento allo schema la fa salire
 /// di uno, con la sua migrazione in _onUpgrade (regola 7 del CLAUDE.md).
-const int kVersioneDb = 14;
+const int kVersioneDb = 15;
 
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
@@ -545,6 +557,77 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
       )
     ''', 'CREATE INDEX IF NOT EXISTS idx_assistenze_assoc ON assistenze(associazione_id)');
   }
+  if (oldVersion < 15) {
+    // Campi personalizzati dei servizi: la tabella delle definizioni (nome,
+    // tipo, valori possibili, mostrato o nascosto) e, nei servizi, una
+    // colonna JSON id campo -> valore, come `tipologie` nei turni. I servizi
+    // esistenti partono senza valori ('{}'). Niente is_synced: è un resto
+    // della vecchia sincronizzazione, le tabelle nuove non lo hanno.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS campi_servizio (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO')),
+        opzioni TEXT DEFAULT '[]',
+        visibile INTEGER NOT NULL DEFAULT 1,
+        ordine INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      )
+    ''');
+    try { await db.execute("ALTER TABLE servizi ADD COLUMN campi TEXT DEFAULT '{}'"); } catch (_) {}
+    await _inserisciCampiServizioIniziali(db);
+  }
+}
+
+/// Campi personalizzati con cui parte ogni installazione (indicati
+/// dall'utente). Si modificano, nascondono e cancellano come gli altri. Id
+/// fissi e leggibili al posto degli UUID: sono uguali su ogni dispositivo.
+/// I colori di "Colore invio" sono quelli della palette dell'app, così si
+/// ritrovano uguali nel selettore quando si modifica il campo.
+const _campiServizioIniziali = [
+  {
+    'id': 'sesso',
+    'nome': 'Sesso',
+    'tipo': 'TENDINA',
+    'opzioni': [
+      {'id': 'm', 'nome': 'M'},
+      {'id': 'f', 'nome': 'F'},
+      {'id': 'a', 'nome': 'A'},
+    ],
+  },
+  {'id': 'eta', 'nome': 'Età', 'tipo': 'NUMERO', 'opzioni': []},
+  {
+    'id': 'colore_invio',
+    'nome': 'Colore invio',
+    'tipo': 'COLORI',
+    'opzioni': [
+      {'id': 'verde', 'nome': 'Verde', 'colore': '#43A047'},
+      {'id': 'giallo', 'nome': 'Giallo', 'colore': '#FDD835'},
+      {'id': 'rosso', 'nome': 'Rosso', 'colore': '#E53935'},
+    ],
+  },
+];
+
+/// Inserisce i campi iniziali solo se la tabella è vuota: se l'utente li ha
+/// già cancellati o cambiati non vanno ricreati.
+Future<void> _inserisciCampiServizioIniziali(Database db) async {
+  final n = (await db.rawQuery('SELECT COUNT(*) AS n FROM campi_servizio')).first['n'] as int;
+  if (n > 0) return;
+  final adesso = DateTime.now().toUtc().toIso8601String();
+  for (var i = 0; i < _campiServizioIniziali.length; i++) {
+    final campo = _campiServizioIniziali[i];
+    await db.insert('campi_servizio', {
+      'id': campo['id'],
+      'nome': campo['nome'],
+      'tipo': campo['tipo'],
+      'opzioni': jsonEncode(campo['opzioni']),
+      'visibile': 1,
+      'ordine': i,
+      'created_at': adesso,
+      'updated_at': adesso,
+    });
+  }
 }
 
 /// Ricostruisce [tabella] con [creaTabella] (stesso schema, ma `orario` al
@@ -605,6 +688,7 @@ Future<void> _onCreate(Database db, int version) async {
       await db.execute(s);
     }
   }
+  await _inserisciCampiServizioIniziali(db);
 }
 
 /// Apre il DB: solo i PRAGMA di connessione. Le modifiche allo schema vivono

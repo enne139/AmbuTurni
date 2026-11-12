@@ -15,6 +15,10 @@ class AnagraficheProvider extends ChangeNotifier {
   List<Persona> persone = [];
   List<Ospedale> ospedali = [];
   List<TipologiaTurno> tipologieTurno = [];
+  // Campi personalizzati dei servizi (Impostazioni → Campi dei servizi):
+  // stanno qui perché, come le tipologie, servono a più schermate (form e
+  // dettaglio del servizio) e vanno ricaricati dopo un import.
+  List<CampoServizio> campiServizio = [];
   bool _caricato = false;
 
   // Quante volte ogni voce compare in turni/assistenze/servizi (id -> conteggio),
@@ -36,6 +40,7 @@ class AnagraficheProvider extends ChangeNotifier {
     try { persone = await getPersone(); } catch (e) { debugPrint('[anagrafiche] persone non caricate: $e'); }
     try { ospedali = await getOspedali(); } catch (e) { debugPrint('[anagrafiche] ospedali non caricati: $e'); }
     try { tipologieTurno = await getTipologieTurno(); } catch (e) { debugPrint('[anagrafiche] tipologie non caricate: $e'); }
+    try { campiServizio = await getCampiServizio(); } catch (e) { debugPrint('[anagrafiche] campi dei servizi non caricati: $e'); }
     await _caricaConteggi();
     _caricato = true;
     notifyListeners();
@@ -60,6 +65,17 @@ class AnagraficheProvider extends ChangeNotifier {
   }
 
   bool get caricato => _caricato;
+
+  /// Solo i campi da mostrare nel form e nel dettaglio dei servizi.
+  List<CampoServizio> get campiServizioVisibili =>
+      campiServizio.where((c) => c.visibile).toList();
+
+  /// Ricarica i campi personalizzati dopo una modifica dalle Impostazioni,
+  /// senza rileggere tutte le anagrafiche.
+  Future<void> ricaricaCampiServizio() async {
+    try { campiServizio = await getCampiServizio(); } catch (e) { debugPrint('[anagrafiche] campi dei servizi non caricati: $e'); }
+    notifyListeners();
+  }
 
   // I metodi byId* usano try/catch invece di firstWhereOrNull perché quest'ultimo
   // richiede il package collection; evitare dipendenze extra mantiene il pubspec pulito.

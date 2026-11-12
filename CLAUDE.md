@@ -146,6 +146,8 @@ lib/
 │                                   Navigazione (NavigazioneProvider)
 ├── widgets/
 │   ├── codice_chip.dart           chip colorato per codici chiamata/uscita
+│   ├── campi_servizio.dart        ValoriCampiServizio (valori dei campi personalizzati nella
+│   │                               card del servizio) + PallinoColore (colore di un valore)
 │   ├── anag_pickers.dart          PersonaPicker, OspedalePicker, MaterialePicker (RawAutocomplete + Aggiungi...)
 │   ├── calendario_mensile.dart    CalendarioMensile<T>: vista calendario generica (turni e assistenze)
 │   ├── turno_card.dart            TurnoCard: card condivisa tra turni_list e le viste filtrate
@@ -172,7 +174,8 @@ lib/
     │   │                            v. Decisioni tecniche)
     │   ├── turno_form.dart         form crea/modifica turno (assoc., data, ore, tipol., eq.)
     │   ├── turno_detail.dart       dettaglio + lista servizi con riordino frecce
-    │   └── servizio_form.dart      form crea/modifica servizio (codici, ospedale, desc.)
+    │   └── servizio_form.dart      form crea/modifica servizio (codici, ospedale,
+    │                                descrizione, campi personalizzati visibili)
     ├── assistenze/
     │   ├── assistenze_list.dart
     │   ├── assistenza_form.dart
@@ -214,11 +217,15 @@ lib/
     │                                   Tap su un comunicato → apriFileBinarioPiattaforma
     │                                   (db/backup_file.dart) lo apre con un lettore PDF.
     └── impostazioni/
+        ├── campi_servizio_screen.dart Impostazioni → Campi dei servizi: elenco (mostra/
+        │                             nascondi, riordino, elimina con conferma) + CampoServizioForm
+        │                             (nome, tipo, valori con colore)
         └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
                                       fogli turni) + Navigazione (pagina principale, disattiva
                                       Attività+Statistiche, Piano turni in navbar) + Aspetto
-                                      (tema sistema/chiaro/scuro) + Account (login/cambio
+                                      (tema sistema/chiaro/scuro) + Campi dei servizi (apre
+                                      campi_servizio_screen.dart) + Account (login/cambio
                                       password/logout utente-app). Le anagrafiche (associazioni/
                                       persone/ospedali/tipologie) sono in screens/anagrafiche/
 
@@ -281,7 +288,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: `kVersioneDb` = 14); `_onOpen` esegue soltanto i PRAGMA
+(versione corrente: `kVersioneDb` = 15); `_onOpen` esegue soltanto i PRAGMA
 di connessione (WAL + foreign_keys). Le migrazioni si testano in
 `test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
 schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
@@ -296,6 +303,12 @@ mezzo, non una FK — i mezzi vivono sul backend condiviso).
 `turni` e `assistenze` hanno `orario` (v14, testo corto tipo "12:00 - 18:00")
 al posto della vecchia `descrizione`; i `servizi` tengono la loro
 `descrizione`. Vedi "Orario al posto della descrizione" in Decisioni tecniche.
+
+`campi_servizio` (v15) contiene le definizioni dei campi personalizzati dei
+servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO`, valori possibili in
+JSON, `visibile`, `ordine`); i valori di ogni servizio stanno in
+`servizi.campi` (JSON id campo -> valore). Vedi "Campi personalizzati dei
+servizi" in Decisioni tecniche.
 
 ### Desktop (Windows/Linux/macOS)
 
@@ -681,10 +694,12 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   riportare `note` a `null` quando il campo si svuota.
 - **Descrizione dei servizi in markdown**: stessa estensione a `Servizio.descrizione`
   (`NotaMarkdown` con `fontSize`/`color` opzionali per lo stile compatto già
-  in `_ServizioCard`). Il campo nel form riempie lo spazio libero sotto gli
-  altri campi con `CustomScrollView` + `SliverFillRemaining` (non `Column` +
-  `Expanded`, che andava in overflow quando la tastiera riduce lo spazio e i
-  campi sopra non ci stanno più — con lo sliver l'intera schermata scrolla invece).
+  in `_ServizioCard`). Fino alla v1.18 il campo nel form stava in fondo e
+  riempiva lo spazio libero (`CustomScrollView` + `SliverFillRemaining`);
+  con i campi personalizzati (2026-11-12) l'utente l'ha voluta subito dopo
+  l'ospedale, sopra i campi, sia nel form sia nella card: ora è un campo da
+  4 a 10 righe in una `ListView` (la pagina scorre, la tastiera non manda
+  in overflow).
 - **`byId*` con try/catch**: evita `firstWhereOrNull` (richiederebbe il package `collection`).
 - **Combobox `RawAutocomplete`** (`PersonaPicker`/`OspedalePicker`): controller/focus
   esterni, voce "Aggiungi..." per creazione inline; l'update dopo creazione
@@ -2726,6 +2741,81 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     `test/db/migrazioni_test.dart`: v13 → v14 con turno, servizio figlio e
     assistenza, colonne, valori, indici; DB nuovo già con `orario`).
     **Da verificare su Android reale** (regola 8): migrazione v14.
+- **Campi personalizzati dei servizi (2026-11-12, DB v15)**: richiesta
+  esplicita. Ogni servizio ha dei campi in più, definiti dall'utente in
+  Impostazioni → Campi dei servizi, con nome e tipo: **tendina** (un valore
+  da un menu), **colori** (un valore da un elenco, ognuno col suo colore,
+  scelto con chip come i codici), **testo**, **numero**. Valgono per i
+  servizi dei turni (un servizio = un paziente), non per turni e
+  assistenze. Campi iniziali indicati dall'utente: Sesso (tendina M, F, A),
+  Età (numero), Colore invio (colori verde, giallo, rosso — **non** è il
+  codice chiamata, che resta com'è).
+  - **Dati**: definizioni in `campi_servizio`, valori in `servizi.campi`
+    (JSON id campo -> valore, come `tipologie` nei turni: niente tabella di
+    collegamento, i valori viaggiano col servizio nel backup e si leggono
+    con lui). Per tendina e colori si salva l'**id** dell'opzione
+    (`OpzioneCampo`), non il nome: rinominare un valore non tocca i
+    servizi, e passare da tendina a colori (stessi id) li conserva. Numeri
+    come `num` (`parseNumeroCampo` accetta virgola e punto,
+    `formatNumeroCampo` scrive "45" o "37,5"). `CampoServizio.valoreValido`
+    dice se un valore vale ancora per la definizione attuale ed è la base di
+    tutto il resto: i valori non validi non si mostrano e vengono tolti
+    quando la definizione cambia.
+  - **Campi iniziali**: id fissi e leggibili (`sesso`, `eta`,
+    `colore_invio`, opzioni `m`/`f`/`a` e `verde`/`giallo`/`rosso`), colori
+    presi da `kColorPalette` così si ritrovano nel selettore. Inseriti da
+    `_inserisciCampiServizioIniziali` sia in `_onCreate` sia nella
+    migrazione v15, solo se la tabella è vuota. Si modificano, nascondono
+    e cancellano come gli altri (scelta dell'utente).
+  - **Mostrato/nascosto** (richiesta dell'utente): un campo nascosto non
+    compare nel form e nel dettaglio del servizio, ma i valori restano. Il
+    form parte dalla mappa salvata (campi nascosti compresi) e ci scrive
+    sopra solo i campi visibili, quindi salvare un servizio non cancella i
+    valori nascosti.
+  - **Conferme** (decisione dell'utente): eliminare un campo dice quanti
+    servizi hanno un valore (`contaServiziConCampo`) e lo toglie da tutti
+    (`deleteCampoServizio`); salvare una modifica che rende non validi dei
+    valori (valore tolto dall'elenco, tipo cambiato tra testo/numero/scelta)
+    dice quanti servizi lo perdono (`contaValoriNonPiuValidi`) e
+    `saveCampoServizio` li toglie nella stessa transazione. I conteggi
+    decodificano i JSON in Dart, come `contaOccorrenzeTipologie`.
+  - **Riordino**: frecce come per le tipologie; `spostaCampoServizio`
+    riassegna l'indice a tutti i campi prima dello scambio, così funziona
+    anche se dopo un import gli `ordine` hanno buchi o doppioni.
+  - **Schermate**: `CampiServizioScreen` (elenco con interruttore
+    mostra/nascondi, frecce, menu Modifica/Elimina, "Nuovo campo") e
+    `CampoServizioForm` (nome, tipo con `SegmentedButton`, interruttore,
+    valori con pallino colore che apre la palette); in Impostazioni la
+    voce `_SezioneCampiServizi` con il contatore mostrati/totali apre la
+    pagina invece di espandersi, perché i campi non stanno in una lista
+    collassabile. Nel form del servizio i campi visibili stanno dopo la
+    Descrizione (ordine voluto dall'utente: codici, ospedale, descrizione,
+    campi), nell'ordine scelto; nella card del servizio, sempre dopo la
+    descrizione, `ValoriCampiServizio` mostra una riga
+    "Sesso F · Età 45 · ● Giallo". Nomi
+    di campo doppi e valori doppi bloccati nel form (senza UNIQUE nel DB,
+    come i materiali). Le definizioni stanno in `AnagraficheProvider`
+    (`campiServizio`, `campiServizioVisibili`, `ricaricaCampiServizio`),
+    ricaricate anche dopo un import.
+  - **Backup**: `campi_servizio` è in `_backupTables`, ma l'import la
+    svuota **solo se il backup la contiene** (`_tenuteSeAssentiNelBackup`):
+    un backup precedente alla v15 lascerebbe altrimenti il dispositivo
+    senza nemmeno i campi iniziali. Le righe dei servizi vecchie non hanno
+    `campi` e prendono il default `'{}'`. L'export leggibile ha per ogni
+    servizio `campi`: { "nome campo": "valore leggibile" }, nascosti
+    compresi.
+  - **Verificato**: `flutter analyze` senza errori, `flutter test` (gruppi
+    `Modello CampoServizio` e `Campi personalizzati dei servizi` in
+    `helpers_test.dart`, migrazione v13 → v15 in `migrazioni_test.dart`).
+    App web in Chromium headless (puppeteer-core, 412×860): import di un
+    backup v13 con `descrizione` (nessuna riga scartata, orario nel
+    dettaglio di turno e assistenza), form del servizio con i tre campi,
+    salvataggio e riga nella card, elenco campi, form di Colore invio,
+    campo nascosto (sparisce da form e card, il valore torna quando lo si
+    rimostra, anche dopo aver salvato il servizio mentre era nascosto),
+    nuovo campo di testo, conferma togliendo un valore usato, conferma
+    di eliminazione; tema chiaro e scuro.
+    **Da verificare su Android reale** (regola 8): migrazioni v14 e v15.
 
 ---
 
@@ -2746,6 +2836,10 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   testuale (orario/note) e vista calendario come i turni.
 - ✅ **Orario** di turni e assistenze (v14, prima "Descrizione"): campo di
   una riga accanto a data e ore, es. "12:00 - 18:00".
+- ✅ **Campi personalizzati dei servizi** (v15, Impostazioni → Campi dei
+  servizi): tendina, colori, testo o numero, mostrati o nascosti,
+  riordinabili; partono Sesso (M, F, A), Età e Colore invio (verde,
+  giallo, rosso); valori nel form e nella card del servizio.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
   associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
@@ -2829,7 +2923,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 236 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 248 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

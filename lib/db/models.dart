@@ -412,6 +412,11 @@ class Servizio {
   final String? ospedaleId;
   final String? descrizione;
   final int ordine;
+  // Valori dei campi personalizzati (v15): id del campo -> valore. Per i
+  // campi a tendina e a colori il valore è l'id dell'opzione scelta, per i
+  // testi una stringa, per i numeri un num. Ci sono anche i valori dei campi
+  // nascosti: nasconderne uno non deve far perdere quello che c'era.
+  final Map<String, dynamic> campi;
   final String? createdAt;
   final String? updatedAt;
   final int isSynced;
@@ -428,6 +433,7 @@ class Servizio {
     this.ospedaleId,
     this.descrizione,
     this.ordine = 0,
+    this.campi = const {},
     this.createdAt,
     this.updatedAt,
     this.isSynced = 0,
@@ -443,6 +449,7 @@ class Servizio {
         ospedaleId: m['ospedale_id'] as String?,
         descrizione: m['descrizione'] as String?,
         ordine: (m['ordine'] as int?) ?? 0,
+        campi: decodificaCampi(m['campi']),
         createdAt: m['created_at'] as String?,
         updatedAt: m['updated_at'] as String?,
         isSynced: (m['is_synced'] as int?) ?? 0,
@@ -458,10 +465,200 @@ class Servizio {
         'ospedale_id': ospedaleId,
         'descrizione': descrizione,
         'ordine': ordine,
+        'campi': jsonEncode(campi),
         'created_at': createdAt,
         'updated_at': updatedAt,
         'is_synced': isSynced,
       };
+}
+
+/// Legge la colonna `servizi.campi` (oggetto JSON id campo -> valore).
+/// Un valore assente, vuoto o rovinato diventa una mappa vuota invece di far
+/// fallire la lettura del servizio, come per le tipologie dei turni.
+Map<String, dynamic> decodificaCampi(Object? raw) {
+  if (raw is! String || raw.isEmpty) return {};
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map) return Map<String, dynamic>.from(decoded);
+  } catch (_) {}
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// CAMPI PERSONALIZZATI DEI SERVIZI (v15)
+// ---------------------------------------------------------------------------
+
+// Tipi di campo: tendina (un valore da un menu), colori (un valore da un
+// elenco, ognuno col suo colore, scelto con chip colorati come i codici),
+// testo libero, numero.
+const String kCampoTendina = 'TENDINA';
+const String kCampoColori = 'COLORI';
+const String kCampoTesto = 'TESTO';
+const String kCampoNumero = 'NUMERO';
+const List<String> tipiCampoServizio = [kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero];
+
+/// Nome del tipo di campo da mostrare all'utente.
+String nomeTipoCampo(String tipo) => switch (tipo) {
+      kCampoTendina => 'Tendina',
+      kCampoColori => 'Colori',
+      kCampoTesto => 'Testo',
+      kCampoNumero => 'Numero',
+      _ => tipo,
+    };
+
+/// Un valore possibile di un campo a tendina o a colori. L'id è stabile e
+/// nei servizi si salva quello, non il nome: rinominare un valore dalle
+/// impostazioni non richiede di toccare i servizi.
+class OpzioneCampo {
+  final String id;
+  final String nome;
+  // "#RRGGBB", solo per i campi a colori (nei campi a tendina resta null).
+  final String? colore;
+
+  const OpzioneCampo({required this.id, required this.nome, this.colore});
+
+  factory OpzioneCampo.fromMap(Map<dynamic, dynamic> m) => OpzioneCampo(
+        id: m['id'] as String,
+        nome: m['nome'] as String,
+        colore: m['colore'] as String?,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'nome': nome,
+        if (colore != null) 'colore': colore,
+      };
+}
+
+/// Un campo personalizzato dei servizi, creato dalle Impostazioni (nome,
+/// tipo, valori possibili, mostrato o nascosto). I valori dei singoli
+/// servizi stanno in `Servizio.campi`.
+class CampoServizio {
+  final String id;
+  final String nome;
+  final String tipo;
+  // Valori possibili, solo per tendina e colori (vuota per testo e numero).
+  final List<OpzioneCampo> opzioni;
+  // Un campo nascosto non compare nel form e nel dettaglio del servizio,
+  // ma i valori già salvati restano (scelta dell'utente).
+  final bool visibile;
+  final int ordine;
+  final String? createdAt;
+  final String? updatedAt;
+
+  const CampoServizio({
+    required this.id,
+    required this.nome,
+    required this.tipo,
+    this.opzioni = const [],
+    this.visibile = true,
+    this.ordine = 0,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  /// true per i tipi che si scelgono da un elenco di valori.
+  bool get haOpzioni => tipo == kCampoTendina || tipo == kCampoColori;
+
+  OpzioneCampo? opzione(String? id) {
+    if (id == null) return null;
+    for (final o in opzioni) {
+      if (o.id == id) return o;
+    }
+    return null;
+  }
+
+  /// true se [valore] vale per il campo così com'è definito adesso. Serve a
+  /// capire quali valori salvati nei servizi vanno tolti quando si cambia il
+  /// tipo o si toglie un valore dall'elenco, e a non mostrare quelli rimasti
+  /// orfani.
+  bool valoreValido(dynamic valore) => switch (tipo) {
+        kCampoTendina || kCampoColori => valore is String && opzione(valore) != null,
+        kCampoTesto => valore is String && valore.isNotEmpty,
+        kCampoNumero => valore is num,
+        _ => false,
+      };
+
+  /// Testo da mostrare per [valore], oppure null se è vuoto o non vale più.
+  String? etichetta(dynamic valore) {
+    if (!valoreValido(valore)) return null;
+    if (haOpzioni) return opzione(valore as String)!.nome;
+    if (valore is num) return formatNumeroCampo(valore);
+    return valore as String;
+  }
+
+  factory CampoServizio.fromMap(Map<String, dynamic> m) {
+    final opzioni = <OpzioneCampo>[];
+    final raw = m['opzioni'];
+    if (raw is String && raw.isNotEmpty) {
+      // Stesso approccio di Turno.fromMap: un JSON rovinato lascia il campo
+      // senza valori invece di far fallire la lettura di tutti i campi.
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final o in decoded.whereType<Map>()) {
+            if (o['id'] is String && o['nome'] is String) opzioni.add(OpzioneCampo.fromMap(o));
+          }
+        }
+      } catch (_) {}
+    }
+    return CampoServizio(
+      id: m['id'] as String,
+      nome: m['nome'] as String,
+      tipo: m['tipo'] as String,
+      opzioni: opzioni,
+      visibile: ((m['visibile'] as int?) ?? 1) == 1,
+      ordine: (m['ordine'] as int?) ?? 0,
+      createdAt: m['created_at'] as String?,
+      updatedAt: m['updated_at'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'nome': nome,
+        'tipo': tipo,
+        'opzioni': jsonEncode(opzioni.map((o) => o.toMap()).toList()),
+        'visibile': visibile ? 1 : 0,
+        'ordine': ordine,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+      };
+
+  CampoServizio copyWith({
+    String? nome,
+    String? tipo,
+    List<OpzioneCampo>? opzioni,
+    bool? visibile,
+    int? ordine,
+  }) => CampoServizio(
+        id: id,
+        nome: nome ?? this.nome,
+        tipo: tipo ?? this.tipo,
+        opzioni: opzioni ?? this.opzioni,
+        visibile: visibile ?? this.visibile,
+        ordine: ordine ?? this.ordine,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+}
+
+/// Numero di un campo personalizzato come lo scrive un italiano: senza
+/// decimali se è intero ("45"), con la virgola altrimenti ("37,5").
+String formatNumeroCampo(num n) {
+  if (n is int) return '$n';
+  if (n == n.truncateToDouble()) return '${n.toInt()}';
+  return '$n'.replaceAll('.', ',');
+}
+
+/// Legge un numero scritto in un campo personalizzato, accettando sia la
+/// virgola sia il punto. Restituisce null se il testo non è un numero.
+num? parseNumeroCampo(String testo) {
+  final t = testo.trim().replaceAll(',', '.');
+  if (t.isEmpty) return null;
+  final n = num.tryParse(t);
+  if (n == null || n.isNaN || n.isInfinite) return null;
+  return n;
 }
 
 // ---------------------------------------------------------------------------

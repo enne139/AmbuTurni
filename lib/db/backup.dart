@@ -5,6 +5,7 @@ import '../utils/prefs_keys.dart';
 import 'backup_file.dart';
 import 'database.dart';
 import 'helpers.dart' show ricalcolaTutteLeNumerazioni, ricalcolaTuttiINumServizi, upsertOspedali;
+import 'models.dart' show CampoServizio, decodificaCampi;
 
 // Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni, poi
 // estesa ad altre preferenze senza bump: ogni chiave è opzionale, un backup
@@ -28,7 +29,14 @@ const _deleteOrder = [
   'persone',
   'materiali',
   'associazioni',
+  'campi_servizio',
 ];
+
+// Tabelle che l'import svuota solo se il backup le contiene: sono la
+// configurazione dell'app, non dati. Un backup precedente alla v15 non ha i
+// campi personalizzati, e svuotare la tabella lascerebbe il dispositivo
+// senza nemmeno i campi iniziali.
+const _tenuteSeAssentiNelBackup = {'campi_servizio'};
 
 // Tabelle incluse nel backup. L'app RN è dismessa, ma i suoi vecchi backup
 // (e quelli Flutter pre-v8) restano importabili: le tabelle assenti nel file
@@ -46,6 +54,7 @@ const _backupTables = [
   'assistenze',
   'materiali',
   'materiali_usati',
+  'campi_servizio',
 ];
 
 /// Timestamp leggibile per i nomi dei file esportati (AAAAMMGG_HH_MM),
@@ -138,6 +147,21 @@ Future<String?> exportSemplificato() async {
       r['id'] as String: '${r['cognome']} ${r['nome']}'
   };
   final tipologieMap = {for (final r in await db.query('tipologie_turno')) r['id'] as String: r['nome'] as String};
+  final campiServizio = (await db.query('campi_servizio', orderBy: 'ordine ASC, nome ASC'))
+      .map(CampoServizio.fromMap)
+      .toList();
+
+  // Campi personalizzati di un servizio come "nome campo": "valore leggibile"
+  // (nome dell'opzione al posto dell'id), nell'ordine delle Impostazioni.
+  // Ci sono anche quelli nascosti: l'export è una copia dei dati, non una
+  // schermata. I valori che non valgono più vengono saltati.
+  Map<String, String> campiLeggibili(Object? raw) {
+    final valori = decodificaCampi(raw);
+    return {
+      for (final c in campiServizio)
+        if (c.etichetta(valori[c.id]) != null) c.nome: c.etichetta(valori[c.id])!,
+    };
+  }
 
   // Converte un ID persona nullable nel nome completo (null se assente).
   String? p(dynamic id) => id == null ? null : personeMap[id as String];
@@ -195,6 +219,7 @@ Future<String?> exportSemplificato() async {
         'codice_uscita': s['codice_uscita'],
         'ospedale': s['ospedale_nome'],
         'descrizione': s['descrizione'],
+        'campi': campiLeggibili(s['campi']),
         'ordine': s['ordine'],
       }).toList(),
     });
@@ -345,6 +370,7 @@ Future<String> importBackup() async {
   try {
     await db.transaction((txn) async {
       for (final table in _deleteOrder) {
+        if (_tenuteSeAssentiNelBackup.contains(table) && tables[table] is! List) continue;
         await txn.delete(table);
       }
       // Reinserisce ogni tabella presente nel backup.
