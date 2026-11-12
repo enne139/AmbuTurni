@@ -676,6 +676,23 @@ void main() {
       expect(await contaServiziConCampo(campo.id), 0);
     });
 
+    test('salvaListaCampiServizio crea i nuovi, aggiorna gli altri e ne salva l\'ordine', () async {
+      final prima = await getCampiServizio();
+      final rovesciati = [
+        const CampoServizio(id: 'da-file', nome: 'Dal file', tipo: kCampoTesto),
+        ...prima.reversed,
+      ];
+      await salvaListaCampiServizio([
+        for (var i = 0; i < rovesciati.length; i++) rovesciati[i].copyWith(ordine: i),
+      ]);
+      final dopo = await getCampiServizio();
+      expect(dopo.map((c) => c.id), rovesciati.map((c) => c.id));
+      // Rimette l'ordine di prima e toglie il campo aggiunto, per gli altri test.
+      await deleteCampoServizio('da-file');
+      await salvaListaCampiServizio([for (var i = 0; i < prima.length; i++) prima[i].copyWith(ordine: i)]);
+      expect((await getCampiServizio()).map((c) => c.id), prima.map((c) => c.id));
+    });
+
     test('spostaCampoServizio scambia due campi vicini', () async {
       final prima = await getCampiServizio();
       await spostaCampoServizio(0, 1);

@@ -689,6 +689,31 @@ Future<void> saveCampoServizio(CampoServizio campo) async {
   });
 }
 
+/// Salva una lista intera di campi già unita (import della lista da un
+/// file, vedi utils/campi_condivisi.dart): crea quelli nuovi e aggiorna gli
+/// altri, ordine compreso, in una transazione sola. I valori dei servizi non
+/// si toccano: l'unione è fatta apposta per non renderne nessuno non valido.
+Future<void> salvaListaCampiServizio(List<CampoServizio> campi) async {
+  final db = await getDb();
+  final now = _now();
+  await db.transaction((txn) async {
+    for (final campo in campi) {
+      final map = campo.toMap()..['updated_at'] = now;
+      final esiste = await txn.query('campi_servizio',
+          columns: ['id'], where: 'id = ?', whereArgs: [campo.id], limit: 1);
+      if (esiste.isEmpty) {
+        map['created_at'] = now;
+        await txn.insert('campi_servizio', map);
+      } else {
+        map
+          ..remove('id')
+          ..remove('created_at');
+        await txn.update('campi_servizio', map, where: 'id = ?', whereArgs: [campo.id]);
+      }
+    }
+  });
+}
+
 /// Mostra o nasconde un campo senza toccare i valori salvati nei servizi.
 Future<void> setCampoServizioVisibile(String id, bool visibile) async {
   final db = await getDb();

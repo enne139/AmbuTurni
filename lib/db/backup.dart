@@ -4,7 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prefs_keys.dart';
 import 'backup_file.dart';
 import 'database.dart';
-import 'helpers.dart' show ricalcolaTutteLeNumerazioni, ricalcolaTuttiINumServizi, upsertOspedali;
+import '../utils/campi_condivisi.dart';
+import '../utils/theme.dart' show kColorPalette;
+import 'helpers.dart'
+    show getCampiServizio, ricalcolaTutteLeNumerazioni, ricalcolaTuttiINumServizi, salvaListaCampiServizio, upsertOspedali;
 import 'models.dart' show CampoServizio, decodificaCampi;
 
 // Versione 2: aggiunta la sezione opzionale "preferenze" (Piano turni, poi
@@ -500,6 +503,48 @@ Map<String, dynamic> _descrizioneInOrario(Map<String, dynamic> riga) {
     riga.putIfAbsent('orario', () => descrizione);
   }
   return riga;
+}
+
+/// Esporta la lista dei campi personalizzati dei servizi in un file da
+/// mandare a un'altra persona (formato in utils/campi_condivisi.dart).
+Future<String?> exportCampiServizio() async {
+  final json = campiInJson(await getCampiServizio());
+  return _salvaFile(json, 'ambuturni_campi_${_timestampFile()}.json', 'Campi dei servizi AmbuTurni');
+}
+
+/// Importa una lista di campi da un file e la unisce a quella del
+/// dispositivo (scelta dell'utente: unire, non sostituire): i campi uguali
+/// si aggiornano, quelli nuovi si aggiungono, gli altri restano, e nessun
+/// valore dei servizi va perso. Restituisce il messaggio di esito.
+Future<String> importCampiServizio() async {
+  final String raw;
+  try {
+    final letto = await leggiBackupScelto();
+    if (letto == null) return 'Import annullato.';
+    raw = letto;
+  } on StateError catch (e) {
+    return e.message;
+  }
+  final ({List<CampoServizio> campi, int scartati}) letti;
+  try {
+    letti = campiDaJson(raw);
+  } on FormatException catch (e) {
+    return e.message;
+  }
+  if (letti.campi.isEmpty) return 'Il file non contiene nessun campo da importare.';
+
+  final esito = unisciCampi(await getCampiServizio(), letti.campi, palette: kColorPalette);
+  await salvaListaCampiServizio(esito.campi);
+
+  final parti = [
+    if (esito.aggiornati > 0) '${esito.aggiornati} aggiornati',
+    if (esito.nuovi > 0) '${esito.nuovi} nuovi',
+  ];
+  final saltati = esito.saltati.isEmpty
+      ? ''
+      : ' Non importati perché qui hanno un tipo diverso: ${esito.saltati.join(', ')}.';
+  final scartati = letti.scartati == 0 ? '' : ' ${letti.scartati} voci del file non valide.';
+  return 'Campi importati: ${parti.isEmpty ? 'nessuna modifica' : parti.join(', ')}.$saltati$scartati';
 }
 
 /// Esporta la sola anagrafica ospedali (nome, via, città, regione,

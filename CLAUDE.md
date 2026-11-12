@@ -114,6 +114,9 @@ lib/
 │   ├── materiali_condivisi.dart   Dart puro, testato: MaterialeUsatoCondiviso (materiale usato
 │   │                               condiviso sul backend), nomi dei mezzi, filtraPerMezzo
 │   │                               (tool Materiali usati)
+│   ├── campi_condivisi.dart       Dart puro, testato: file della lista dei campi personalizzati
+│   │                               (campiInJson/campiDaJson) e unione con quella del dispositivo
+│   │                               (unisciCampi), per Esporta/Importa in Campi dei servizi
 │   ├── comunicati.dart            Dart puro, testato: raggruppaPerMese/dataComunicato per il
 │   │                               tool Archivio comunicati (data dal nome file AAAAMMGG,
 │   │                               fallback su createdAt)
@@ -218,8 +221,8 @@ lib/
     │                                   (db/backup_file.dart) lo apre con un lettore PDF.
     └── impostazioni/
         ├── campi_servizio_screen.dart Impostazioni → Campi dei servizi: elenco (mostra/
-        │                             nascondi, riordino, elimina con conferma) + CampoServizioForm
-        │                             (nome, tipo, valori con colore)
+        │                             nascondi, riordino, elimina con conferma, esporta/importa
+        │                             la lista) + CampoServizioForm (nome, tipo, valori con colore)
         └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
                                       fogli turni) + Navigazione (pagina principale, disattiva
@@ -2852,6 +2855,35 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     sesso ed età affiancati sotto la descrizione, card, modifica del campo
     speciale, menu senza "Elimina".
     **Da verificare su Android reale** (regola 8): migrazioni v14–v16.
+- **Lista dei campi condivisa con un file (2026-11-12)**: richiesta
+  esplicita, "condividere e impostare la lista dei campi". Scelte
+  dell'utente: **con un file** (non dal backend condiviso) e **unione**
+  all'import (non sostituzione).
+  - In Campi dei servizi due icone nell'AppBar: "Esporta la lista"
+    (`exportCampiServizio`, JSON con `formato: ambuturni_campi_servizio`,
+    gli id, i valori e la visibilità, condiviso come il backup) e "Importa
+    una lista" (`importCampiServizio`, accetta anche un backup completo,
+    che ha la tabella `campi_servizio`, come l'import degli ospedali).
+  - **Unione** (`unisciCampi` in `utils/campi_condivisi.dart`, Dart puro):
+    un campo si riconosce per id, poi per nome senza badare alle
+    maiuscole, e lo speciale anche solo dal tipo. Di un campo riconosciuto
+    restano l'id e i valori dell'elenco che il file non ha (in fondo);
+    nome, tipo, visibilità e valori del file vincono, e i valori
+    riconosciuti tengono l'id del dispositivo, a cui puntano i servizi. Un
+    campo con lo stesso nome ma un tipo incompatibile (passare da testo a
+    numero farebbe perdere valori) non si tocca e finisce nel messaggio.
+    L'ordine diventa quello del file, coi campi solo del dispositivo dopo.
+    Risultato: nessun campo sparisce e **nessun valore dei servizi va
+    perso**, quindi niente conferma prima dell'import, solo un messaggio
+    con quanti campi sono stati aggiornati, aggiunti o saltati.
+    `salvaListaCampiServizio` scrive la lista in una transazione sola,
+    senza toccare i servizi.
+  - **Verificato**: `test/utils/campi_condivisi_test.dart` (andata e
+    ritorno del file, backup completo, voci rovinate, unione per id e per
+    nome, tipo incompatibile, tendina → colori, speciale, id già usato) e
+    un test di `salvaListaCampiServizio`. Web in Chromium: esporta, poi
+    import di una lista con un valore di colore in più, un campo nuovo e
+    un altro ordine.
 
 ---
 
@@ -2876,7 +2908,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   servizi): tendina, colori, testo o numero, mostrati o nascosti,
   riordinabili; partono Sesso ed età (campo speciale, affiancati, v16) e
   Colore invio (verde, giallo, rosso); valori nel form e nella card del
-  servizio, sotto la descrizione.
+  servizio, sotto la descrizione. La lista si esporta in un file e si
+  importa unendola a quella del dispositivo.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
   associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
@@ -2960,7 +2993,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 251 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 260 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

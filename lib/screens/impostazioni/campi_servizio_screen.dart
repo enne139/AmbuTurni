@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../db/backup.dart' show exportCampiServizio, importCampiServizio;
 import '../../db/helpers.dart';
 import '../../db/models.dart';
 import '../../providers/app_provider.dart';
@@ -17,7 +18,23 @@ class CampiServizioScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final campi = context.watch<AnagraficheProvider>().campiServizio;
     return Scaffold(
-      appBar: AppBar(title: const Text('Campi dei servizi')),
+      appBar: AppBar(
+        title: const Text('Campi dei servizi'),
+        // Condividere la lista con un file (scelta dell'utente): si manda a
+        // un'altra persona e lei la importa, unendola alla sua.
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: 'Esporta la lista',
+            onPressed: () => _esporta(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.file_download_outlined),
+            tooltip: 'Importa una lista',
+            onPressed: () => _importa(context),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _apriForm(context, null),
         icon: const Icon(Icons.add),
@@ -53,6 +70,35 @@ class CampiServizioScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _esporta(BuildContext context) async {
+    try {
+      final path = await exportCampiServizio();
+      if (context.mounted && path != null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lista dei campi esportata.')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore export: $e')));
+      }
+    }
+  }
+
+  /// Import della lista: unisce senza chiedere conferma, perché per come è
+  /// fatta l'unione nessun campo sparisce e nessun valore va perso; il
+  /// messaggio dice cosa è cambiato.
+  Future<void> _importa(BuildContext context) async {
+    String esito;
+    try {
+      esito = await importCampiServizio();
+    } catch (e) {
+      esito = 'Errore import: $e';
+    }
+    if (!context.mounted) return;
+    await context.read<AnagraficheProvider>().ricaricaCampiServizio();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(esito)));
   }
 
   Future<void> _apriForm(BuildContext context, CampoServizio? campo) => Navigator.push(
