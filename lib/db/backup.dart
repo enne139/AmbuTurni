@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prefs_keys.dart';
 import 'backup_file.dart';
 import 'database.dart';
 import '../utils/campi_condivisi.dart';
+import '../utils/servizi_csv.dart';
 import '../utils/theme.dart' show kColorPalette;
 import 'helpers.dart'
     show getCampiServizio, ricalcolaTutteLeNumerazioni, ricalcolaTuttiINumServizi, salvaListaCampiServizio, upsertOspedali;
@@ -503,6 +505,72 @@ Map<String, dynamic> _descrizioneInOrario(Map<String, dynamic> riga) {
     riga.putIfAbsent('orario', () => descrizione);
   }
   return riga;
+}
+
+/// Esporta tutti i servizi dei turni in un CSV da aprire con Excel o
+/// LibreOffice (formato in utils/servizi_csv.dart): una riga per servizio,
+/// coi dati del turno e una colonna per ogni campo personalizzato, anche
+/// quelli nascosti (è un export dei dati, come quello leggibile). Passa da
+/// salvaFileBinarioPiattaforma per dare il tipo `text/csv` alla
+/// condivisione: la versione testuale è pensata per i JSON.
+Future<String?> exportServiziCsv() async {
+  final db = await getDb();
+  final tipologieMap = {for (final r in await db.query('tipologie_turno')) r['id'] as String: r['nome'] as String};
+  final campi = (await db.query('campi_servizio', orderBy: 'ordine ASC, nome ASC'))
+      .map(CampoServizio.fromMap)
+      .toList();
+  final righe = await db.rawQuery('''
+    SELECT s.*,
+           t.data AS turno_data,
+           t.numero_progressivo AS turno_numero,
+           t.tipologie AS turno_tipologie,
+           t.orario AS turno_orario,
+           a.nome AS associazione_nome,
+           o.nome AS ospedale_nome,
+           o.citta AS ospedale_citta
+    FROM servizi s
+    JOIN turni t ON t.id = s.turno_id
+    LEFT JOIN associazioni a ON a.id = t.associazione_id
+    LEFT JOIN ospedali o ON o.id = s.ospedale_id
+    ORDER BY t.data ASC, t.created_at ASC, t.id ASC, s.ordine ASC
+  ''');
+
+  // Il numero del servizio è la sua posizione nel turno, contata qui:
+  // `ordine` può avere buchi dopo le eliminazioni.
+  final servizi = <RigaServizioCsv>[];
+  String? turnoPrecedente;
+  var numero = 0;
+  for (final r in righe) {
+    final turnoId = r['turno_id'] as String;
+    numero = turnoId == turnoPrecedente ? numero + 1 : 1;
+    turnoPrecedente = turnoId;
+    final tipologie = <String>[];
+    try {
+      final decoded = jsonDecode((r['turno_tipologie'] as String?) ?? '[]');
+      if (decoded is List) {
+        tipologie.addAll(decoded.whereType<String>().map((id) => tipologieMap[id]).whereType<String>());
+      }
+    } catch (_) {
+      // Valore rovinato: la riga esce senza tipologie.
+    }
+    servizi.add(RigaServizioCsv(
+      data: r['turno_data'] as String,
+      numeroTurno: r['turno_numero'] as int?,
+      associazione: r['associazione_nome'] as String?,
+      tipologie: tipologie.join(', '),
+      orario: r['turno_orario'] as String?,
+      numeroServizio: numero,
+      codiceChiamata: r['codice_chiamata'] as String?,
+      codiceUscita: r['codice_uscita'] as String?,
+      ospedale: r['ospedale_nome'] as String?,
+      citta: r['ospedale_citta'] as String?,
+      descrizione: r['descrizione'] as String?,
+      campi: decodificaCampi(r['campi']),
+    ));
+  }
+  final csv = serviziInCsv(servizi, campi);
+  return salvaFileBinarioPiattaforma(Uint8List.fromList(utf8.encode(csv)),
+      'ambuturni_servizi_${_timestampFile()}.csv', 'Servizi AmbuTurni', 'text/csv');
 }
 
 /// Esporta la lista dei campi personalizzati dei servizi in un file da

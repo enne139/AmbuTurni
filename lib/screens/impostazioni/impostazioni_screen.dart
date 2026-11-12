@@ -81,6 +81,26 @@ class _SezioneBackupState extends State<_SezioneBackup> {
     }
   }
 
+  /// Tutti i servizi in un CSV da aprire con Excel o LibreOffice.
+  Future<void> _exportCsv() async {
+    setState(() => _busy = true);
+    try {
+      final path = await exportServiziCsv();
+      if (mounted) {
+        final msg = path != null ? 'Servizi esportati in CSV.' : 'Export annullato.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore export: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _exportSemplificato() async {
     setState(() => _busy = true);
     try {
@@ -201,6 +221,19 @@ class _SezioneBackupState extends State<_SezioneBackup> {
                     side: BorderSide(color: coloreTesto(context, 0.12)),
                   ),
                   onPressed: _exportSemplificato,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.table_chart_outlined, size: 18),
+                  label: const Text('Esporta servizi in CSV (Excel)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: coloreTesto(context, 0.54),
+                    side: BorderSide(color: coloreTesto(context, 0.12)),
+                  ),
+                  onPressed: _exportCsv,
                 ),
               ),
             ]),

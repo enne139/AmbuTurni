@@ -117,6 +117,8 @@ lib/
 │   ├── campi_condivisi.dart       Dart puro, testato: file della lista dei campi personalizzati
 │   │                               (campiInJson/campiDaJson) e unione con quella del dispositivo
 │   │                               (unisciCampi), per Esporta/Importa in Campi dei servizi
+│   ├── servizi_csv.dart           Dart puro, testato: serviziInCsv, i servizi in CSV per Excel
+│   │                               (Impostazioni → Backup → Esporta servizi in CSV)
 │   ├── comunicati.dart            Dart puro, testato: raggruppaPerMese/dataComunicato per il
 │   │                               tool Archivio comunicati (data dal nome file AAAAMMGG,
 │   │                               fallback su createdAt)
@@ -223,7 +225,7 @@ lib/
         ├── campi_servizio_screen.dart Impostazioni → Campi dei servizi: elenco (mostra/
         │                             nascondi, riordino, elimina con conferma, esporta/importa
         │                             la lista) + CampoServizioForm (nome, tipo, valori con colore)
-        └── impostazioni_screen.dart Backup/ripristino + versione app + configurazione del
+        └── impostazioni_screen.dart Backup/ripristino (anche servizi in CSV) + versione app + configurazione del
                                       backend condiviso (indirizzo del server, sincronizzazione
                                       fogli turni) + Navigazione (pagina principale, disattiva
                                       Attività+Statistiche, Piano turni in navbar) + Aspetto
@@ -2884,6 +2886,29 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     un test di `salvaListaCampiServizio`. Web in Chromium: esporta, poi
     import di una lista con un valore di colore in più, un campo nuovo e
     un altro ordine.
+- **Servizi in CSV (2026-11-12)**: richiesta esplicita, "esportare i
+  servizi in formato CSV"; scelta dell'utente: tutti i servizi, senza
+  filtri. Pulsante "Esporta servizi in CSV (Excel)" in Impostazioni →
+  Backup (`exportServiziCsv` in `backup.dart`, formato in
+  `utils/servizi_csv.dart`, Dart puro).
+  - Una riga per servizio, coi dati del turno: Data, Turno n.,
+    Associazione, Tipologia, Orario turno, Servizio n. (posizione nel
+    turno, contata in Dart perché `ordine` può avere buchi), codici,
+    Ospedale, Città, Descrizione, poi una colonna per ogni campo
+    personalizzato nell'ordine delle Impostazioni, **nascosti compresi**
+    (è un export dei dati, come quello leggibile); lo speciale fa due
+    colonne, Sesso ed Età. Ordinato per data del turno.
+  - Pensato per Excel/LibreOffice in italiano: separatore `;` (la virgola
+    è il separatore decimale), numeri con la virgola, date GG/MM/AAAA, BOM
+    UTF-8 in testa (senza, Excel legge male gli accenti) e righe chiuse da
+    CRLF; virgolette solo dove servono (`;`, virgolette, a capo nelle
+    descrizioni markdown). Condiviso con `salvaFileBinarioPiattaforma` per
+    avere il tipo `text/csv`: `salvaFilePiattaforma` sul desktop propone
+    solo `.json`.
+  - **Verificato**: `test/utils/servizi_csv_test.dart` (intestazione,
+    BOM, CRLF, numeri con la virgola, celle tra virgolette, valori non più
+    validi vuoti, nessun servizio). Web in Chromium: il file condiviso ha
+    la riga del servizio con sesso, età e colore.
 
 ---
 
@@ -2910,6 +2935,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   Colore invio (verde, giallo, rosso); valori nel form e nella card del
   servizio, sotto la descrizione. La lista si esporta in un file e si
   importa unendola a quella del dispositivo.
+- ✅ **Servizi in CSV** (Impostazioni → Backup): tutti i servizi, una riga
+  ciascuno coi dati del turno e i campi personalizzati, pronto per Excel.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
   associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
@@ -2993,7 +3020,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 260 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 263 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 
