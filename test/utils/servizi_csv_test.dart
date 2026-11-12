@@ -81,6 +81,22 @@ void main() {
     expect(righe[1].endsWith(';07:05;Pronto soccorso, Reparto'), isTrue);
   });
 
+  test('tabella orari: una colonna per riga', () {
+    final csv = serviziInCsv([
+      const RigaServizioCsv(data: '2026-11-12', numeroServizio: 1, campi: {
+        'orari': {'partenza': '14:42'},
+      }),
+    ], const [
+      CampoServizio(id: 'orari', nome: 'Orari', tipo: kCampoTabellaOrari, opzioni: [
+        OpzioneCampo(id: 'chiamata', nome: 'Chiamata'),
+        OpzioneCampo(id: 'partenza', nome: 'Partenza'),
+      ]),
+    ]);
+    final righe = csv.substring(1).split('\r\n');
+    expect(righe[0].endsWith(';Descrizione;Orari - Chiamata;Orari - Partenza'), isTrue);
+    expect(righe[1].endsWith(';;14:42'), isTrue);
+  });
+
   test('senza servizi resta solo l\'intestazione', () {
     final csv = serviziInCsv(const [], const []);
     expect(csv, '﻿Data;Turno n.;Associazione;Tipologia;Orario turno;Servizio n.;Codice chiamata;'

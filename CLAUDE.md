@@ -293,7 +293,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: `kVersioneDb` = 17); `_onOpen` esegue soltanto i PRAGMA
+(versione corrente: `kVersioneDb` = 18); `_onOpen` esegue soltanto i PRAGMA
 di connessione (WAL + foreign_keys). Le migrazioni si testano in
 `test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
 schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
@@ -311,7 +311,7 @@ al posto della vecchia `descrizione`; i `servizi` tengono la loro
 
 `campi_servizio` (v15) contiene le definizioni dei campi personalizzati dei
 servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO`, `ORARIO`/`COMBO`
-dalla v17 o lo speciale `SESSO_ETA` dalla v16, valori possibili in JSON,
+dalla v17, `TABELLA_ORARI` dalla v18 o lo speciale `SESSO_ETA` dalla v16, valori possibili in JSON,
 `visibile`, `ordine`); i valori di ogni servizio stanno in
 `servizi.campi` (JSON id campo -> valore). Vedi "Campi personalizzati dei
 servizi" in Decisioni tecniche.
@@ -2926,6 +2926,30 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   ha gli stessi campi di un'installazione nuova. Chi ha già la 1.19.0 lo
   tiene, coi suoi valori: nessuna migrazione lo cancella, lo si elimina a
   mano da Impostazioni → Campi dei servizi se non serve.
+- **Tabella orari (2026-11-12, DB v18)**: richiesta esplicita, un tipo di
+  campo `TABELLA_ORARI` "dove posso aggiungere diversi campi e una tabella
+  con il nome e accanto l'orario". Le righe sono le opzioni del campo
+  (es. Chiamata, Arrivo sul posto, Partenza: "Righe della tabella" nel
+  form del campo); il valore è una mappa id riga -> "HH:MM" con le sole
+  righe compilate, quindi togliere una riga toglie solo la sua ora
+  (`pulisci` tiene le altre, `valorePerso` lo conta).
+  - **Form del servizio**: una tabella con bordo, una riga per voce col
+    nome a sinistra e l'ora a destra; si tocca la riga e si sceglie l'ora
+    con l'orologio a 24 ore, che parte da adesso (comodo durante il
+    servizio), la x la toglie. La scelta dell'ora è `_chiediOra`, la
+    stessa del campo orario.
+  - **Card**: sotto le altre voci, una tabellina col nome del campo e solo
+    le righe compilate (`Table` a colonne intrinseche, cifre tabulari).
+  - **CSV**: una colonna per riga, "Orari - Chiamata"; si unisce solo con
+    un'altra tabella orari nell'import della lista.
+  - **Migrazione v18**: il tipo nel CHECK di `campi_servizio`, ricostruita
+    come nella v16 e nella v17.
+  - **Verificato**: `flutter test` (righe tolte e ore non valide scartate,
+    etichetta, riga tolta che lascia le altre su un servizio vero, colonne
+    del CSV, migrazione v17 → v18 con Colore invio che resta). Web in
+    Chromium: tabella creata con tre righe, due ore segnate
+    dall'orologio, tabellina nella card.
+    **Da verificare su Android reale** (regola 8): migrazioni v14–v18.
 - **Servizi in CSV (2026-11-12)**: richiesta esplicita, "esportare i
   servizi in formato CSV"; scelta dell'utente: tutti i servizi, senza
   filtri. Pulsante "Esporta servizi in CSV (Excel)" in Impostazioni →
@@ -2970,7 +2994,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Orario** di turni e assistenze (v14, prima "Descrizione"): campo di
   una riga accanto a data e ore, es. "12:00 - 18:00".
 - ✅ **Campi personalizzati dei servizi** (v15, Impostazioni → Campi dei
-  servizi): tendina, colori, testo, numero, orario o combo box, mostrati o nascosti,
+  servizi): tendina, colori, testo, numero, orario, combo box o tabella orari, mostrati o nascosti,
   riordinabili; parte Sesso ed età (campo speciale, affiancati, v16:
   Colore invio non c'è più tra i campi iniziali); valori nel form e nella card del
   servizio, sotto la descrizione. La lista si esporta in un file e si
@@ -3060,7 +3084,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 269 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 273 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

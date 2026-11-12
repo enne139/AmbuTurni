@@ -249,4 +249,35 @@ void main() {
       await db.close();
     }
   });
+
+  test('v17 → v18: campi_servizio accetta la tabella orari, i campi restano', () async {
+    final vecchio = await openDatabase(percorso, version: 17, onCreate: (db, _) async {
+      await db.execute('''CREATE TABLE servizi (
+        id TEXT PRIMARY KEY, turno_id TEXT NOT NULL, campi TEXT DEFAULT '{}'
+      )''');
+      await db.execute('''CREATE TABLE campi_servizio (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO')),
+        opzioni TEXT DEFAULT '[]',
+        visibile INTEGER NOT NULL DEFAULT 1,
+        ordine INTEGER DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+      )''');
+    });
+    await vecchio.insert('campi_servizio', {'id': 'sesso_eta', 'nome': 'Sesso ed età', 'tipo': 'SESSO_ETA', 'ordine': 0});
+    await vecchio.insert('campi_servizio', {'id': 'colore_invio', 'nome': 'Colore invio', 'tipo': 'COLORI', 'ordine': 1});
+    await vecchio.close();
+
+    final db = await openTestDbAt(percorso);
+    try {
+      // Chi aveva Colore invio dalla 1.19.0 lo tiene.
+      expect((await db.query('campi_servizio', orderBy: 'ordine')).map((c) => c['id']), ['sesso_eta', 'colore_invio']);
+      await db.insert('campi_servizio', {'id': 't', 'nome': 'Orari', 'tipo': 'TABELLA_ORARI'});
+      expect(() => db.insert('campi_servizio', {'id': 'y', 'nome': 'Y', 'tipo': 'BOH'}), throwsA(anything));
+    } finally {
+      await db.close();
+    }
+  });
 }

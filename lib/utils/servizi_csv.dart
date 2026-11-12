@@ -45,7 +45,7 @@ String serviziInCsv(List<RigaServizioCsv> righe, List<CampoServizio> campi) {
   final intestazione = [
     'Data', 'Turno n.', 'Associazione', 'Tipologia', 'Orario turno', 'Servizio n.',
     'Codice chiamata', 'Codice uscita', 'Ospedale', 'Città', 'Descrizione',
-    for (final c in campi) ...(c.speciale ? ['Sesso', 'Età'] : [c.nome]),
+    for (final c in campi) ..._intestazioni(c),
   ];
   final buffer = StringBuffer('﻿')..write(_riga(intestazione));
   for (final r in righe) {
@@ -67,8 +67,20 @@ String serviziInCsv(List<RigaServizioCsv> righe, List<CampoServizio> campi) {
   return buffer.toString();
 }
 
-/// Le celle di un campo: due per lo speciale (sesso, età), una per gli altri.
+/// Le colonne di un campo: due per lo speciale (Sesso, Età), una per riga
+/// per la tabella orari ("Orari - Chiamata"), una per gli altri.
+List<String> _intestazioni(CampoServizio campo) {
+  if (campo.speciale) return ['Sesso', 'Età'];
+  if (campo.tipo == kCampoTabellaOrari) return [for (final o in campo.opzioni) '${campo.nome} - ${o.nome}'];
+  return [campo.nome];
+}
+
+/// Le celle di un campo, una per colonna di _intestazioni.
 List<String?> _valori(CampoServizio campo, dynamic valore) {
+  if (campo.tipo == kCampoTabellaOrari) {
+    final orari = (campo.pulisci(valore) as Map?) ?? const {};
+    return [for (final o in campo.opzioni) orari[o.id] as String?];
+  }
   if (campo.speciale) {
     final v = campo.pulisci(valore);
     final eta = campo.etaDi(v);

@@ -502,6 +502,11 @@ const String kCampoOrario = 'ORARIO';
 // o più valori dell'elenco. Il valore è la lista degli id scelti, come per
 // la tendina: rinominare un valore non tocca i servizi.
 const String kCampoCombo = 'COMBO';
+// Tabella orari (v18, richiesta dell'utente): una riga per ogni valore
+// dell'elenco (es. Chiamata, Arrivo sul posto, Partenza) e accanto l'ora
+// scelta con l'orologio. Il valore è una mappa id riga -> "HH:MM", con le
+// sole righe compilate.
+const String kCampoTabellaOrari = 'TABELLA_ORARI';
 // Tipo speciale (v16, richiesta dell'utente): sesso ed età del paziente in
 // un campo solo, con i due controlli affiancati. È uno e fisso: si nasconde,
 // si sposta e se ne cambiano i valori del sesso, ma non si crea da "Nuovo
@@ -511,14 +516,18 @@ const String kCampoSessoEta = 'SESSO_ETA';
 const String kIdCampoSessoEta = 'sesso_eta';
 // Tipi che si possono scegliere creando un campo (lo speciale no).
 const List<String> tipiCampoServizio = [
-  kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero, kCampoOrario, kCampoCombo,
+  kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero, kCampoOrario, kCampoCombo, kCampoTabellaOrari,
 ];
 
-/// true per i tipi che hanno un elenco di valori da impostare: tendina e
-/// colori (si sceglie per forza tra quelli), combo box (proposti) e lo
-/// speciale (i valori del sesso).
+/// true per i tipi che hanno un elenco di valori da impostare: tendina,
+/// colori e combo box (si sceglie tra quelli), le righe della tabella orari
+/// e lo speciale (i valori del sesso).
 bool tipoConOpzioni(String tipo) =>
-    tipo == kCampoTendina || tipo == kCampoColori || tipo == kCampoCombo || tipo == kCampoSessoEta;
+    tipo == kCampoTendina ||
+    tipo == kCampoColori ||
+    tipo == kCampoCombo ||
+    tipo == kCampoTabellaOrari ||
+    tipo == kCampoSessoEta;
 
 /// Formato dei valori dei campi orario.
 final _formatoOrario = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
@@ -531,6 +540,7 @@ String nomeTipoCampo(String tipo) => switch (tipo) {
       kCampoNumero => 'Numero',
       kCampoOrario => 'Orario',
       kCampoCombo => 'Combo box',
+      kCampoTabellaOrari => 'Tabella orari',
       kCampoSessoEta => 'Sesso ed età',
       _ => tipo,
     };
@@ -624,6 +634,16 @@ class CampoServizio {
         return valore is num ? valore : null;
       case kCampoOrario:
         return valore is String && _formatoOrario.hasMatch(valore) ? valore : null;
+      case kCampoTabellaOrari:
+        // Solo le righe che ci sono ancora, con un'ora valida, nell'ordine
+        // dell'elenco.
+        if (valore is! Map) return null;
+        final orari = <String, String>{};
+        for (final o in opzioni) {
+          final ora = valore[o.id];
+          if (ora is String && _formatoOrario.hasMatch(ora)) orari[o.id] = ora;
+        }
+        return orari.isEmpty ? null : orari;
       case kCampoSessoEta:
         if (valore is! Map) return null;
         final sesso = valore['sesso'];
@@ -684,6 +704,11 @@ class CampoServizio {
       ].join(' · ');
     }
     if (tipo == kCampoTendina || tipo == kCampoColori) return opzione(v as String)!.nome;
+    // Tabella orari: "Chiamata 14:30, Partenza 14:42".
+    if (tipo == kCampoTabellaOrari) {
+      final orari = v as Map;
+      return opzioni.where((o) => orari.containsKey(o.id)).map((o) => '${o.nome} ${orari[o.id]}').join(', ');
+    }
     // Combo: i nomi scelti nell'ordine dell'elenco, non in quello del tocco.
     if (tipo == kCampoCombo) {
       return opzioni.where((o) => (v as List).contains(o.id)).map((o) => o.nome).join(', ');

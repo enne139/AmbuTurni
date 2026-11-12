@@ -180,6 +180,19 @@ void main() {
       expect(stessoValoreCampo({'eta': 1}, {'sesso': 'm', 'eta': 1}), isFalse);
     });
 
+    test('tabella orari: solo righe esistenti con un\'ora valida', () {
+      const tabella = CampoServizio(id: 't', nome: 'Orari', tipo: kCampoTabellaOrari, opzioni: [
+        OpzioneCampo(id: 'chiamata', nome: 'Chiamata'),
+        OpzioneCampo(id: 'partenza', nome: 'Partenza'),
+      ]);
+      expect(tabella.haOpzioni, isTrue);
+      expect(tabella.pulisci({'partenza': '14:42', 'chiamata': '14:30', 'tolta': '15:00', 'x': 'boh'}),
+          {'chiamata': '14:30', 'partenza': '14:42'});
+      expect(tabella.etichetta({'partenza': '14:42', 'chiamata': '14:30'}), 'Chiamata 14:30, Partenza 14:42');
+      expect(tabella.valoreValido({'chiamata': '25:00'}), isFalse);
+      expect(tabella.valoreValido('14:30'), isFalse);
+    });
+
     test('orario e combo box: valori validi ed etichette', () {
       const ora = CampoServizio(id: 'o', nome: 'Ora chiamata', tipo: kCampoOrario);
       expect(ora.etichetta('14:30'), '14:30');
@@ -715,6 +728,19 @@ void main() {
       await saveCampoServizio(campo);
       expect((await campiDi(id))[campo.id], 'ps');
       expect((await campiDi(due))[campo.id], 'ps');
+    });
+
+    test('tabella orari: togliere una riga lascia le altre ore', () async {
+      final tabella = CampoServizio(id: newId(), nome: 'Orari', tipo: kCampoTabellaOrari, opzioni: const [
+        OpzioneCampo(id: 'chiamata', nome: 'Chiamata'),
+        OpzioneCampo(id: 'partenza', nome: 'Partenza'),
+      ]);
+      await saveCampoServizio(tabella);
+      final id = await servizioCon({tabella.id: {'chiamata': '14:30', 'partenza': '14:42'}});
+      final soloChiamata = tabella.copyWith(opzioni: const [OpzioneCampo(id: 'chiamata', nome: 'Chiamata')]);
+      expect(await contaValoriNonPiuValidi(soloChiamata), 1);
+      await saveCampoServizio(soloChiamata);
+      expect((await campiDi(id))[tabella.id], {'chiamata': '14:30'});
     });
 
     test('nascondere un campo tiene i valori, eliminarlo li toglie', () async {

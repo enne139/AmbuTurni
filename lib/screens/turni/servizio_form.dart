@@ -247,9 +247,10 @@ class _ServizioFormState extends State<ServizioForm> {
         }
       });
 
-  /// Apre l'orologio per un campo orario, partendo dall'ora salvata o da
-  /// adesso, sempre nel formato 24 ore.
-  Future<void> _scegliOrario(CampoServizio campo, String? attuale) async {
+  /// Apre l'orologio partendo dall'ora [attuale] ("HH:MM") o da adesso,
+  /// sempre nel formato 24 ore. Restituisce l'ora scelta come "HH:MM", o
+  /// null se si annulla. Usata dal campo orario e dalla tabella orari.
+  Future<String?> _chiediOra(String? attuale) async {
     final parti = attuale?.split(':');
     final iniziale = parti == null
         ? TimeOfDay.now()
@@ -262,9 +263,86 @@ class _ServizioFormState extends State<ServizioForm> {
         child: child!,
       ),
     );
-    if (ora == null || !mounted) return;
+    if (ora == null || !mounted) return null;
     String due(int n) => n.toString().padLeft(2, '0');
-    _scegli(campo, '${due(ora.hour)}:${due(ora.minute)}');
+    return '${due(ora.hour)}:${due(ora.minute)}';
+  }
+
+  Future<void> _scegliOrario(CampoServizio campo, String? attuale) async {
+    final ora = await _chiediOra(attuale);
+    if (ora != null) _scegli(campo, ora);
+  }
+
+  /// Imposta (o toglie, con null) l'ora di una riga della tabella orari,
+  /// lasciando com'erano le altre righe.
+  void _impostaRiga(CampoServizio campo, String rigaId, String? ora) => setState(() {
+        final orari = Map<String, dynamic>.from((campo.pulisci(_campi[campo.id]) as Map?) ?? const {});
+        if (ora == null) {
+          orari.remove(rigaId);
+        } else {
+          orari[rigaId] = ora;
+        }
+        if (orari.isEmpty) {
+          _campi.remove(campo.id);
+        } else {
+          _campi[campo.id] = orari;
+        }
+      });
+
+  /// Tabella orari: una riga per voce dell'elenco, col nome a sinistra e
+  /// l'ora a destra. Si tocca la riga per scegliere l'ora con l'orologio
+  /// (parte da adesso, comodo mentre si è in servizio), la x la toglie.
+  Widget _tabellaOrari(CampoServizio campo) {
+    final orari = (campo.pulisci(_campi[campo.id]) as Map?) ?? const {};
+    final bordo = coloreTesto(context, 0.15);
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: bordo),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < campo.opzioni.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: bordo),
+            InkWell(
+              onTap: () async {
+                final o = campo.opzioni[i];
+                final ora = await _chiediOra(orari[o.id] as String?);
+                if (ora != null) _impostaRiga(campo, o.id, ora);
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(campo.opzioni[i].nome)),
+                    Text(
+                      (orari[campo.opzioni[i].id] as String?) ?? '--:--',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: orari.containsKey(campo.opzioni[i].id) ? null : coloreTesto(context, 0.35),
+                      ),
+                    ),
+                    if (orari.containsKey(campo.opzioni[i].id))
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: 'Togli l\'ora',
+                        onPressed: () => _impostaRiga(campo, campo.opzioni[i].id, null),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Icon(Icons.access_time, size: 18, color: coloreTesto(context, 0.45)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   /// Il controllo giusto per il tipo di un campo personalizzato.
@@ -336,6 +414,8 @@ class _ServizioFormState extends State<ServizioForm> {
             child: Text(ora ?? ''),
           ),
         );
+      case kCampoTabellaOrari:
+        return _tabellaOrari(campo);
       case kCampoCombo:
         // Scelta multipla: un chip con la spunta per ogni valore, se ne
         // accendono quanti se ne vuole. Si salvano gli id nell'ordine

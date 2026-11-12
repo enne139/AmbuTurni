@@ -34,6 +34,9 @@ class ValoriCampiServizio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voci = <Widget>[];
+    // Le tabelle orari vanno sotto le altre voci, ognuna come tabellina
+    // nome | ora, come nel form: in fila con le altre non si leggerebbero.
+    final tabelle = <Widget>[];
     Widget voce(String nome, String valore) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -50,6 +53,10 @@ class ValoriCampiServizio extends StatelessWidget {
         if (eta != null) voci.add(voce('Età', formatNumeroCampo(eta)));
         continue;
       }
+      if (campo.tipo == kCampoTabellaOrari) {
+        if (valore is Map) tabelle.add(_tabella(context, campo, valore));
+        continue;
+      }
       final etichetta = campo.etichetta(valore);
       if (etichetta == null) continue;
       voci.add(Row(
@@ -64,10 +71,47 @@ class ValoriCampiServizio extends StatelessWidget {
         ],
       ));
     }
-    if (voci.isEmpty) return const SizedBox.shrink();
+    if (voci.isEmpty && tabelle.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 4),
-      child: Wrap(spacing: 12, runSpacing: 2, children: voci),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (voci.isNotEmpty) Wrap(spacing: 12, runSpacing: 2, children: voci),
+          ...tabelle,
+        ],
+      ),
+    );
+  }
+
+  /// Tabellina di una tabella orari: titolo e una riga per ogni ora segnata.
+  Widget _tabella(BuildContext context, CampoServizio campo, Map<dynamic, dynamic> orari) {
+    final attenuato = TextStyle(color: coloreTesto(context, 0.45), fontSize: 12);
+    final forte = TextStyle(
+      color: coloreTesto(context, 0.8),
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(campo.nome, style: attenuato),
+          Table(
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            children: [
+              for (final o in campo.opzioni)
+                if (orari.containsKey(o.id))
+                  TableRow(children: [
+                    Padding(padding: const EdgeInsets.only(right: 12), child: Text(o.nome, style: attenuato)),
+                    Text(orari[o.id] as String, style: forte),
+                  ]),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

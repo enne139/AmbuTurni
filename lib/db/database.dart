@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
 CREATE TABLE IF NOT EXISTS campi_servizio (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL,
-  tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO','TABELLA_ORARI')),
   opzioni TEXT DEFAULT '[]',
   visibile INTEGER NOT NULL DEFAULT 1,
   ordine INTEGER DEFAULT 0,
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS campi_servizio (
 
 /// Versione corrente dello schema: ogni cambiamento allo schema la fa salire
 /// di uno, con la sua migrazione in _onUpgrade (regola 7 del CLAUDE.md).
-const int kVersioneDb = 17;
+const int kVersioneDb = 18;
 
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
@@ -622,6 +622,32 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
           id TEXT PRIMARY KEY,
           nome TEXT NOT NULL,
           tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO')),
+          opzioni TEXT DEFAULT '[]',
+          visibile INTEGER NOT NULL DEFAULT 1,
+          ordine INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )
+      ''');
+      for (final riga in righe) {
+        await db.insert('campi_servizio', riga);
+      }
+    }
+  }
+  if (oldVersion < 18) {
+    // Tipo di campo nuovo, la tabella orari (richiesta dell'utente): va nel
+    // CHECK di campi_servizio, ricostruita come nella v16 e nella v17.
+    final sql = (await db.rawQuery(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'campi_servizio'"))
+        .first['sql'] as String;
+    if (!sql.contains('TABELLA_ORARI')) {
+      final righe = await db.query('campi_servizio');
+      await db.execute('DROP TABLE campi_servizio');
+      await db.execute('''
+        CREATE TABLE campi_servizio (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL,
+          tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO','TABELLA_ORARI')),
           opzioni TEXT DEFAULT '[]',
           visibile INTEGER NOT NULL DEFAULT 1,
           ordine INTEGER DEFAULT 0,

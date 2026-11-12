@@ -152,6 +152,7 @@ IconData _iconaTipo(String tipo) => switch (tipo) {
       kCampoNumero => Icons.pin_outlined,
       kCampoOrario => Icons.access_time,
       kCampoCombo => Icons.checklist,
+      kCampoTabellaOrari => Icons.table_rows_outlined,
       kCampoSessoEta => Icons.person_outline,
       _ => Icons.short_text,
     };
@@ -275,7 +276,8 @@ class _CampoCard extends StatelessWidget {
       final sessi = campo.opzioni.map((o) => o.nome).join(', ');
       return Text('Speciale · sesso ($sessi) ed età affiancati$nascosto', style: stile);
     }
-    final valori = (campo.tipo == kCampoTendina || campo.tipo == kCampoCombo) && campo.opzioni.isNotEmpty
+    final valori = (campo.tipo == kCampoTendina || campo.tipo == kCampoCombo || campo.tipo == kCampoTabellaOrari) &&
+            campo.opzioni.isNotEmpty
         ? ' · ${campo.opzioni.map((o) => o.nome).join(', ')}'
         : '';
     return Text('${nomeTipoCampo(campo.tipo)}$valori$nascosto', style: stile);
@@ -434,7 +436,9 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
           colore: _tipo == kCampoColori ? (o.colore ?? kColorPalette.first) : null,
         ));
       }
-      if (opzioni.isEmpty) return _avvisa('Aggiungi almeno un valore');
+      if (opzioni.isEmpty) {
+        return _avvisa(_tipo == kCampoTabellaOrari ? 'Aggiungi almeno una riga' : 'Aggiungi almeno un valore');
+      }
     }
 
     final campo = CampoServizio(
@@ -501,6 +505,8 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
       kCampoNumero => 'Si scrive un numero, per esempio un\'età.',
       kCampoOrario => 'Si sceglie un\'ora con l\'orologio, per esempio 14:30.',
       kCampoCombo => 'Si possono scegliere più valori dell\'elenco insieme.',
+      kCampoTabellaOrari => 'Una tabella con una riga per voce (es. Chiamata, Arrivo sul posto, Partenza) '
+          'e accanto l\'ora, scelta con l\'orologio.',
       _ => 'Si scrive un testo libero.',
     };
     return Scaffold(
@@ -568,6 +574,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
             const SizedBox(height: 12),
             _label(switch (_tipo) {
               kCampoSessoEta => 'Valori del sesso',
+              kCampoTabellaOrari => 'Righe della tabella',
               _ => 'Valori',
             }),
             for (var i = 0; i < _opzioni.length; i++)
@@ -591,7 +598,8 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
                       child: TextField(
                         controller: _opzioni[i].ctrl,
                         textCapitalization: TextCapitalization.sentences,
-                        decoration: InputDecoration(hintText: 'Valore ${i + 1}'),
+                        decoration: InputDecoration(
+                            hintText: _tipo == kCampoTabellaOrari ? 'Riga ${i + 1}' : 'Valore ${i + 1}'),
                       ),
                     ),
                     IconButton(
@@ -608,7 +616,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
               child: TextButton.icon(
                 onPressed: _aggiungiOpzione,
                 icon: const Icon(Icons.add),
-                label: const Text('Aggiungi valore'),
+                label: Text(_tipo == kCampoTabellaOrari ? 'Aggiungi riga' : 'Aggiungi valore'),
               ),
             ),
           ],
