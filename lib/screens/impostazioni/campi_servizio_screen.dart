@@ -28,7 +28,7 @@ class CampiServizioScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
           Text(
-            'Campi in più nel modulo di ogni servizio, dopo l\'ospedale. '
+            'Campi in più nel modulo di ogni servizio, sotto la descrizione. '
             'Quelli nascosti non compaiono nel modulo e nel dettaglio, ma i '
             'valori già salvati restano.',
             style: TextStyle(color: coloreTesto(context, 0.6), fontSize: 13),
@@ -104,6 +104,7 @@ IconData _iconaTipo(String tipo) => switch (tipo) {
       kCampoTendina => Icons.arrow_drop_down_circle_outlined,
       kCampoColori => Icons.palette_outlined,
       kCampoNumero => Icons.pin_outlined,
+      kCampoSessoEta => Icons.person_outline,
       _ => Icons.short_text,
     };
 
@@ -185,9 +186,12 @@ class _CampoCard extends StatelessWidget {
                   if (v == 'edit') onTap();
                   if (v == 'del') onElimina();
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'edit', child: Text('Modifica')),
-                  PopupMenuItem(value: 'del', child: Text('Elimina', style: TextStyle(color: kPrimary))),
+                // Il campo speciale non si elimina: per toglierlo dal form
+                // si nasconde con l'interruttore.
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Modifica')),
+                  if (!campo.speciale)
+                    const PopupMenuItem(value: 'del', child: Text('Elimina', style: TextStyle(color: kPrimary))),
                 ],
               ),
             ],
@@ -218,6 +222,10 @@ class _CampoCard extends StatelessWidget {
           if (nascosto.isNotEmpty) Text(nascosto.substring(3), style: stile),
         ],
       );
+    }
+    if (campo.speciale) {
+      final sessi = campo.opzioni.map((o) => o.nome).join(', ');
+      return Text('Speciale · sesso ($sessi) ed età affiancati$nascosto', style: stile);
     }
     final valori = campo.tipo == kCampoTendina ? ' · ${campo.opzioni.map((o) => o.nome).join(', ')}' : '';
     return Text('${nomeTipoCampo(campo.tipo)}$valori$nascosto', style: stile);
@@ -253,7 +261,11 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
   late final List<_OpzioneInModifica> _opzioni;
   bool _saving = false;
 
-  bool get _haOpzioni => _tipo == kCampoTendina || _tipo == kCampoColori;
+  bool get _haOpzioni => _tipo == kCampoTendina || _tipo == kCampoColori || _speciale;
+
+  // Il campo speciale sesso ed età ha nome e tipo fissi: qui se ne cambiano
+  // solo la visibilità e i valori del sesso.
+  bool get _speciale => _tipo == kCampoSessoEta;
 
   @override
   void initState() {
@@ -352,7 +364,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(testo)));
 
   Future<void> _salva() async {
-    final nome = _nomeCtrl.text.trim();
+    final nome = _speciale ? widget.campo!.nome : _nomeCtrl.text.trim();
     if (nome.isEmpty) return _avvisa('Scrivi il nome del campo');
     final anag = context.read<AnagraficheProvider>();
     final doppione = anag.campiServizio.any(
@@ -432,6 +444,8 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
   @override
   Widget build(BuildContext context) {
     final spiegazione = switch (_tipo) {
+      kCampoSessoEta => 'Campo speciale: sesso ed età sulla stessa riga del servizio. '
+          'Non si elimina: se non serve, nascondilo.',
       kCampoTendina => 'Si sceglie un valore da un menu a tendina.',
       kCampoColori => 'Si sceglie un valore tra quelli dell\'elenco, ognuno col suo colore.',
       kCampoNumero => 'Si scrive un numero, per esempio un\'età.',
@@ -454,22 +468,28 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
         padding: const EdgeInsets.all(16),
         children: [
           _label('Nome'),
-          TextField(
-            controller: _nomeCtrl,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(hintText: 'es. Sesso'),
-          ),
+          if (_speciale)
+            Text(widget.campo!.nome, style: const TextStyle(fontSize: 16))
+          else
+            TextField(
+              controller: _nomeCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(hintText: 'es. Codice fiscale'),
+            ),
           const SizedBox(height: 20),
           _label('Tipo'),
-          SegmentedButton<String>(
-            showSelectedIcon: false,
-            segments: [
-              for (final t in tipiCampoServizio)
-                ButtonSegment(value: t, label: Text(nomeTipoCampo(t))),
-            ],
-            selected: {_tipo},
-            onSelectionChanged: (s) => _cambiaTipo(s.first),
-          ),
+          if (_speciale)
+            Text(nomeTipoCampo(_tipo), style: const TextStyle(fontSize: 16))
+          else
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: [
+                for (final t in tipiCampoServizio)
+                  ButtonSegment(value: t, label: Text(nomeTipoCampo(t))),
+              ],
+              selected: {_tipo},
+              onSelectionChanged: (s) => _cambiaTipo(s.first),
+            ),
           const SizedBox(height: 6),
           Text(spiegazione, style: TextStyle(color: coloreTesto(context, 0.55), fontSize: 12)),
           const SizedBox(height: 8),
@@ -486,7 +506,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
           ),
           if (_haOpzioni) ...[
             const SizedBox(height: 12),
-            _label('Valori'),
+            _label(_speciale ? 'Valori del sesso' : 'Valori'),
             for (var i = 0; i < _opzioni.length; i++)
               Padding(
                 key: ObjectKey(_opzioni[i]),

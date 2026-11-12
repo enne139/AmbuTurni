@@ -162,6 +162,24 @@ void main() {
       expect(formatNumeroCampo(12), '12');
     });
 
+    test('campo speciale sesso ed età: tiene la parte buona del valore', () {
+      const speciale = CampoServizio(id: kIdCampoSessoEta, nome: 'Sesso ed età', tipo: kCampoSessoEta, opzioni: [
+        OpzioneCampo(id: 'm', nome: 'M'),
+        OpzioneCampo(id: 'f', nome: 'F'),
+      ]);
+      expect(speciale.speciale, isTrue);
+      expect(speciale.etichetta({'sesso': 'f', 'eta': 45}), 'F · 45 anni');
+      expect(speciale.etichetta({'eta': 7}), '7 anni');
+      // Sesso non più tra i valori: resta l'età.
+      expect(speciale.pulisci({'sesso': 'x', 'eta': 45}), {'eta': 45});
+      expect(speciale.pulisci({'sesso': 'x'}), isNull);
+      expect(speciale.pulisci('f'), isNull); // non è una mappa
+      expect(speciale.sessoDi({'sesso': 'm'})!.nome, 'M');
+      expect(speciale.etaDi({'eta': 37.5}), 37.5);
+      expect(stessoValoreCampo({'eta': 1, 'sesso': 'm'}, {'sesso': 'm', 'eta': 1}), isTrue);
+      expect(stessoValoreCampo({'eta': 1}, {'sesso': 'm', 'eta': 1}), isFalse);
+    });
+
     test('decodificaCampi: vuoto, rovinato o assente diventa una mappa vuota', () {
       expect(decodificaCampi('{"eta":45,"sesso":"m"}'), {'eta': 45, 'sesso': 'm'});
       expect(decodificaCampi(null), isEmpty);
@@ -546,22 +564,42 @@ void main() {
     Future<Map<String, dynamic>> campiDi(String servizioId) async =>
         (await getServizi(turnoId)).firstWhere((s) => s.id == servizioId).campi;
 
-    test('un DB nuovo parte con Sesso, Età e Colore invio, in quest\'ordine', () async {
+    test('un DB nuovo parte con Sesso ed età (speciale) e Colore invio', () async {
       final campi = await getCampiServizio();
-      expect(campi.take(3).map((c) => c.nome), ['Sesso', 'Età', 'Colore invio']);
-      final sesso = campi[0], eta = campi[1], colore = campi[2];
-      expect(sesso.tipo, kCampoTendina);
-      expect(sesso.opzioni.map((o) => o.nome), ['M', 'F', 'A']);
-      expect(eta.tipo, kCampoNumero);
+      expect(campi.take(2).map((c) => c.nome), ['Sesso ed età', 'Colore invio']);
+      final sessoEta = campi[0], colore = campi[1];
+      expect(sessoEta.id, kIdCampoSessoEta);
+      expect(sessoEta.tipo, kCampoSessoEta);
+      expect(sessoEta.opzioni.map((o) => o.nome), ['M', 'F', 'A']);
       expect(colore.tipo, kCampoColori);
       expect(colore.opzioni.map((o) => o.nome), ['Verde', 'Giallo', 'Rosso']);
       expect(colore.opzioni.every((o) => o.colore != null), isTrue);
-      expect(campi.take(3).every((c) => c.visibile), isTrue);
+      expect(campi.take(2).every((c) => c.visibile), isTrue);
     });
 
     test('i valori si salvano e si rileggono col servizio', () async {
-      final id = await servizioCon({'sesso': 'f', 'eta': 45, 'colore_invio': 'giallo'});
-      expect(await campiDi(id), {'sesso': 'f', 'eta': 45, 'colore_invio': 'giallo'});
+      final id = await servizioCon({kIdCampoSessoEta: {'sesso': 'f', 'eta': 45}, 'colore_invio': 'giallo'});
+      expect(await campiDi(id), {kIdCampoSessoEta: {'sesso': 'f', 'eta': 45}, 'colore_invio': 'giallo'});
+    });
+
+    test('il campo speciale non si elimina; togliere un sesso tiene l\'età', () async {
+      final speciale = (await getCampiServizio()).firstWhere((c) => c.speciale);
+      final senzaF = speciale.copyWith(opzioni: speciale.opzioni.where((o) => o.id != 'f').toList());
+      // Il DB dei test è condiviso: conta anche i servizi dei test precedenti.
+      final giaPrima = await contaValoriNonPiuValidi(senzaF);
+      final conF = await servizioCon({kIdCampoSessoEta: {'sesso': 'f', 'eta': 30}});
+      final soloF = await servizioCon({kIdCampoSessoEta: {'sesso': 'f'}});
+      final conM = await servizioCon({kIdCampoSessoEta: {'sesso': 'm', 'eta': 60}});
+
+      await expectLater(deleteCampoServizio(speciale.id), throwsStateError);
+      expect((await getCampiServizio()).any((c) => c.id == speciale.id), isTrue);
+
+      expect(await contaValoriNonPiuValidi(senzaF), giaPrima + 2);
+      await saveCampoServizio(senzaF);
+      expect(await campiDi(conF), {kIdCampoSessoEta: {'eta': 30}});
+      expect(await campiDi(soloF), isEmpty);
+      expect(await campiDi(conM), {kIdCampoSessoEta: {'sesso': 'm', 'eta': 60}});
+      await saveCampoServizio(speciale); // rimette F per gli altri test
     });
 
     test('un campo nuovo va in fondo; rinominare un valore non tocca i servizi', () async {

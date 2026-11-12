@@ -684,7 +684,7 @@ Future<void> saveCampoServizio(CampoServizio campo) async {
         ..remove('ordine')
         ..remove('created_at');
       await txn.update('campi_servizio', map, where: 'id = ?', whereArgs: [campo.id]);
-      await _togliValori(txn, campo.id, (v) => !campo.valoreValido(v));
+      await _aggiornaValori(txn, campo.id, campo.pulisci);
     }
   });
 }
@@ -697,12 +697,18 @@ Future<void> setCampoServizioVisibile(String id, bool visibile) async {
 }
 
 /// Elimina un campo e toglie il suo valore da tutti i servizi, così non
-/// restano dati che nessuna schermata può più mostrare.
+/// restano dati che nessuna schermata può più mostrare. Il campo speciale
+/// sesso ed età non si elimina (si nasconde): la schermata non offre la
+/// voce, e qui lo si rifiuta comunque.
 Future<void> deleteCampoServizio(String id) async {
   final db = await getDb();
   await db.transaction((txn) async {
+    final righe = await txn.query('campi_servizio', columns: ['tipo'], where: 'id = ?', whereArgs: [id]);
+    if (righe.isNotEmpty && righe.first['tipo'] == kCampoSessoEta) {
+      throw StateError('Il campo sesso ed età non si elimina: si può nascondere.');
+    }
     await txn.delete('campi_servizio', where: 'id = ?', whereArgs: [id]);
-    await _togliValori(txn, id, (_) => true);
+    await _aggiornaValori(txn, id, (_) => null);
   });
 }
 
@@ -731,12 +737,16 @@ Future<int> contaServiziConCampo(String campoId) async {
   return servizi.length;
 }
 
-/// Quanti servizi perderebbero il loro valore salvando [campo] così com'è
-/// (per la conferma prima di salvare una modifica).
+/// Quanti servizi perderebbero il loro valore, o una parte (nel campo
+/// speciale), salvando [campo] così com'è (per la conferma prima di salvare
+/// una modifica).
 Future<int> contaValoriNonPiuValidi(CampoServizio campo) async {
   final db = await getDb();
   final servizi = await _serviziConValore(db, campo.id);
-  return servizi.where((s) => !campo.valoreValido(s.campi[campo.id])).length;
+  return servizi.where((s) {
+    final valore = s.campi[campo.id];
+    return !stessoValoreCampo(campo.pulisci(valore), valore);
+  }).length;
 }
 
 /// Servizi che hanno una chiave [campoId] in `campi`, con la mappa decodificata.
@@ -752,15 +762,21 @@ Future<List<({String id, Map<String, dynamic> campi})>> _serviziConValore(
   return risultato;
 }
 
-/// Toglie dai servizi il valore del campo [campoId] quando [daTogliere] dice
-/// di sì. Aggiorna anche `updated_at` dei servizi toccati, perché il loro
-/// contenuto cambia.
-Future<void> _togliValori(
-    DatabaseExecutor db, String campoId, bool Function(dynamic valore) daTogliere) async {
+/// Sostituisce nei servizi il valore del campo [campoId] con quello dato da
+/// [nuovoValore] (null = togliere il valore). Tocca solo i servizi in cui
+/// cambia qualcosa, e ne aggiorna anche `updated_at`.
+Future<void> _aggiornaValori(
+    DatabaseExecutor db, String campoId, dynamic Function(dynamic valore) nuovoValore) async {
   final now = _now();
   for (final s in await _serviziConValore(db, campoId)) {
-    if (!daTogliere(s.campi[campoId])) continue;
-    s.campi.remove(campoId);
+    final vecchio = s.campi[campoId];
+    final nuovo = nuovoValore(vecchio);
+    if (stessoValoreCampo(nuovo, vecchio)) continue;
+    if (nuovo == null) {
+      s.campi.remove(campoId);
+    } else {
+      s.campi[campoId] = nuovo;
+    }
     await db.update('servizi', {'campi': jsonEncode(s.campi), 'updated_at': now},
         where: 'id = ?', whereArgs: [s.id]);
   }

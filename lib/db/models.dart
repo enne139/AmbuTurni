@@ -495,6 +495,14 @@ const String kCampoTendina = 'TENDINA';
 const String kCampoColori = 'COLORI';
 const String kCampoTesto = 'TESTO';
 const String kCampoNumero = 'NUMERO';
+// Tipo speciale (v16, richiesta dell'utente): sesso ed età del paziente in
+// un campo solo, con i due controlli affiancati. È uno e fisso: si nasconde,
+// si sposta e se ne cambiano i valori del sesso, ma non si crea da "Nuovo
+// campo" e non si elimina. Il valore è una mappa {"sesso": id opzione,
+// "eta": numero}, con una sola delle due parti se l'altra è vuota.
+const String kCampoSessoEta = 'SESSO_ETA';
+const String kIdCampoSessoEta = 'sesso_eta';
+// Tipi che si possono scegliere creando un campo (lo speciale no).
 const List<String> tipiCampoServizio = [kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero];
 
 /// Nome del tipo di campo da mostrare all'utente.
@@ -503,6 +511,7 @@ String nomeTipoCampo(String tipo) => switch (tipo) {
       kCampoColori => 'Colori',
       kCampoTesto => 'Testo',
       kCampoNumero => 'Numero',
+      kCampoSessoEta => 'Sesso ed età',
       _ => tipo,
     };
 
@@ -557,8 +566,11 @@ class CampoServizio {
     this.updatedAt,
   });
 
-  /// true per i tipi che si scelgono da un elenco di valori.
-  bool get haOpzioni => tipo == kCampoTendina || tipo == kCampoColori;
+  /// true per i tipi con un elenco di valori (nello speciale, quelli del sesso).
+  bool get haOpzioni => tipo == kCampoTendina || tipo == kCampoColori || tipo == kCampoSessoEta;
+
+  /// true per il campo speciale sesso ed età.
+  bool get speciale => tipo == kCampoSessoEta;
 
   OpzioneCampo? opzione(String? id) {
     if (id == null) return null;
@@ -568,23 +580,58 @@ class CampoServizio {
     return null;
   }
 
-  /// true se [valore] vale per il campo così com'è definito adesso. Serve a
-  /// capire quali valori salvati nei servizi vanno tolti quando si cambia il
-  /// tipo o si toglie un valore dall'elenco, e a non mostrare quelli rimasti
-  /// orfani.
-  bool valoreValido(dynamic valore) => switch (tipo) {
-        kCampoTendina || kCampoColori => valore is String && opzione(valore) != null,
-        kCampoTesto => valore is String && valore.isNotEmpty,
-        kCampoNumero => valore is num,
-        _ => false,
-      };
+  /// La parte di [valore] che vale per il campo così com'è definito adesso,
+  /// oppure null se non ne resta niente. Serve a capire cosa togliere dai
+  /// servizi quando si cambia il tipo o si toglie un valore dall'elenco, e a
+  /// non mostrare i valori rimasti orfani. Per lo speciale si tiene la parte
+  /// buona: togliere un valore del sesso non deve far perdere l'età.
+  dynamic pulisci(dynamic valore) {
+    switch (tipo) {
+      case kCampoTendina:
+      case kCampoColori:
+        return valore is String && opzione(valore) != null ? valore : null;
+      case kCampoTesto:
+        return valore is String && valore.isNotEmpty ? valore : null;
+      case kCampoNumero:
+        return valore is num ? valore : null;
+      case kCampoSessoEta:
+        if (valore is! Map) return null;
+        final sesso = valore['sesso'];
+        final eta = valore['eta'];
+        final parti = <String, dynamic>{
+          if (sesso is String && opzione(sesso) != null) 'sesso': sesso,
+          if (eta is num) 'eta': eta,
+        };
+        return parti.isEmpty ? null : parti;
+    }
+    return null;
+  }
+
+  /// true se [valore] vale (almeno in parte) per il campo com'è adesso.
+  bool valoreValido(dynamic valore) => pulisci(valore) != null;
+
+  /// Opzione del sesso scelta in un valore del campo speciale.
+  OpzioneCampo? sessoDi(dynamic valore) =>
+      speciale && valore is Map && valore['sesso'] is String ? opzione(valore['sesso'] as String) : null;
+
+  /// Età in un valore del campo speciale.
+  num? etaDi(dynamic valore) => speciale && valore is Map && valore['eta'] is num ? valore['eta'] as num : null;
 
   /// Testo da mostrare per [valore], oppure null se è vuoto o non vale più.
+  /// Per lo speciale: "F · 45 anni", o solo una delle due parti.
   String? etichetta(dynamic valore) {
-    if (!valoreValido(valore)) return null;
-    if (haOpzioni) return opzione(valore as String)!.nome;
-    if (valore is num) return formatNumeroCampo(valore);
-    return valore as String;
+    final v = pulisci(valore);
+    if (v == null) return null;
+    if (speciale) {
+      final eta = etaDi(v);
+      return [
+        if (sessoDi(v) != null) sessoDi(v)!.nome,
+        if (eta != null) '${formatNumeroCampo(eta)} anni',
+      ].join(' · ');
+    }
+    if (haOpzioni) return opzione(v as String)!.nome;
+    if (v is num) return formatNumeroCampo(v);
+    return v as String;
   }
 
   factory CampoServizio.fromMap(Map<String, dynamic> m) {
@@ -641,6 +688,15 @@ class CampoServizio {
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
+}
+
+/// true se due valori di un campo personalizzato sono uguali, anche quando
+/// sono mappe (campo speciale) con le chiavi in un ordine diverso.
+bool stessoValoreCampo(dynamic a, dynamic b) {
+  if (a is Map && b is Map) {
+    return a.length == b.length && a.keys.every((k) => b.containsKey(k) && a[k] == b[k]);
+  }
+  return a == b;
 }
 
 /// Numero di un campo personalizzato come lo scrive un italiano: senza

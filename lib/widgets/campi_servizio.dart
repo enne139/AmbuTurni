@@ -22,9 +22,10 @@ class PallinoColore extends StatelessWidget {
 }
 
 /// Valori dei campi personalizzati di un servizio, nella card del dettaglio
-/// turno: "Sesso M · Età 45 · ● Giallo". Solo i campi [campi] passati (quelli
-/// visibili) e solo quelli con un valore valido; se non ce n'è nessuno non
-/// occupa spazio.
+/// turno: "Sesso F  Età 45  Colore invio ● Giallo". Solo i campi [campi]
+/// passati (quelli visibili) e solo quelli con un valore valido; se non ce
+/// n'è nessuno non occupa spazio. Il campo speciale mostra sesso ed età come
+/// due voci, come nel form.
 class ValoriCampiServizio extends StatelessWidget {
   final List<CampoServizio> campi;
   final Map<String, dynamic> valori;
@@ -33,8 +34,22 @@ class ValoriCampiServizio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voci = <Widget>[];
+    Widget voce(String nome, String valore) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$nome ', style: TextStyle(color: coloreTesto(context, 0.45), fontSize: 12)),
+            Text(valore, style: TextStyle(color: coloreTesto(context, 0.8), fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
+        );
     for (final campo in campi) {
-      final valore = valori[campo.id];
+      final valore = campo.pulisci(valori[campo.id]);
+      if (campo.speciale) {
+        final sesso = campo.sessoDi(valore);
+        final eta = campo.etaDi(valore);
+        if (sesso != null) voci.add(voce('Sesso', sesso.nome));
+        if (eta != null) voci.add(voce('Età', formatNumeroCampo(eta)));
+        continue;
+      }
       final etichetta = campo.etichetta(valore);
       if (etichetta == null) continue;
       voci.add(Row(

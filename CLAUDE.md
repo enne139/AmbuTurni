@@ -288,7 +288,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: `kVersioneDb` = 15); `_onOpen` esegue soltanto i PRAGMA
+(versione corrente: `kVersioneDb` = 16); `_onOpen` esegue soltanto i PRAGMA
 di connessione (WAL + foreign_keys). Le migrazioni si testano in
 `test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
 schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
@@ -305,8 +305,8 @@ al posto della vecchia `descrizione`; i `servizi` tengono la loro
 `descrizione`. Vedi "Orario al posto della descrizione" in Decisioni tecniche.
 
 `campi_servizio` (v15) contiene le definizioni dei campi personalizzati dei
-servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO`, valori possibili in
-JSON, `visibile`, `ordine`); i valori di ogni servizio stanno in
+servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO` o lo speciale
+`SESSO_ETA` dalla v16, valori possibili in JSON, `visibile`, `ordine`); i valori di ogni servizio stanno in
 `servizi.campi` (JSON id campo -> valore). Vedi "Campi personalizzati dei
 servizi" in Decisioni tecniche.
 
@@ -2816,6 +2816,42 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     nuovo campo di testo, conferma togliendo un valore usato, conferma
     di eliminazione; tema chiaro e scuro.
     **Da verificare su Android reale** (regola 8): migrazioni v14 e v15.
+- **Sesso ed età: un campo speciale affiancato (2026-11-12, DB v16)**:
+  richiesta dell'utente dopo aver provato la v15, dove Sesso ed Età erano
+  due campi separati uno sotto l'altro. Ora sono un solo campo di tipo
+  `SESSO_ETA` (id fisso `sesso_eta`), con la tendina del sesso e l'età
+  sulla stessa riga del form e due voci "Sesso F  Età 45" nella card.
+  - **Fisso**: c'è sempre, si nasconde, si sposta e se ne cambiano i
+    valori del sesso (M, F, A all'inizio) come una tendina, ma nome e tipo
+    non si cambiano, non compare tra i tipi di "Nuovo campo" (resta
+    `tipiCampoServizio`) e non si elimina: niente voce "Elimina" nel menu,
+    e `deleteCampoServizio` lo rifiuta con uno `StateError`. Scelta mia,
+    l'utente non ha indicato altro: con un campo eliminabile servirebbe un
+    modo per ricrearlo.
+  - **Valore**: una mappa `{"sesso": id opzione, "eta": numero}`, anche
+    con una parte sola. `CampoServizio.pulisci` (ha preso il posto del
+    vecchio controllo sì/no) restituisce la parte che vale ancora, così
+    togliere un valore del sesso lascia l'età; `contaValoriNonPiuValidi` e
+    `_aggiornaValori` (ex `_togliValori`) lavorano su quel valore pulito,
+    con `stessoValoreCampo` per confrontare le mappe.
+  - **Migrazione v16**: il tipo nuovo va nel CHECK di `campi_servizio`,
+    quindi la tabella si ricostruisce (nessuna FK punta lì). Poi
+    `_unisciSessoEta` porta i campi `sesso` (tendina) ed `eta` (numero)
+    della v15 nel campo speciale, al posto del primo dei due, con i valori
+    del sesso di prima e visibile se almeno uno lo era, e riscrive i valori
+    dei servizi nella mappa; se l'utente li aveva cancellati tutti e due,
+    lo speciale nasce nascosto. I campi iniziali della v15 restano
+    congelati in `_campiServizioV15`; una installazione nuova parte da
+    `_campiServizioIniziali` (Sesso ed età + Colore invio).
+  - **Verificato**: `flutter test` (campo speciale nel modello, valori,
+    eliminazione rifiutata, sesso tolto che tiene l'età; migrazione
+    v15 → v16 con Età nascosta e spostata, un campo dell'utente e servizi
+    con valori interi, parziali o assenti; v13 → v16). Su Waydroid
+    (debug sopra la v15 già installata): elenco con Sesso ed età speciale
+    e il campo creato dall'utente intatto. Web in Chromium: form con
+    sesso ed età affiancati sotto la descrizione, card, modifica del campo
+    speciale, menu senza "Elimina".
+    **Da verificare su Android reale** (regola 8): migrazioni v14–v16.
 
 ---
 
@@ -2838,8 +2874,9 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   una riga accanto a data e ore, es. "12:00 - 18:00".
 - ✅ **Campi personalizzati dei servizi** (v15, Impostazioni → Campi dei
   servizi): tendina, colori, testo o numero, mostrati o nascosti,
-  riordinabili; partono Sesso (M, F, A), Età e Colore invio (verde,
-  giallo, rosso); valori nel form e nella card del servizio.
+  riordinabili; partono Sesso ed età (campo speciale, affiancati, v16) e
+  Colore invio (verde, giallo, rosso); valori nel form e nella card del
+  servizio, sotto la descrizione.
 - ✅ **Statistiche**: 6 card aggregate, filtro associazione, si aggiornano anche dopo import.
 - ✅ **Anagrafiche** (raggiungibile dall'AppBar di Attività): CRUD
   associazioni/persone/ospedali/tipologie turno, "Vedi turni" per
@@ -2923,7 +2960,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 248 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 251 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

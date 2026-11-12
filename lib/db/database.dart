@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
 CREATE TABLE IF NOT EXISTS campi_servizio (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL,
-  tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA')),
   opzioni TEXT DEFAULT '[]',
   visibile INTEGER NOT NULL DEFAULT 1,
   ordine INTEGER DEFAULT 0,
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS campi_servizio (
 
 /// Versione corrente dello schema: ogni cambiamento allo schema la fa salire
 /// di uno, con la sua migrazione in _onUpgrade (regola 7 del CLAUDE.md).
-const int kVersioneDb = 15;
+const int kVersioneDb = 16;
 
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
@@ -576,47 +576,148 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
       )
     ''');
     try { await db.execute("ALTER TABLE servizi ADD COLUMN campi TEXT DEFAULT '{}'"); } catch (_) {}
-    await _inserisciCampiServizioIniziali(db);
+    await _inserisciCampiServizioIniziali(db, _campiServizioV15);
+  }
+  if (oldVersion < 16) {
+    // Sesso ed età diventano un campo speciale unico, coi due controlli
+    // affiancati (richiesta dell'utente arrivata dopo la v15). Il tipo
+    // SESSO_ETA va aggiunto al CHECK di campi_servizio, e SQLite non cambia
+    // un CHECK con ALTER: la tabella si ricostruisce (nessuna FK punta qui).
+    final sql = (await db.rawQuery(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'campi_servizio'"))
+        .first['sql'] as String;
+    if (!sql.contains('SESSO_ETA')) {
+      final righe = await db.query('campi_servizio');
+      await db.execute('DROP TABLE campi_servizio');
+      await db.execute('''
+        CREATE TABLE campi_servizio (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL,
+          tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA')),
+          opzioni TEXT DEFAULT '[]',
+          visibile INTEGER NOT NULL DEFAULT 1,
+          ordine INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )
+      ''');
+      for (final riga in righe) {
+        await db.insert('campi_servizio', riga);
+      }
+    }
+    await _unisciSessoEta(db);
   }
 }
 
-/// Campi personalizzati con cui parte ogni installazione (indicati
-/// dall'utente). Si modificano, nascondono e cancellano come gli altri. Id
-/// fissi e leggibili al posto degli UUID: sono uguali su ogni dispositivo.
-/// I colori di "Colore invio" sono quelli della palette dell'app, così si
-/// ritrovano uguali nel selettore quando si modifica il campo.
-const _campiServizioIniziali = [
-  {
-    'id': 'sesso',
-    'nome': 'Sesso',
-    'tipo': 'TENDINA',
-    'opzioni': [
-      {'id': 'm', 'nome': 'M'},
-      {'id': 'f', 'nome': 'F'},
-      {'id': 'a', 'nome': 'A'},
-    ],
-  },
-  {'id': 'eta', 'nome': 'Età', 'tipo': 'NUMERO', 'opzioni': []},
-  {
-    'id': 'colore_invio',
-    'nome': 'Colore invio',
-    'tipo': 'COLORI',
-    'opzioni': [
-      {'id': 'verde', 'nome': 'Verde', 'colore': '#43A047'},
-      {'id': 'giallo', 'nome': 'Giallo', 'colore': '#FDD835'},
-      {'id': 'rosso', 'nome': 'Rosso', 'colore': '#E53935'},
-    ],
-  },
+/// v16: porta i campi separati "Sesso" (tendina) ed "Età" (numero) creati
+/// dalla v15 nel campo speciale `sesso_eta`, insieme ai loro valori nei
+/// servizi ({"sesso": id, "eta": numero}). Se uno dei due era stato
+/// cancellato si usa quello che resta; se mancano tutti e due lo speciale
+/// nasce nascosto, per rispettare la scelta di averli tolti, con i valori
+/// M, F, A. Non fa niente se lo speciale c'è già.
+Future<void> _unisciSessoEta(Database db) async {
+  final campi = await db.query('campi_servizio');
+  if (campi.any((c) => c['tipo'] == 'SESSO_ETA')) return;
+  Map<String, Object?>? cerca(String id, String tipo) {
+    for (final c in campi) {
+      if (c['id'] == id && c['tipo'] == tipo) return c;
+    }
+    return null;
+  }
+
+  final sesso = cerca('sesso', 'TENDINA');
+  final eta = cerca('eta', 'NUMERO');
+  final vecchi = [if (sesso != null) sesso, if (eta != null) eta];
+  final adesso = DateTime.now().toUtc().toIso8601String();
+  await db.insert('campi_servizio', {
+    'id': 'sesso_eta',
+    'nome': 'Sesso ed età',
+    'tipo': 'SESSO_ETA',
+    'opzioni': sesso?['opzioni'] ?? jsonEncode(_opzioniSesso),
+    'visibile': vecchi.isEmpty ? 0 : (vecchi.any((c) => c['visibile'] == 1) ? 1 : 0),
+    // Al posto del primo dei due; se non c'erano, in fondo.
+    'ordine': vecchi.isEmpty
+        ? campi.length
+        : vecchi.map((c) => (c['ordine'] as int?) ?? 0).reduce((a, b) => a < b ? a : b),
+    'created_at': adesso,
+    'updated_at': adesso,
+  });
+  if (vecchi.isEmpty) return;
+
+  final servizi = await db.query('servizi',
+      columns: ['id', 'campi'], where: "campi IS NOT NULL AND campi != '{}'");
+  for (final servizio in servizi) {
+    final Map<String, dynamic> valori;
+    try {
+      final decoded = jsonDecode(servizio['campi'] as String);
+      if (decoded is! Map) continue;
+      valori = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      continue; // JSON rovinato: il servizio resta com'era
+    }
+    final haSesso = sesso != null && valori.containsKey('sesso');
+    final haEta = eta != null && valori.containsKey('eta');
+    if (!haSesso && !haEta) continue;
+    final valoreSesso = haSesso ? valori.remove('sesso') : null;
+    final valoreEta = haEta ? valori.remove('eta') : null;
+    final unito = <String, dynamic>{
+      if (valoreSesso is String) 'sesso': valoreSesso,
+      if (valoreEta is num) 'eta': valoreEta,
+    };
+    if (unito.isNotEmpty) valori['sesso_eta'] = unito;
+    await db.update('servizi', {'campi': jsonEncode(valori)},
+        where: 'id = ?', whereArgs: [servizio['id']]);
+  }
+  for (final c in vecchi) {
+    await db.delete('campi_servizio', where: 'id = ?', whereArgs: [c['id']]);
+  }
+}
+
+/// Valori del sesso con cui parte il campo speciale (indicati dall'utente).
+const _opzioniSesso = [
+  {'id': 'm', 'nome': 'M'},
+  {'id': 'f', 'nome': 'F'},
+  {'id': 'a', 'nome': 'A'},
 ];
 
-/// Inserisce i campi iniziali solo se la tabella è vuota: se l'utente li ha
-/// già cancellati o cambiati non vanno ricreati.
-Future<void> _inserisciCampiServizioIniziali(Database db) async {
+/// "Colore invio": colori presi dalla palette dell'app, così si ritrovano
+/// uguali nel selettore quando si modifica il campo.
+const _campoColoreInvio = {
+  'id': 'colore_invio',
+  'nome': 'Colore invio',
+  'tipo': 'COLORI',
+  'opzioni': [
+    {'id': 'verde', 'nome': 'Verde', 'colore': '#43A047'},
+    {'id': 'giallo', 'nome': 'Giallo', 'colore': '#FDD835'},
+    {'id': 'rosso', 'nome': 'Rosso', 'colore': '#E53935'},
+  ],
+};
+
+/// Campi personalizzati con cui parte una installazione nuova (indicati
+/// dall'utente): il campo speciale sesso ed età e Colore invio. Id fissi e
+/// leggibili al posto degli UUID: sono uguali su ogni dispositivo.
+const _campiServizioIniziali = [
+  {'id': 'sesso_eta', 'nome': 'Sesso ed età', 'tipo': 'SESSO_ETA', 'opzioni': _opzioniSesso},
+  _campoColoreInvio,
+];
+
+/// I campi iniziali come li creava la migrazione v15, quando sesso ed età
+/// erano ancora due campi separati: la migrazione deve restare uguale anche
+/// se i campi iniziali cambiano, e la v16 li unisce nel campo speciale.
+const _campiServizioV15 = [
+  {'id': 'sesso', 'nome': 'Sesso', 'tipo': 'TENDINA', 'opzioni': _opzioniSesso},
+  {'id': 'eta', 'nome': 'Età', 'tipo': 'NUMERO', 'opzioni': []},
+  _campoColoreInvio,
+];
+
+/// Inserisce [campi] solo se la tabella è vuota: se l'utente li ha già
+/// cancellati o cambiati non vanno ricreati.
+Future<void> _inserisciCampiServizioIniziali(Database db, List<Map<String, Object>> campi) async {
   final n = (await db.rawQuery('SELECT COUNT(*) AS n FROM campi_servizio')).first['n'] as int;
   if (n > 0) return;
   final adesso = DateTime.now().toUtc().toIso8601String();
-  for (var i = 0; i < _campiServizioIniziali.length; i++) {
-    final campo = _campiServizioIniziali[i];
+  for (var i = 0; i < campi.length; i++) {
+    final campo = campi[i];
     await db.insert('campi_servizio', {
       'id': campo['id'],
       'nome': campo['nome'],
@@ -688,7 +789,7 @@ Future<void> _onCreate(Database db, int version) async {
       await db.execute(s);
     }
   }
-  await _inserisciCampiServizioIniziali(db);
+  await _inserisciCampiServizioIniziali(db, _campiServizioIniziali);
 }
 
 /// Apre il DB: solo i PRAGMA di connessione. Le modifiche allo schema vivono

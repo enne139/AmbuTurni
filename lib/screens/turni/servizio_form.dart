@@ -73,6 +73,28 @@ class _ServizioFormState extends State<ServizioForm> {
   Map<String, dynamic>? _valoriCampi() {
     final valori = Map<String, dynamic>.from(_campi);
     for (final campo in context.read<AnagraficheProvider>().campiServizioVisibili) {
+      if (campo.speciale) {
+        // Il sesso è già nella mappa (scelto dalla tendina), l'età si legge
+        // dal suo controller; senza nessuna delle due il valore si toglie.
+        final parti = _parti(campo)..remove('eta');
+        final testo = _ctrlEta(campo).text.trim();
+        if (testo.isNotEmpty) {
+          final eta = parseNumeroCampo(testo);
+          if (eta == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('L\'età deve essere un numero')),
+            );
+            return null;
+          }
+          parti['eta'] = eta;
+        }
+        if (parti.isEmpty) {
+          valori.remove(campo.id);
+        } else {
+          valori[campo.id] = parti;
+        }
+        continue;
+      }
       if (campo.tipo != kCampoTesto && campo.tipo != kCampoNumero) continue;
       final testo = _ctrlCampi[campo.id]?.text.trim() ?? '';
       if (testo.isEmpty) {
@@ -136,6 +158,82 @@ class _ServizioFormState extends State<ServizioForm> {
         final testo = v is num ? formatNumeroCampo(v) : (v is String ? v : '');
         return TextEditingController(text: testo);
       });
+
+  /// Valore del campo speciale come mappa modificabile ({"sesso", "eta"}).
+  Map<String, dynamic> _parti(CampoServizio campo) {
+    final v = _campi[campo.id];
+    return v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+  }
+
+  /// Controller dell'età del campo speciale, creato col valore salvato.
+  TextEditingController _ctrlEta(CampoServizio campo) =>
+      _ctrlCampi.putIfAbsent('${campo.id}.eta', () {
+        final eta = campo.etaDi(_campi[campo.id]);
+        return TextEditingController(text: eta == null ? '' : formatNumeroCampo(eta));
+      });
+
+  /// Sceglie (o toglie, con null) il sesso nel campo speciale, lasciando
+  /// com'è l'età.
+  void _scegliSesso(CampoServizio campo, String? opzioneId) => setState(() {
+        final parti = _parti(campo);
+        if (opzioneId == null) {
+          parti.remove('sesso');
+        } else {
+          parti['sesso'] = opzioneId;
+        }
+        if (parti.isEmpty) {
+          _campi.remove(campo.id);
+        } else {
+          _campi[campo.id] = parti;
+        }
+      });
+
+  /// Campo speciale: sesso (tendina) ed età (numero) sulla stessa riga,
+  /// ognuno con la sua etichetta, come voluto dall'utente.
+  Widget _inputSessoEta(CampoServizio campo) {
+    const stileEtichetta = TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600);
+    final sesso = campo.sessoDi(_campi[campo.id])?.id;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Sesso', style: stileEtichetta),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String?>(
+                initialValue: sesso,
+                dropdownColor: Theme.of(context).colorScheme.surface,
+                decoration: const InputDecoration(),
+                hint: const Text('—'),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('—')),
+                  ...campo.opzioni.map((o) => DropdownMenuItem<String?>(value: o.id, child: Text(o.nome))),
+                ],
+                onChanged: (v) => _scegliSesso(campo, v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Età', style: stileEtichetta),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _ctrlEta(campo),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(hintText: 'Anni'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   /// Imposta (o toglie, con null) il valore scelto in un campo a tendina o
   /// a colori.
@@ -288,9 +386,13 @@ class _ServizioFormState extends State<ServizioForm> {
           // Campi personalizzati visibili, nell'ordine delle
           // Impostazioni → Campi dei servizi.
           for (final campo in anag.campiServizioVisibili) ...[
-            Text(campo.nome, style: const TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            _inputCampo(campo),
+            if (campo.speciale)
+              _inputSessoEta(campo)
+            else ...[
+              Text(campo.nome, style: const TextStyle(color: kPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              _inputCampo(campo),
+            ],
             const SizedBox(height: 20),
           ],
         ],
