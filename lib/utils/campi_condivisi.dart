@@ -120,11 +120,13 @@ class EsitoUnioneCampi {
 }
 
 /// true se un campo di tipo [da] può diventare di tipo [a] senza perdere
-/// valori né cambiarne la forma: stesso tipo, oppure tendina e colori
-/// (stessi valori, stessi id). La combo box salva una lista di id, quindi
-/// si unisce solo con un'altra combo box.
+/// valori né cambiarne la forma: stesso tipo, tendina e colori (stessi
+/// valori, stessi id), oppure combo box e combo con ricerca (tutte e due
+/// una lista di id).
 bool _tipiCompatibili(String da, String a) =>
-    da == a || {da, a}.difference({kCampoTendina, kCampoColori}).isEmpty;
+    da == a ||
+    {da, a}.difference({kCampoTendina, kCampoColori}).isEmpty ||
+    {da, a}.difference({kCampoCombo, kCampoComboRicerca}).isEmpty;
 
 /// Unisce la lista [daFile] a quella del dispositivo [locali], come scelto
 /// dall'utente: i campi uguali si aggiornano, quelli nuovi si aggiungono,

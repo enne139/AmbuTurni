@@ -119,6 +119,12 @@ void main() {
       final c = esito.campi.single;
       expect(c.id, 't');
       expect(c.opzioni.map((o) => o.nome), ['Reparto', 'Pronto soccorso']);
+      // Con la combo con ricerca sì: salvano lo stesso valore.
+      final conRicerca = unisciCampi([combo], [
+        const CampoServizio(id: 't', nome: 'Destinazione', tipo: kCampoComboRicerca),
+      ]);
+      expect(conRicerca.saltati, isEmpty);
+      expect(conRicerca.campi.single.tipo, kCampoComboRicerca);
       // Da testo o da tendina cambierebbe la forma dei valori: non si unisce.
       const testo = CampoServizio(id: 'n', nome: 'Note', tipo: kCampoTesto);
       expect(unisciCampi([testo], [const CampoServizio(id: 'n', nome: 'Note', tipo: kCampoCombo)]).saltati,

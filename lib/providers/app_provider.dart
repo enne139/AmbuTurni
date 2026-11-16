@@ -66,9 +66,10 @@ class AnagraficheProvider extends ChangeNotifier {
 
   bool get caricato => _caricato;
 
-  /// Solo i campi da mostrare nel form e nel dettaglio dei servizi.
+  /// Solo i campi da mostrare nel form e nel dettaglio dei servizi: visibili
+  /// e di un tipo che questa versione sa disegnare (vedi tipoSupportato).
   List<CampoServizio> get campiServizioVisibili =>
-      campiServizio.where((c) => c.visibile).toList();
+      campiServizio.where((c) => c.visibile && c.tipoSupportato).toList();
 
   /// Ricarica i campi personalizzati dopo una modifica dalle Impostazioni,
   /// senza rileggere tutte le anagrafiche.

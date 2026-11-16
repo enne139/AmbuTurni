@@ -212,6 +212,23 @@ void main() {
       expect(combo.valoreValido('ps'), isFalse); // non è una lista
     });
 
+    test('combo con ricerca: come la combo box, e tipi non supportati', () {
+      const ricerca = CampoServizio(id: 'r', nome: 'Patologie', tipo: kCampoComboRicerca, opzioni: [
+        OpzioneCampo(id: 'asma', nome: 'Asma'),
+        OpzioneCampo(id: 'bpco', nome: 'BPCO'),
+      ]);
+      expect(tipoMultiplo(kCampoComboRicerca), isTrue);
+      expect(ricerca.etichetta(['bpco', 'asma', 'tolta']), 'Asma, BPCO');
+      final combo = ricerca.copyWith(tipo: kCampoCombo);
+      expect(combo.convertiDa(ricerca, ['asma']), ['asma']); // stesso valore
+      const tendina = CampoServizio(id: 'r', nome: 'Patologie', tipo: kCampoTendina, opzioni: [
+        OpzioneCampo(id: 'asma', nome: 'Asma'),
+      ]);
+      expect(ricerca.convertiDa(tendina, 'asma'), ['asma']);
+      expect(ricerca.tipoSupportato, isTrue);
+      expect(const CampoServizio(id: 'x', nome: 'X', tipo: 'TIPO_FUTURO').tipoSupportato, isFalse);
+    });
+
     test('convertiDa: tendina ↔ combo box', () {
       const tendina = CampoServizio(id: 'd', nome: 'Destinazione', tipo: kCampoTendina, opzioni: [
         OpzioneCampo(id: 'ps', nome: 'Pronto soccorso'),

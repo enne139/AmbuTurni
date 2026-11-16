@@ -293,7 +293,7 @@ lascia semplicemente assenti.
 
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: `kVersioneDb` = 18); `_onOpen` esegue soltanto i PRAGMA
+(versione corrente: `kVersioneDb` = 19); `_onOpen` esegue soltanto i PRAGMA
 di connessione (WAL + foreign_keys). Le migrazioni si testano in
 `test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
 schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
@@ -311,7 +311,9 @@ al posto della vecchia `descrizione`; i `servizi` tengono la loro
 
 `campi_servizio` (v15) contiene le definizioni dei campi personalizzati dei
 servizi (nome, tipo `TENDINA`/`COLORI`/`TESTO`/`NUMERO`, `ORARIO`/`COMBO`
-dalla v17, `TABELLA_ORARI` dalla v18 o lo speciale `SESSO_ETA` dalla v16, valori possibili in JSON,
+dalla v17, `TABELLA_ORARI` dalla v18, `COMBO_RICERCA` dalla v19 o lo
+speciale `SESSO_ETA` dalla v16 — dalla v19 senza CHECK sul tipo, controllato
+dall'app, valori possibili in JSON,
 `visibile`, `ordine`); i valori di ogni servizio stanno in
 `servizi.campi` (JSON id campo -> valore). Vedi "Campi personalizzati dei
 servizi" in Decisioni tecniche.
@@ -2950,6 +2952,40 @@ Actions (`build-android.yml`) usa `flutter build apk`.
     Chromium: tabella creata con tre righe, due ore segnate
     dall'orologio, tabellina nella card.
     **Da verificare su Android reale** (regola 8): migrazioni v14–v18.
+- **Combo con ricerca (2026-11-12, DB v19)**: richiesta esplicita, un
+  tipo `COMBO_RICERCA` "dove posso selezionare più voci cercandole".
+  Stesso valore della combo box (lista di id, `tipoMultiplo`), quindi si
+  passa da un tipo all'altro e si uniscono all'import senza toccare i
+  servizi; cambia solo il controllo nel form, `SceltaConRicerca` in
+  `widgets/campi_servizio.dart`: in alto i valori scelti come `InputChip`
+  con la x, sotto un campo di ricerca (`RawAutocomplete`, stesso stile
+  della lista di `OspedalePicker`) che filtra per "contiene" senza badare
+  alle maiuscole e mostra solo i valori non ancora scelti; Invio sceglie il
+  primo trovato, e dopo una scelta il campo si svuota e tiene il cursore
+  per cercare il successivo. Pensata per elenchi lunghi (es. patologie):
+  nell'elenco dei campi, oltre sei valori si mostra solo quanti sono.
+  - **Niente più CHECK sul tipo (v19)**: ogni tipo nuovo (v16, v17, v18)
+    aveva richiesto di ricostruire `campi_servizio` per allargare il CHECK.
+    La v19 la ricostruisce un'ultima volta senza, e il tipo lo controlla
+    l'app: `campiDaJson` scarta i tipi sconosciuti, e un campo di un tipo
+    che questa versione non conosce (es. da un backup di una versione più
+    nuova) resta nelle Impostazioni ma non si mostra nel form né nella card
+    (`CampoServizio.tipoSupportato`, filtrato in `campiServizioVisibili`).
+    I tipi futuri non richiedono più una migrazione.
+  - I test delle migrazioni v16–v18 non controllano più che il DB rifiuti
+    un tipo sconosciuto: le migrazioni girano sempre fino all'ultima
+    versione (i blocchi guardano solo `oldVersion`), quindi dopo la v19 il
+    CHECK non c'è comunque.
+  - **Verificato**: `flutter test` (etichetta, conversione con la combo
+    box e la tendina, `tipoSupportato`, unione combo/combo con ricerca,
+    migrazione v18 → v19 senza CHECK, con un tipo futuro che entra). Web
+    in Chromium: campo con otto patologie, ricerca "dia" → Diabete, poi
+    "iper" + Invio → Ipertensione e "bp" → BPCO senza ritoccare il campo.
+    Attenzione per i test futuri: con la semantica di Flutter attivata
+    (`flt-semantics-placeholder`, usata per trovare gli elementi per
+    testo) il campo riprende il fuoco ma i tasti non arrivano più; senza
+    semantica, come per un utente, funziona. **Da verificare su Android
+    reale** (regola 8): migrazioni v14–v19.
 - **Servizi in CSV (2026-11-12)**: richiesta esplicita, "esportare i
   servizi in formato CSV"; scelta dell'utente: tutti i servizi, senza
   filtri. Pulsante "Esporta servizi in CSV (Excel)" in Impostazioni →
@@ -2994,7 +3030,8 @@ rilevanti"; qui solo l'inventario di cosa esiste.
 - ✅ **Orario** di turni e assistenze (v14, prima "Descrizione"): campo di
   una riga accanto a data e ore, es. "12:00 - 18:00".
 - ✅ **Campi personalizzati dei servizi** (v15, Impostazioni → Campi dei
-  servizi): tendina, colori, testo, numero, orario, combo box o tabella orari, mostrati o nascosti,
+  servizi): tendina, colori, testo, numero, orario, combo box, combo con
+  ricerca o tabella orari, mostrati o nascosti,
   riordinabili; parte Sesso ed età (campo speciale, affiancati, v16:
   Colore invio non c'è più tra i campi iniziali); valori nel form e nella card del
   servizio, sotto la descrizione. La lista si esporta in un file e si
@@ -3084,7 +3121,7 @@ rilevanti"; qui solo l'inventario di cosa esiste.
   scoperti, icona persona, tasto per aprire il link del foglio nel
   browser; Tools spiega anche che Archivio comunicati/Repository
   formazione richiedono credenziali da richiedere all'associazione).
-- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 273 test unitari.
+- ✅ Windows desktop, web (Chrome/Edge), icona app personalizzata, 275 test unitari.
 - ✅ **CI/Release**: build APK su GitHub Actions (runner GitHub-hosted),
   Release automatica sui tag `vX.Y.Z`.
 

@@ -115,3 +115,118 @@ class ValoriCampiServizio extends StatelessWidget {
     );
   }
 }
+
+/// Combo con ricerca: più valori scelti cercandoli. In alto i valori già
+/// scelti come chip con la x, sotto un campo di ricerca che filtra l'elenco
+/// mentre si scrive (senza testo mostra tutti quelli non ancora scelti).
+/// Scelto un valore il campo si svuota e resta pronto per il successivo.
+/// [scelti] e [onChanged] usano gli id, nell'ordine dell'elenco del campo,
+/// come la combo box: i due tipi salvano lo stesso valore.
+class SceltaConRicerca extends StatefulWidget {
+  final CampoServizio campo;
+  final List<String> scelti;
+  final ValueChanged<List<String>> onChanged;
+  const SceltaConRicerca({super.key, required this.campo, required this.scelti, required this.onChanged});
+
+  @override
+  State<SceltaConRicerca> createState() => _SceltaConRicercaState();
+}
+
+class _SceltaConRicercaState extends State<SceltaConRicerca> {
+  final _ctrl = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Gli id scelti dopo aver aggiunto o tolto [id], nell'ordine dell'elenco.
+  List<String> _con(String id, bool scelto) => [
+        for (final o in widget.campo.opzioni)
+          if (o.id == id ? scelto : widget.scelti.contains(o.id)) o.id,
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final scelti = widget.campo.opzioni.where((o) => widget.scelti.contains(o.id)).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (scelti.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final o in scelti)
+                InputChip(
+                  label: Text(o.nome),
+                  onDeleted: () => widget.onChanged(_con(o.id, false)),
+                  deleteButtonTooltipMessage: 'Togli',
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        LayoutBuilder(
+          builder: (context, vincoli) => RawAutocomplete<OpzioneCampo>(
+            textEditingController: _ctrl,
+            focusNode: _focus,
+            displayStringForOption: (o) => o.nome,
+            optionsBuilder: (testo) {
+              final q = testo.text.trim().toLowerCase();
+              return widget.campo.opzioni.where(
+                  (o) => !widget.scelti.contains(o.id) && (q.isEmpty || o.nome.toLowerCase().contains(q)));
+            },
+            onSelected: (o) {
+              widget.onChanged(_con(o.id, true));
+              // RawAutocomplete ha appena scritto il nome nel campo: lo si
+              // svuota e gli si ridà il cursore, per cercare subito il
+              // valore successivo.
+              _ctrl.clear();
+              _focus.requestFocus();
+            },
+            fieldViewBuilder: (context, ctrl, focus, invia) => TextField(
+              controller: ctrl,
+              focusNode: focus,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                hintText: 'Cerca e aggiungi',
+                prefixIcon: Icon(Icons.search, size: 18),
+              ),
+              // Invio sceglie il primo valore trovato.
+              onSubmitted: (_) => invia(),
+            ),
+            optionsViewBuilder: (ctx, scegli, valori) => Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: Theme.of(context).colorScheme.surface,
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: 250, maxWidth: vincoli.maxWidth),
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    children: [
+                      for (final o in valori)
+                        InkWell(
+                          onTap: () => scegli(o),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            child: Text(o.nome, style: const TextStyle(fontSize: 14)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

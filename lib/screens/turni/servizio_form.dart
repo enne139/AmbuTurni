@@ -416,6 +416,18 @@ class _ServizioFormState extends State<ServizioForm> {
         );
       case kCampoTabellaOrari:
         return _tabellaOrari(campo);
+      case kCampoComboRicerca:
+        return SceltaConRicerca(
+          campo: campo,
+          scelti: ((campo.pulisci(valore) as List?) ?? const []).cast<String>(),
+          onChanged: (ids) => setState(() {
+            if (ids.isEmpty) {
+              _campi.remove(campo.id);
+            } else {
+              _campi[campo.id] = ids;
+            }
+          }),
+        );
       case kCampoCombo:
         // Scelta multipla: un chip con la spunta per ogni valore, se ne
         // accendono quanti se ne vuole. Si salvano gli id nell'ordine

@@ -207,9 +207,9 @@ void main() {
       expect(await campiDi('s2'), {'sesso_eta': {'eta': 7}});
       expect(await campiDi('s3'), {'mio': 'solo questo'});
 
-      // Il CHECK nuovo accetta il tipo speciale e rifiuta i tipi sconosciuti.
+      // Il tipo speciale entra (il CHECK sui tipi, poi tolto nella v19, lo
+      // ammetteva già dalla v16).
       await db.insert('campi_servizio', {'id': 'x', 'nome': 'X', 'tipo': 'SESSO_ETA'});
-      expect(() => db.insert('campi_servizio', {'id': 'y', 'nome': 'Y', 'tipo': 'BOH'}), throwsA(anything));
     } finally {
       await db.close();
     }
@@ -244,7 +244,6 @@ void main() {
       expect((await db.query('servizi')).single['campi'], '{"mio":"ok"}');
       await db.insert('campi_servizio', {'id': 'o', 'nome': 'Ora', 'tipo': 'ORARIO'});
       await db.insert('campi_servizio', {'id': 'c', 'nome': 'Combo', 'tipo': 'COMBO'});
-      expect(() => db.insert('campi_servizio', {'id': 'y', 'nome': 'Y', 'tipo': 'BOH'}), throwsA(anything));
     } finally {
       await db.close();
     }
@@ -275,7 +274,44 @@ void main() {
       // Chi aveva Colore invio dalla 1.19.0 lo tiene.
       expect((await db.query('campi_servizio', orderBy: 'ordine')).map((c) => c['id']), ['sesso_eta', 'colore_invio']);
       await db.insert('campi_servizio', {'id': 't', 'nome': 'Orari', 'tipo': 'TABELLA_ORARI'});
-      expect(() => db.insert('campi_servizio', {'id': 'y', 'nome': 'Y', 'tipo': 'BOH'}), throwsA(anything));
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('v18 → v19: niente più CHECK sul tipo, i campi restano', () async {
+    final vecchio = await openDatabase(percorso, version: 18, onCreate: (db, _) async {
+      await db.execute('''CREATE TABLE servizi (
+        id TEXT PRIMARY KEY, turno_id TEXT NOT NULL, campi TEXT DEFAULT '{}'
+      )''');
+      await db.execute('''CREATE TABLE campi_servizio (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO','TABELLA_ORARI')),
+        opzioni TEXT DEFAULT '[]',
+        visibile INTEGER NOT NULL DEFAULT 1,
+        ordine INTEGER DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+      )''');
+    });
+    await vecchio.insert('campi_servizio', {'id': 'sesso_eta', 'nome': 'Sesso ed età', 'tipo': 'SESSO_ETA', 'ordine': 0});
+    await vecchio.insert('campi_servizio', {'id': 'p', 'nome': 'Patologie', 'tipo': 'COMBO', 'ordine': 1,
+        'opzioni': '[{"id":"a","nome":"Asma"}]', 'visibile': 0});
+    await vecchio.close();
+
+    final db = await openTestDbAt(percorso);
+    try {
+      final campi = await db.query('campi_servizio', orderBy: 'ordine');
+      expect(campi.map((c) => c['id']), ['sesso_eta', 'p']);
+      expect(campi.last['opzioni'], contains('Asma'));
+      expect(campi.last['visibile'], 0);
+      final sql = (await db.rawQuery("SELECT sql FROM sqlite_master WHERE name = 'campi_servizio'")).first['sql'] as String;
+      expect(sql, isNot(contains('CHECK')));
+      // La combo con ricerca, e un tipo che questa versione non conosce
+      // (da un backup più nuovo), entrano: il tipo lo controlla l'app.
+      await db.insert('campi_servizio', {'id': 'r', 'nome': 'Ricerca', 'tipo': 'COMBO_RICERCA'});
+      await db.insert('campi_servizio', {'id': 'f', 'nome': 'Futuro', 'tipo': 'TIPO_FUTURO'});
     } finally {
       await db.close();
     }

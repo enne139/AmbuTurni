@@ -152,6 +152,7 @@ IconData _iconaTipo(String tipo) => switch (tipo) {
       kCampoNumero => Icons.pin_outlined,
       kCampoOrario => Icons.access_time,
       kCampoCombo => Icons.checklist,
+      kCampoComboRicerca => Icons.manage_search,
       kCampoTabellaOrari => Icons.table_rows_outlined,
       kCampoSessoEta => Icons.person_outline,
       _ => Icons.short_text,
@@ -276,10 +277,14 @@ class _CampoCard extends StatelessWidget {
       final sessi = campo.opzioni.map((o) => o.nome).join(', ');
       return Text('Speciale · sesso ($sessi) ed età affiancati$nascosto', style: stile);
     }
-    final valori = (campo.tipo == kCampoTendina || campo.tipo == kCampoCombo || campo.tipo == kCampoTabellaOrari) &&
-            campo.opzioni.isNotEmpty
-        ? ' · ${campo.opzioni.map((o) => o.nome).join(', ')}'
-        : '';
+    // Con elenchi lunghi (la combo con ricerca serve proprio a quelli) i
+    // nomi non ci starebbero: oltre sei valori si mostra solo quanti sono.
+    final elenco = campo.tipo != kCampoColori && campo.haOpzioni && campo.opzioni.isNotEmpty;
+    final valori = !elenco
+        ? ''
+        : campo.opzioni.length > 6
+            ? ' · ${campo.opzioni.length} valori'
+            : ' · ${campo.opzioni.map((o) => o.nome).join(', ')}';
     return Text('${nomeTipoCampo(campo.tipo)}$valori$nascosto', style: stile);
   }
 }
@@ -505,6 +510,7 @@ class _CampoServizioFormState extends State<CampoServizioForm> {
       kCampoNumero => 'Si scrive un numero, per esempio un\'età.',
       kCampoOrario => 'Si sceglie un\'ora con l\'orologio, per esempio 14:30.',
       kCampoCombo => 'Si possono scegliere più valori dell\'elenco insieme.',
+      kCampoComboRicerca => 'Come la combo box, ma i valori si cercano scrivendo: comoda con elenchi lunghi.',
       kCampoTabellaOrari => 'Una tabella con una riga per voce (es. Chiamata, Arrivo sul posto, Partenza) '
           'e accanto l\'ora, scelta con l\'orologio.',
       _ => 'Si scrive un testo libero.',

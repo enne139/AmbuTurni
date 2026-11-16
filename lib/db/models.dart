@@ -507,6 +507,11 @@ const String kCampoCombo = 'COMBO';
 // scelta con l'orologio. Il valore è una mappa id riga -> "HH:MM", con le
 // sole righe compilate.
 const String kCampoTabellaOrari = 'TABELLA_ORARI';
+// Combo con ricerca (v19, richiesta dell'utente): come la combo box si
+// scelgono più valori, ma cercandoli scrivendo, comodo con elenchi lunghi.
+// Il valore è lo stesso della combo box (lista di id), quindi si passa da
+// un tipo all'altro senza toccare i servizi.
+const String kCampoComboRicerca = 'COMBO_RICERCA';
 // Tipo speciale (v16, richiesta dell'utente): sesso ed età del paziente in
 // un campo solo, con i due controlli affiancati. È uno e fisso: si nasconde,
 // si sposta e se ne cambiano i valori del sesso, ma non si crea da "Nuovo
@@ -516,8 +521,13 @@ const String kCampoSessoEta = 'SESSO_ETA';
 const String kIdCampoSessoEta = 'sesso_eta';
 // Tipi che si possono scegliere creando un campo (lo speciale no).
 const List<String> tipiCampoServizio = [
-  kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero, kCampoOrario, kCampoCombo, kCampoTabellaOrari,
+  kCampoTendina, kCampoColori, kCampoTesto, kCampoNumero, kCampoOrario, kCampoCombo, kCampoComboRicerca,
+  kCampoTabellaOrari,
 ];
+
+/// true per i tipi a scelta multipla (combo box e combo con ricerca), che
+/// salvano una lista di id.
+bool tipoMultiplo(String tipo) => tipo == kCampoCombo || tipo == kCampoComboRicerca;
 
 /// true per i tipi che hanno un elenco di valori da impostare: tendina,
 /// colori e combo box (si sceglie tra quelli), le righe della tabella orari
@@ -526,6 +536,7 @@ bool tipoConOpzioni(String tipo) =>
     tipo == kCampoTendina ||
     tipo == kCampoColori ||
     tipo == kCampoCombo ||
+    tipo == kCampoComboRicerca ||
     tipo == kCampoTabellaOrari ||
     tipo == kCampoSessoEta;
 
@@ -540,6 +551,7 @@ String nomeTipoCampo(String tipo) => switch (tipo) {
       kCampoNumero => 'Numero',
       kCampoOrario => 'Orario',
       kCampoCombo => 'Combo box',
+      kCampoComboRicerca => 'Combo con ricerca',
       kCampoTabellaOrari => 'Tabella orari',
       kCampoSessoEta => 'Sesso ed età',
       _ => tipo,
@@ -602,6 +614,11 @@ class CampoServizio {
   /// true per il campo speciale sesso ed età.
   bool get speciale => tipo == kCampoSessoEta;
 
+  /// false per un tipo che questa versione non conosce: dalla v19 il DB non
+  /// controlla più il tipo, e un backup di una versione più nuova potrebbe
+  /// portarne uno. Un campo così non si mostra nel form del servizio.
+  bool get tipoSupportato => tipiCampoServizio.contains(tipo) || speciale;
+
   OpzioneCampo? opzione(String? id) {
     if (id == null) return null;
     for (final o in opzioni) {
@@ -623,6 +640,7 @@ class CampoServizio {
       case kCampoTesto:
         return valore is String && valore.isNotEmpty ? valore : null;
       case kCampoCombo:
+      case kCampoComboRicerca:
         // Solo gli id che sono ancora nell'elenco, senza doppioni.
         if (valore is! List) return null;
         final scelti = <String>[];
@@ -669,10 +687,10 @@ class CampoServizio {
   dynamic convertiDa(CampoServizio vecchio, dynamic valore) {
     final daScelta = vecchio.tipo == kCampoTendina || vecchio.tipo == kCampoColori;
     final aScelta = tipo == kCampoTendina || tipo == kCampoColori;
-    if (daScelta && tipo == kCampoCombo) {
+    if (daScelta && tipoMultiplo(tipo)) {
       return pulisci(valore is String ? [valore] : null);
     }
-    if (vecchio.tipo == kCampoCombo && aScelta) {
+    if (tipoMultiplo(vecchio.tipo) && aScelta) {
       // Resta il primo valore scelto che c'è ancora nell'elenco.
       if (valore is! List) return null;
       for (final id in valore) {
@@ -710,7 +728,7 @@ class CampoServizio {
       return opzioni.where((o) => orari.containsKey(o.id)).map((o) => '${o.nome} ${orari[o.id]}').join(', ');
     }
     // Combo: i nomi scelti nell'ordine dell'elenco, non in quello del tocco.
-    if (tipo == kCampoCombo) {
+    if (tipoMultiplo(tipo)) {
       return opzioni.where((o) => (v as List).contains(o.id)).map((o) => o.nome).join(', ');
     }
     if (v is num) return formatNumeroCampo(v);

@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS materiali_usati (
 CREATE TABLE IF NOT EXISTS campi_servizio (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL,
-  tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO','TABELLA_ORARI')),
+  tipo TEXT NOT NULL,
   opzioni TEXT DEFAULT '[]',
   visibile INTEGER NOT NULL DEFAULT 1,
   ordine INTEGER DEFAULT 0,
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS campi_servizio (
 
 /// Versione corrente dello schema: ogni cambiamento allo schema la fa salire
 /// di uno, con la sua migrazione in _onUpgrade (regola 7 del CLAUDE.md).
-const int kVersioneDb = 18;
+const int kVersioneDb = 19;
 
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
@@ -648,6 +648,35 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
           id TEXT PRIMARY KEY,
           nome TEXT NOT NULL,
           tipo TEXT NOT NULL CHECK (tipo IN ('TENDINA','COLORI','TESTO','NUMERO','SESSO_ETA','ORARIO','COMBO','TABELLA_ORARI')),
+          opzioni TEXT DEFAULT '[]',
+          visibile INTEGER NOT NULL DEFAULT 1,
+          ordine INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )
+      ''');
+      for (final riga in righe) {
+        await db.insert('campi_servizio', riga);
+      }
+    }
+  }
+  if (oldVersion < 19) {
+    // Ogni tipo di campo nuovo (v16, v17, v18) ha richiesto di ricostruire
+    // campi_servizio per allargare il CHECK su `tipo`. Dalla v19 il CHECK
+    // non c'è più e il tipo lo controlla l'app (tipiCampoServizio,
+    // CampoServizio.tipoSupportato): i tipi futuri, a cominciare dalla
+    // combo con ricerca, non richiedono più una migrazione.
+    final sql = (await db.rawQuery(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'campi_servizio'"))
+        .first['sql'] as String;
+    if (sql.contains('CHECK')) {
+      final righe = await db.query('campi_servizio');
+      await db.execute('DROP TABLE campi_servizio');
+      await db.execute('''
+        CREATE TABLE campi_servizio (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL,
+          tipo TEXT NOT NULL,
           opzioni TEXT DEFAULT '[]',
           visibile INTEGER NOT NULL DEFAULT 1,
           ordine INTEGER DEFAULT 0,
