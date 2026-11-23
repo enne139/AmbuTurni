@@ -874,6 +874,61 @@ class Materiale {
       };
 }
 
+/// Una tessera salvata (tool Tessere): un nome e un codice da ridisegnare a
+/// schermo per farlo leggere da un lettore. `tipo` è la simbologia (code128,
+/// ean13, ean8, qr, vedi utils/tessere_tipi.dart). Solo locale sul device,
+/// nessuna sincronizzazione.
+class Tessera {
+  final String id;
+  final String nome;
+  final String valore;
+  final String tipo;
+  final String? note;
+  final String? createdAt;
+  final String? updatedAt;
+
+  const Tessera({
+    required this.id,
+    required this.nome,
+    required this.valore,
+    required this.tipo,
+    this.note,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory Tessera.fromMap(Map<String, dynamic> m) => Tessera(
+        id: m['id'] as String,
+        nome: m['nome'] as String,
+        valore: m['valore'] as String,
+        tipo: m['tipo'] as String,
+        note: m['note'] as String?,
+        createdAt: m['created_at'] as String?,
+        updatedAt: m['updated_at'] as String?,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'nome': nome,
+        'valore': valore,
+        'tipo': tipo,
+        'note': note,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+      };
+
+  Tessera copyWith({String? nome, String? valore, String? tipo, String? note}) =>
+      Tessera(
+        id: id,
+        nome: nome ?? this.nome,
+        valore: valore ?? this.valore,
+        tipo: tipo ?? this.tipo,
+        note: note ?? this.note,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+}
+
 // Posizioni valide per un utilizzo di materiale (dove si trovava/va ripristinato).
 const List<String> posizioniMateriale = ['AMBULANZA', 'BOMBOLINO', 'ZAINO'];
 

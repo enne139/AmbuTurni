@@ -60,6 +60,7 @@ const _backupTables = [
   'materiali',
   'materiali_usati',
   'campi_servizio',
+  'tessere',
 ];
 
 /// Timestamp leggibile per i nomi dei file esportati (AAAAMMGG_HH_MM),

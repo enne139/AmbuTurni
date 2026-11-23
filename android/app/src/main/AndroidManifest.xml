@@ -4,6 +4,12 @@
          reload), quindi la sua mancanza si manifesta solo negli APK release:
          "Failed host lookup" alla prima richiesta HTTP. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- CAMERA serve al tool Tessere (scansione del codice a barre/QR con
+         mobile_scanner). La fotocamera è dichiarata non obbligatoria così
+         l'app resta installabile anche su device senza: il resto dell'app non
+         la usa. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <!-- allowBackup=false: senza, Android carica il DB SQLite (nomi di persone,
          turni) nel backup automatico Google del device. I dati restano solo
          sul telefono; per il trasferimento si usa l'export JSON dell'app. -->

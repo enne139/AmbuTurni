@@ -76,6 +76,9 @@
 | Apertura PDF (Archivio comunicati) | `open_filex` su Android (vero "Apri con" via FileProvider), `url_launcher` su desktop |
 | Icona app | `flutter_launcher_icons` (dev dependency), genera Android+Windows+web da `assets/icon/` |
 | Versione app a runtime | `package_info_plus` (legge X.Y.Z+N dalla piattaforma, mostrata in Impostazioni) |
+| Disegno codici a barre/QR (Tessere) | `barcode_widget` (Dart puro: Code 128, EAN-13, EAN-8, QR, funziona ovunque) |
+| Scansione codici (Tessere) | `mobile_scanner` (fotocamera): Android/iOS e web, **non** desktop — il pulsante Scansiona compare solo lì (`isMobile \|\| kIsWeb`). Richiede il permesso `CAMERA` nel manifest |
+| Luminosità al massimo (Tessere, schermata di visualizzazione) | `screen_brightness` (alza la luminosità per far leggere il codice, la ripristina all'uscita; in try/catch perché non è supportata ovunque, es. web) |
 | Localizzazione widget nativi | `flutter_localizations` (SDK), solo per `showDatePicker`: `locale` fisso `it`, il resto dell'app resta testo italiano hardcoded |
 | Build | `flutter build apk` oppure workflow GitHub Actions |
 
@@ -122,6 +125,9 @@ lib/
 │   ├── comunicati.dart            Dart puro, testato: raggruppaPerMese/dataComunicato per il
 │   │                               tool Archivio comunicati (data dal nome file AAAAMMGG,
 │   │                               fallback su createdAt)
+│   ├── tessere_tipi.dart          Dart puro, testato: tipi di tessera (code128/ean13/ean8/qr),
+│   │                               etichette, valoreValidoPerTipo e barcodeDaTipo (oggetto
+│   │                               Barcode di barcode_widget) per il tool Tessere
 │   ├── prefs_keys.dart            chiavi SharedPreferences condivise col backup
 │   │                               (Piano turni + Tools attivi + indirizzo del backend
 │   │                               condiviso ospedali + sincronizzazione fogli turni)
@@ -217,10 +223,18 @@ lib/
     │   │                               materiali di formazione (impostato solo dalla pagina admin
     │   │                               del backend condiviso, non configurabile qui). CONTENUTO
     │   │                               RISERVATO: avvolto in AccessoRichiesto, richiede login.
-    │   └── archivio_comunicati_screen.dart elenco PDF caricati dall'admin, raggruppati per
-    │                                   mese; CONTENUTO RISERVATO (AccessoRichiesto, come sopra).
-    │                                   Tap su un comunicato → apriFileBinarioPiattaforma
-    │                                   (db/backup_file.dart) lo apre con un lettore PDF.
+    │   ├── archivio_comunicati_screen.dart elenco PDF caricati dall'admin, raggruppati per
+    │   │                               mese; CONTENUTO RISERVATO (AccessoRichiesto, come sopra).
+    │   │                               Tap su un comunicato → apriFileBinarioPiattaforma
+    │   │                               (db/backup_file.dart) lo apre con un lettore PDF.
+    │   ├── tessere_screen.dart        tool Tessere: lista delle tessere (solo locali) + FAB;
+    │   │                               tap → MostraTesseraScreen (stessa classe nel file), la
+    │   │                               tessera a schermo intero su fondo bianco e luminosità al
+    │   │                               massimo (screen_brightness) perché la legga un lettore
+    │   ├── tessera_form.dart          form crea/modifica tessera (nome, codice, tipo, note);
+    │   │                               pulsante Scansiona solo su mobile/web (apre TesseraScanScreen)
+    │   └── tessera_scan_screen.dart   fotocamera a schermo intero (mobile_scanner): legge il
+    │                                   codice e torna valore + tipo rilevato al form
     └── impostazioni/
         ├── campi_servizio_screen.dart Impostazioni → Campi dei servizi: elenco (mostra/
         │                             nascondi, riordino, elimina con conferma, esporta/importa
@@ -291,9 +305,13 @@ non esistevano nell'app React Native. Sono incluse nel backup JSON
 (`_backupTables` in `backup.dart`): un vecchio backup RN importato qui le
 lascia semplicemente assenti.
 
+`tessere` (v20, tool Tessere) tiene le tessere salvate sul device (nome,
+`valore`, `tipo`, `note`): solo locale, nessuna sincronizzazione, inclusa nel
+backup JSON (`_backupTables`). Vedi il tool "Tessere" in Decisioni tecniche.
+
 Il DB è un singleton (`getDb()` in `database.dart`) aperto all'avvio in `main()`.
 Le migrazioni vivono SOLO nel sistema versionato `_onCreate`/`_onUpgrade`
-(versione corrente: `kVersioneDb` = 19); `_onOpen` esegue soltanto i PRAGMA
+(versione corrente: `kVersioneDb` = 20); `_onOpen` esegue soltanto i PRAGMA
 di connessione (WAL + foreign_keys). Le migrazioni si testano in
 `test/db/migrazioni_test.dart` con `openTestDbAt` (DB su file creato con lo
 schema vecchio, chiuso e riaperto con il vero `_onUpgrade`).
@@ -1898,6 +1916,35 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   (`url_launcher`/`Uri.file` continua a funzionare); su iOS/web
   `open_filex` non è nemmeno raggiunto (`isMobile` è già false sul web, e
   il progetto non ha target iOS).
+- **Tool Tessere (2026-11-24, DB v20)**: richiesta esplicita, un posto dove
+  tenere le tessere a codice a barre/QR e mostrarle al lettore senza la
+  tessera fisica. Nuovo tool nel catalogo (`kToolTessere`), tabella `tessere`
+  solo locale (no backend), inclusa nel backup JSON.
+  - **Niente NFC**: la richiesta iniziale comprendeva anche le carte NFC
+    (leggerle ed emularle). Verificato su un telefono reale via `adb logcat`
+    (dumpsys nfc + lettura di una carta): la carta di prova è una **MIFARE
+    Classic 1K**, che il chip NFC del telefono **non può emulare** (protezione
+    proprietaria, non ISO-DEP, e l'UID in emulazione è casuale). Scartata
+    l'NFC, il tool fa solo codici a barre/QR.
+  - **`barcode_widget`** disegna il codice (Dart puro, tutti i target).
+    **`mobile_scanner`** scansiona dalla fotocamera: esiste solo su
+    Android/iOS e web, quindi il pulsante Scansiona compare solo lì
+    (`isMobile || kIsWeb`, come add_2_calendar); sul desktop il codice si
+    digita. Permesso `CAMERA` nel manifest, fotocamera `required="false"`
+    così l'app resta installabile su device senza.
+  - **Tipi disegnabili** (`utils/tessere_tipi.dart`, Dart puro e testato):
+    Code 128 (default, accetta qualsiasi testo), EAN-13, EAN-8 (solo cifre di
+    lunghezza fissa) e QR. La scansione mappa la simbologia letta su questi
+    (i 1D lineari → Code 128); una simbologia fuori elenco lascia il tipo
+    scelto a mano. `valoreValidoPerTipo` blocca al salvataggio un valore
+    incompatibile col tipo; in visualizzazione un codice comunque non
+    disegnabile (es. da un backup più nuovo) ricade sull'`errorBuilder` di
+    `BarcodeWidget` invece di far saltare la schermata.
+  - **`screen_brightness`** alza la luminosità al massimo nella schermata di
+    visualizzazione (fondo bianco) e la ripristina all'uscita, per far leggere
+    il codice da uno scanner; in try/catch perché non supportata ovunque (es.
+    web). Nota: uno scanner laser a volte non legge da schermo, quelli a
+    immagine sì.
 - **`usesCleartextTraffic` SOLO nel manifest di debug (2026-09-03)**:
   necessario per testare l'app su un telefono reale contro un backend
   fatto girare in locale sul PC di sviluppo (`docker compose`/

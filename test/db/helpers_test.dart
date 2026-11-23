@@ -1056,4 +1056,61 @@ void main() {
       expect(conteggi[idB], 1);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Tessere (tool Tessere)
+  // ---------------------------------------------------------------------------
+
+  group('Modello Tessera', () {
+    test('fromMap → toMap è identico', () {
+      final map = {
+        'id': 't1',
+        'nome': 'Biblioteca',
+        'valore': 'ABC123',
+        'tipo': 'code128',
+        'note': 'scaffale A',
+        'created_at': '2024-01-01T00:00:00Z',
+        'updated_at': '2024-01-01T00:00:00Z',
+      };
+      expect(Tessera.fromMap(map).toMap(), map);
+    });
+  });
+
+  group('CRUD tessere', () {
+    test('saveTessera crea, poi aggiorna senza duplicare', () async {
+      final t = Tessera(id: newId(), nome: 'Palestra', valore: '5900000', tipo: 'ean8');
+      await saveTessera(t);
+      var lista = await getTessere();
+      expect(lista.where((x) => x.id == t.id).length, 1);
+
+      await saveTessera(t.copyWith(nome: 'Palestra nuova'));
+      lista = await getTessere();
+      expect(lista.where((x) => x.id == t.id).length, 1);
+      expect(lista.firstWhere((x) => x.id == t.id).nome, 'Palestra nuova');
+    });
+
+    test('created_at resta quello originale dopo un aggiornamento', () async {
+      final t = Tessera(id: newId(), nome: 'Fedeltà', valore: 'X1', tipo: 'qr');
+      await saveTessera(t);
+      final creato = (await getTessere()).firstWhere((x) => x.id == t.id).createdAt;
+      await saveTessera(t.copyWith(valore: 'X2'));
+      final dopo = (await getTessere()).firstWhere((x) => x.id == t.id);
+      expect(dopo.createdAt, creato);
+      expect(dopo.valore, 'X2');
+    });
+
+    test('getTessere le ordina per nome', () async {
+      await saveTessera(Tessera(id: newId(), nome: 'Zeta tessera', valore: '1', tipo: 'code128'));
+      await saveTessera(Tessera(id: newId(), nome: 'Alfa tessera', valore: '2', tipo: 'code128'));
+      final nomi = (await getTessere()).map((t) => t.nome).toList();
+      expect(nomi.indexOf('Alfa tessera') < nomi.indexOf('Zeta tessera'), isTrue);
+    });
+
+    test('deleteTessera la rimuove', () async {
+      final t = Tessera(id: newId(), nome: 'Da togliere', valore: '9', tipo: 'code128');
+      await saveTessera(t);
+      await deleteTessera(t.id);
+      expect((await getTessere()).any((x) => x.id == t.id), isFalse);
+    });
+  });
 }

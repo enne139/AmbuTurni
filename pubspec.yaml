@@ -110,6 +110,9 @@ dependencies:
   # né voce <queries> nel manifest (a differenza di un intent geo: diretto).
   url_launcher: ^6.3.2
   open_filex: ^4.7.0
+  barcode_widget: ^2.0.4
+  mobile_scanner: ^7.5.0
+  screen_brightness: ^2.1.11
 
 dev_dependencies:
   flutter_test:

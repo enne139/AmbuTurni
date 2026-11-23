@@ -316,4 +316,29 @@ void main() {
       await db.close();
     }
   });
+
+  test('v19 → v20: nasce la tabella tessere, scrivibile', () async {
+    // DB v19 senza la tabella tessere: la migrazione v20 la deve creare.
+    final vecchio = await openDatabase(percorso, version: 19, onCreate: (db, _) async {
+      await db.execute('CREATE TABLE associazioni (id TEXT PRIMARY KEY, nome TEXT)');
+    });
+    await vecchio.close();
+
+    final db = await openTestDbAt(percorso);
+    try {
+      final tabelle = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tessere'");
+      expect(tabelle, isNotEmpty);
+      await db.insert('tessere', {
+        'id': 't1',
+        'nome': 'Biblioteca',
+        'valore': 'ABC123',
+        'tipo': 'code128',
+      });
+      final righe = await db.query('tessere');
+      expect(righe.first['valore'], 'ABC123');
+    } finally {
+      await db.close();
+    }
+  });
 }

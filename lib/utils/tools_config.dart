@@ -8,6 +8,7 @@ const kToolPianoTurni = 'piano_turni';
 const kToolListaOspedali = 'lista_ospedali';
 const kToolRepositoryFormazione = 'repository_formazione';
 const kToolArchivioComunicati = 'archivio_comunicati';
+const kToolTessere = 'tessere';
 
 /// Metadati di un tool per la card in Tools e lo switch in Impostazioni:
 /// un'unica fonte così le due schermate restano coerenti (stesso titolo,
@@ -61,5 +62,11 @@ const kToolsDisponibili = [
     titolo: 'Archivio comunicati',
     sottotitolo: 'Comunicati e avvisi dell\'associazione (richiede login)',
     icon: Icons.campaign_outlined,
+  ),
+  ToolInfo(
+    id: kToolTessere,
+    titolo: 'Tessere',
+    sottotitolo: 'Codici a barre e QR da mostrare al lettore',
+    icon: Icons.badge_outlined,
   ),
 ];

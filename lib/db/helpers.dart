@@ -739,6 +739,41 @@ Future<void> deleteCampoServizio(String id) async {
   });
 }
 
+// ---------------------------------------------------------------------------
+// TESSERE (tool Tessere)
+// ---------------------------------------------------------------------------
+
+/// Tutte le tessere salvate, in ordine alfabetico per nome.
+Future<List<Tessera>> getTessere() async {
+  final db = await getDb();
+  final rows = await db.query('tessere', orderBy: 'nome ASC');
+  return rows.map(Tessera.fromMap).toList();
+}
+
+/// Crea o aggiorna una tessera (riconosciuta dall'id). `created_at` resta
+/// quello originale su un aggiornamento, stesso criterio di saveCampoServizio.
+Future<void> saveTessera(Tessera tessera) async {
+  final db = await getDb();
+  final now = _now();
+  final esiste = await db.query('tessere',
+      columns: ['id'], where: 'id = ?', whereArgs: [tessera.id], limit: 1);
+  final map = tessera.toMap()..['updated_at'] = now;
+  if (esiste.isEmpty) {
+    map['created_at'] = now;
+    await db.insert('tessere', map);
+  } else {
+    map
+      ..remove('id')
+      ..remove('created_at');
+    await db.update('tessere', map, where: 'id = ?', whereArgs: [tessera.id]);
+  }
+}
+
+Future<void> deleteTessera(String id) async {
+  final db = await getDb();
+  await db.delete('tessere', where: 'id = ?', whereArgs: [id]);
+}
+
 /// Scambia l'ordine di due campi adiacenti, stesso pattern di spostaTipologia.
 Future<void> spostaCampoServizio(int fromIndex, int toIndex) async {
   final db = await getDb();

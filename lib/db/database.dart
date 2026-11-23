@@ -159,11 +159,21 @@ CREATE TABLE IF NOT EXISTS campi_servizio (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS tessere (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  valore TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 ''';
 
 /// Versione corrente dello schema: ogni cambiamento allo schema la fa salire
 /// di uno, con la sua migrazione in _onUpgrade (regola 7 del CLAUDE.md).
-const int kVersioneDb = 19;
+const int kVersioneDb = 20;
 
 // Singleton del database: aperto una sola volta e riutilizzato.
 Database? _db;
@@ -688,6 +698,23 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
         await db.insert('campi_servizio', riga);
       }
     }
+  }
+  if (oldVersion < 20) {
+    // Tabella nuova (Tools -> Tessere): CREATE TABLE IF NOT EXISTS è già
+    // idempotente, il try/catch è solo per uniformità con le altre entry.
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS tessere (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL,
+          valore TEXT NOT NULL,
+          tipo TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )
+      ''');
+    } catch (_) {}
   }
 }
 
