@@ -27,7 +27,11 @@ RUN CGO_ENABLED=0 go build -o /ambuturni-backend .
 # Stage 3: nginx (file statici Flutter + reverse proxy) e il binario del
 # backend, avviati insieme da docker-entrypoint.sh. Niente toolchain
 # Flutter/Go nell'immagine finale.
-FROM nginx:alpine
+# nginx pinnato sul ramo stable (1.30), come golang:1.25-alpine sopra: le
+# patch di sicurezza 1.30.x arrivano da sole a ogni build, ma un cambio di
+# ramo non entra mai di nascosto (nginx:alpine seguiva la mainline). Da
+# portare a mano al nuovo ramo stable quando esce (ogni anno, in primavera).
+FROM nginx:1.30-alpine
 COPY --from=build-web /app/build/web /usr/share/nginx/html
 COPY --from=build-backend /ambuturni-backend /app/backend/ambuturni-backend
 COPY --from=build-backend /app/backend/public /app/backend/public

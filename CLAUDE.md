@@ -765,7 +765,11 @@ Actions (`build-android.yml`) usa `flutter build apk`.
   pinnata della CI Android, include già il setup di
   `sqflite_common_ffi_web:setup` non versionato) compila `flutter build web
   --release`; stage 2 `golang:1.25-alpine` compila il backend di `backend/`
-  in un binario statico (`CGO_ENABLED=0`); stage 3 `nginx:alpine` copia
+  in un binario statico (`CGO_ENABLED=0`); stage 3 `nginx:1.30-alpine`
+  (ramo stable pinnato dal 2026-11-26, prima `nginx:alpine` che seguiva la
+  mainline: le patch 1.30.x arrivano da sole, il cambio di ramo si fa a
+  mano quando esce il nuovo stable; `nginx.conf` verificato con 1.30.8 —
+  `nginx -t`, fallback SPA, header, upload da 2 MiB) copia
   l'output statico Flutter, il binario e la cartella `public/` del backend,
   `nginx.conf` e `docker-entrypoint.sh` — nell'immagine finale non c'è
   toolchain Flutter né Go. `docker-entrypoint.sh` avvia il backend in
